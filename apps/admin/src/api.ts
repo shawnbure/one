@@ -387,6 +387,12 @@ export const api = {
     request<{ data: { id: string; caseResultId: string; score: number; verdict: string } }>(
       `/api/evaluation-results/${encodeURIComponent(id)}/review`, { method: "PUT", body: JSON.stringify(body) }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
+  startMicrosoftOAuth: (capabilities: string[]) =>
+    request<{ data: { authorizationUrl: string; capabilities: string[]; scopes: string[]; expiresAt: string } }>(
+      "/api/oauth/microsoft/start", { method: "POST", body: JSON.stringify({ capabilities }) }),
+  disconnectMicrosoft: () =>
+    request<{ data: { disconnected: boolean; connectionId?: string } }>(
+      "/api/oauth/microsoft/disconnect", { method: "POST", body: "{}" }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),

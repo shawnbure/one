@@ -179,6 +179,10 @@ export function App() {
 
   useEffect(() => {
     void refresh();
+    const oauth = new URLSearchParams(window.location.search).get("oauth");
+    if (oauth === "microsoft-connected") setNotice("Microsoft 365 connected with encrypted delegated credentials.");
+    if (oauth === "microsoft-error") setNotice("Microsoft authorization did not complete. Review the app registration and try again.");
+    if (oauth) window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   async function decide(id: string, decision: "approved" | "rejected") {

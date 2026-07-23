@@ -153,11 +153,11 @@ Production inputs are never sampled automatically. An authorized user may explic
 
 The foundation is usable, but these are the highest-value next slices:
 
-1. Add the first provider-specific OAuth lifecycle on top of the implemented Cloudflare secret-reference and generic signed-webhook connector foundation.
+1. Register and credential the first customer Microsoft Entra application. The provider-specific lifecycle is implemented with delegated PKCE authorization, capability-scoped consent, encrypted refresh-token persistence, rotation-aware health checks, and disconnect/reconnect controls.
 2. Add richer multi-dimension rubrics, customer-configurable DLP policies, and Workflow fan-out for large datasets. Automatic common-pattern masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
 3. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
-4. Add authenticated email delivery; Queue-backed signed webhook delivery is implemented.
-5. Add a scripted, reviewable environment promotion command. Cloudflare Access member handoff is now implemented as a secret-free, environment-bound export plus an explicit dry-run/apply FDE command.
-6. Expand the current identity, tenant, role, package, durable-stickiness, Workflow accounting, webhook-deduplication, and Access-handoff tests into live-environment smoke tests with disposable customer fixtures.
+4. Add authenticated email delivery using the Microsoft lifecycle; Queue-backed signed webhook delivery is implemented.
+5. Add a scripted, reviewable environment promotion command. Cloudflare Access member handoff is implemented as a secret-free, environment-bound export plus an explicit dry-run/apply FDE command.
+6. Expand the current identity, tenant, role, OAuth replay/encryption, package, durable-stickiness, Workflow accounting, webhook-deduplication, and Access-handoff tests into live-environment smoke tests with disposable customer fixtures.
 
 Each slice should preserve the core boundary: D1 controls configuration and reporting, durable actors own sticky conversational state, Workflows own long-running orchestration, and Queues own burst absorption.

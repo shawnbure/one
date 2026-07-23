@@ -14,6 +14,7 @@ import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
+import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -22,6 +23,21 @@ export { EvaluationWorkflow } from "./evaluation-workflow";
 export const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 app.post("/webhooks/:endpointId", receiveWebhook);
+app.get("/oauth/microsoft/callback", async (c) => {
+  const url = new URL(c.req.url);
+  const state = url.searchParams.get("state") ?? "";
+  const code = url.searchParams.get("code") ?? "";
+  const providerError = url.searchParams.get("error");
+  try {
+    if (providerError) throw new Error("Microsoft authorization was declined or could not be completed");
+    await completeMicrosoftOAuth(c.env, state, code);
+    return c.redirect(`https://${c.env.APP_DOMAIN}/?oauth=microsoft-connected`);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "microsoft_oauth_callback_failed",
+      error: error instanceof Error ? error.message : String(error) }));
+    return c.redirect(`https://${c.env.APP_DOMAIN}/?oauth=microsoft-error`);
+  }
+});
 app.use("/api/*", requireIdentity);
 app.use("/api/*", requireSameOrigin);
 app.use("/api/*", async (c, next) => {
@@ -81,6 +97,27 @@ app.get("/api/onboarding/access-handoff", requireRoles("admin", "owner"), async 
   c.header("content-disposition", `attachment; filename="workrr-access-handoff-${c.env.ENVIRONMENT}.json"`);
   c.header("cache-control", "no-store");
   return c.json(await exportAccessHandoff(c.env, c.get("tenantId")));
+});
+
+app.post("/api/oauth/microsoft/start", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const body = await c.req.json<{ capabilities?: string[] }>();
+    const data = await startMicrosoftOAuth(c.env, c.get("tenantId"), c.get("actorId"), body.capabilities ?? []);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "connection.oauth_started", "connection",
+      "microsoft", { capabilities: data.capabilities, expiresAt: data.expiresAt });
+    return c.json({ data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Microsoft authorization could not start";
+    return c.json({ error: message }, message.includes("not configured") ? 503 : 400);
+  }
+});
+
+app.post("/api/oauth/microsoft/disconnect", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await disconnectMicrosoft(c.env, c.get("tenantId"), c.get("actorId")) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Microsoft connection could not be disconnected" }, 400);
+  }
 });
 
 app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {
@@ -521,6 +558,14 @@ app.post("/api/connections/:id/test", requireRoles("admin", "builder", "owner", 
     .bind(c.req.param("id"), tenantId).first<Record<string, string | number | null>>();
   if (!connection) return c.json({ error: "Connection not found" }, 404);
 
+  if (connection.kind === "oauth" && connection.name === "Microsoft 365") {
+    try {
+      const data = await checkMicrosoftConnection(c.env, tenantId, c.get("actorId"));
+      return c.json({ data: { ...data, checkedAt: new Date().toISOString() } });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Microsoft connection check failed" }, 409);
+    }
+  }
   const isWorkersAI = connection.kind === "model_provider" && connection.name === "Cloudflare Workers AI";
   const configured = isWorkersAI || Number(connection.secret_configured) === 1;
   const status = isWorkersAI ? "healthy" : configured ? "attention" : "disconnected";
@@ -668,10 +713,15 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
     }
   },
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(env.DB.prepare(`INSERT INTO audit_events
-      (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
-      VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
-      .bind(crypto.randomUUID(), JSON.stringify({ at: new Date().toISOString() })).run());
+    ctx.waitUntil(env.DB.batch([
+      env.DB.prepare(`DELETE FROM oauth_states WHERE expires_at < ? OR
+        (used_at IS NOT NULL AND used_at < ?)`).bind(
+          new Date().toISOString(), new Date(Date.now() - 24 * 60 * 60_000).toISOString()),
+      env.DB.prepare(`INSERT INTO audit_events
+        (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+        VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
+        .bind(crypto.randomUUID(), JSON.stringify({ at: new Date().toISOString() }))
+    ]));
   }
 };
 

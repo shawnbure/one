@@ -20,6 +20,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Isolated baseline-versus-candidate Cloudflare model trials with quality/cost recommendations and automatic masking of common sensitive patterns before case persistence.
 - Tenant-wide and per-process incident containment with drain/emergency-stop admission gates, deferred paused work, evidence timelines, guarded recovery, and critical notifications.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
+- Microsoft 365 delegated OAuth with PKCE, one-time state, selectable least-privilege Graph scopes, AES-256-GCM refresh-token storage, rotation-aware health checks, and disconnect evidence.
 - Shared typed contracts and tests for sticky identity routing.
 
 ## Architecture boundary
@@ -108,6 +109,31 @@ npm run access:sync -- --manifest ./workrr-access-handoff-development.json --app
 ```
 
 The first command is a dry run. The apply command resolves the Access application by both custom domain and audience, then creates or updates only the named Workrr-managed allow policy. It does not delete or replace other customer Access policies.
+
+### Microsoft 365 OAuth registration
+
+Create one Microsoft Entra web application for the customer deployment and register both exact callback URLs:
+
+```text
+https://one-dev.workrr.ai/oauth/microsoft/callback
+https://one.workrr.ai/oauth/microsoft/callback
+```
+
+The lifecycle uses delegated permissions only. Workrr always requests `openid`, `profile`, `email`, `offline_access`, and `User.Read`; the administrator can separately select `Mail.ReadBasic`, `Calendars.ReadBasic`, and `Files.Read`. It does not request mail send, calendar write, directory-wide, or application permissions.
+
+Store the Entra application values and an independent 32-byte encryption key as Worker secrets in each environment:
+
+```bash
+npx wrangler secret put MICROSOFT_CLIENT_ID --env dev
+npx wrangler secret put MICROSOFT_CLIENT_SECRET --env dev
+openssl rand -base64 32 | npx wrangler secret put OAUTH_TOKEN_ENCRYPTION_KEY --env dev
+
+npx wrangler secret put MICROSOFT_CLIENT_ID --env=""
+npx wrangler secret put MICROSOFT_CLIENT_SECRET --env=""
+openssl rand -base64 32 | npx wrangler secret put OAUTH_TOKEN_ENCRYPTION_KEY --env=""
+```
+
+Use a distinct encryption key per environment and retain it in the customer’s password manager. Rotating that key requires reconnecting existing OAuth accounts because Workrr deliberately has no plaintext-token recovery path.
 
 ## Verification
 

@@ -99,6 +99,18 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("status = 'active' ORDER BY email"))).toBe(false);
   });
 
+  it("prevents viewers from starting or disconnecting provider OAuth", async () => {
+    for (const path of ["/api/oauth/microsoft/start", "/api/oauth/microsoft/disconnect"]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(new Request(`http://localhost${path}`, {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }), env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("oauth_states") || sql.includes("oauth_connections"))).toBe(false);
+    }
+  });
+
   it("prevents viewers from changing tenant containment mode", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/tenant/mode", {

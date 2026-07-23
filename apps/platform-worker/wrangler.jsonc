@@ -10,7 +10,7 @@
   "assets": {
     "directory": "../admin/dist",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/health"]
+    "run_worker_first": ["/api/*", "/oauth/*", "/health"]
   },
   "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
   "routes": [{ "pattern": "one.workrr.ai", "custom_domain": true }],
@@ -53,7 +53,7 @@
       "assets": {
         "directory": "../admin/dist",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*", "/health"]
+        "run_worker_first": ["/api/*", "/oauth/*", "/health"]
       },
       "ai": { "binding": "AI" },
       "d1_databases": [{
