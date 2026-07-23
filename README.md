@@ -63,7 +63,8 @@ The admin build is served by the same Worker through Workers Static Assets. API 
 Use Cloudflare Workers Builds rather than a GitHub Actions deployment workflow:
 
 - `main` is the production branch and may promote an active deployment.
-- `dev` and pull-request branches are non-production builds using `wrangler versions upload`; they create preview versions without changing production.
+- `dev` deploys the isolated development Worker; `main` deploys the production Worker.
+- Other branches do not trigger Cloudflare builds, avoiding duplicate preview usage while the product is under active development.
 - Require the typecheck, test, build, and Cloudflare preview checks before merging into `main`.
 - Configure build watch paths so documentation-only commits do not consume build minutes.
 - Keep D1 migrations as an explicit reviewed release step; do not run production migrations automatically on every branch push.
@@ -74,9 +75,8 @@ Suggested Workers Builds settings for this monorepo:
 Root directory: /
 Build command: npm ci && npm run typecheck && npm test && npm run build -w @workrr/admin
 Production deploy command: npm run deploy -w @workrr/platform-worker
-Preview deploy command: npx wrangler versions upload --config apps/platform-worker/wrangler.jsonc
 Production branch: main for `workrr-platform`; dev for `workrr-platform-dev`
-Non-production branch builds: enabled only on the development Worker
+Non-production branch builds: disabled on both Workers
 ```
 
 The Cloudflare account is pinned by `account_id` in the Wrangler configuration. The account ID is an identifier, not a credential; authentication remains in Wrangler locally or in the Cloudflare-managed build token.

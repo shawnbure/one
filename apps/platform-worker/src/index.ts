@@ -31,12 +31,22 @@ app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env
 
 app.get("/api/overview", async (c) => {
   const tenantId = c.get("tenantId");
-  const [processes, runs, approvals] = await Promise.all([
-    c.env.DB.prepare("SELECT status, COUNT(*) count FROM agent_blueprints WHERE tenant_id = ? GROUP BY status").bind(tenantId).all(),
+  const [processes, runs, processRuns, approvals] = await Promise.all([
+    c.env.DB.prepare("SELECT COUNT(*) count FROM agent_blueprints WHERE tenant_id = ? AND status = 'active'").bind(tenantId).first<{ count: number }>(),
     c.env.DB.prepare("SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND started_at >= datetime('now','-7 days') GROUP BY status").bind(tenantId).all(),
+    c.env.DB.prepare("SELECT blueprint_id, COUNT(*) count FROM executions WHERE tenant_id = ? AND started_at >= datetime('now','-7 days') GROUP BY blueprint_id").bind(tenantId).all<{ blueprint_id: string; count: number }>(),
     c.env.DB.prepare("SELECT COUNT(*) count FROM approvals WHERE tenant_id = ? AND status = 'pending'").bind(tenantId).first<{ count: number }>()
   ]);
-  return c.json({ processStatus: processes.results, runStatus: runs.results, pendingApprovals: approvals?.count ?? 0 });
+  const byStatus = Object.fromEntries(runs.results.map((row) => [String(row.status), Number(row.count)]));
+  const processRunCounts = Object.fromEntries(processRuns.results.map((row) => [row.blueprint_id, Number(row.count)]));
+  return c.json({
+    activeProcesses: processes?.count ?? 0,
+    pendingApprovals: approvals?.count ?? 0,
+    runs7d: Object.values(byStatus).reduce((total, count) => total + count, 0),
+    completed7d: byStatus.completed ?? 0,
+    failed7d: byStatus.failed ?? 0,
+    processRuns: processRunCounts
+  });
 });
 
 app.get("/api/executions", async (c) => {
@@ -79,6 +89,12 @@ app.post("/api/approvals/:id/:decision", async (c) => {
   const result = await c.env.DB.prepare(`UPDATE approvals SET status = ?, decided_at = ?, decided_by = ?
     WHERE id = ? AND tenant_id = ? AND status = 'pending'`)
     .bind(decision, new Date().toISOString(), c.get("actorId"), c.req.param("id"), c.get("tenantId")).run();
+  if (result.meta.changes === 1) {
+    await c.env.DB.prepare(`INSERT INTO audit_events
+      (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+      VALUES (?, ?, ?, ?, 'approval', ?, ?)`)
+      .bind(crypto.randomUUID(), c.get("tenantId"), c.get("actorId"), `approval.${decision}`, c.req.param("id"), JSON.stringify({ decision })).run();
+  }
   return c.json({ updated: result.meta.changes === 1 });
 });
 

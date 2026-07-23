@@ -10,7 +10,7 @@
     "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
     "typecheck": "tsc --noEmit",
     "cf:types": "wrangler types",
-    "db:migrate:local": "wrangler d1 migrations apply WORKRR_DB --local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env=\"\"",
     "db:migrate:dev": "wrangler d1 migrations apply DB --remote --env dev"
   },
