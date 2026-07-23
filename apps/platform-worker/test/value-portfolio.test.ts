@@ -40,7 +40,7 @@ describe("executive value portfolio", () => {
     } };
     const result = await getValueDashboard({ DB } as never, "tenant-private");
     expect(result.portfolio).toEqual([]);
-    expect(calls).toHaveLength(4);
+    expect(calls).toHaveLength(5);
     expect(calls.every((call) => call.bindings.length > 0 && call.bindings.every((value) => value === "tenant-private"))).toBe(true);
     expect(calls.every((call) => call.sql.includes("tenant_id"))).toBe(true);
   });

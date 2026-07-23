@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 70,
-  "requiredMigrationName": "0070_access_session_audit.sql"
+  "requiredMigrationId": 71,
+  "requiredMigrationName": "0071_business_value_measurements.sql"
 }

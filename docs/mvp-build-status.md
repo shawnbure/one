@@ -240,6 +240,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 68. `0068_provider_acceptance.sql`: provider capability/scope acceptance evidence without retained provider payloads.
 69. `0069_autonomy_safety_fallback.sql`: bounded reliability policy, latched safety autonomy cap, trigger evidence, and optimistic revision state.
 70. `0070_access_session_audit.sql`: privacy-bounded Cloudflare Access session evidence, designated emergency administrator plan, and reviewable emergency-session events.
+71. `0071_business_value_measurements.sql`: attributable customer outcome evidence, baseline-derived value calculations, immutable correction history, and tenant/process indexes.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -360,6 +361,8 @@ Team & Roles now turns Cloudflare Access authentication into useful, privacy-bou
 Administrators can designate a separate, active Workrr administrator as the emergency identity, attach a vault/runbook evidence reference and recovery procedure, and set a review date. The configuring administrator cannot designate themself, the emergency identity remains subject to both Cloudflare Access and tenant membership, and each newly observed session creates one critical notification plus an immutable audit event. Administrators and owners must classify that session as a drill, incident, or false positive with review evidence; viewers can inspect the resulting evidence without changing it.
 
 Value & Decisions closes the gap between collecting business metrics and making an operating decision. One tenant-scoped portfolio query combines the last 30 days of value snapshots and executions with discovery baselines, unresolved incidents, operating state, and latched safety caps. The UI explains each expand, correct, observe, hold, or retire recommendation, its confidence, the exact threshold evidence, and the governed next action. Active incidents and safety caps always take precedence; sparse evidence remains observation rather than being mistaken for success; expansion requires positive measured value plus bounded adverse-run and override rates; and retirement is suggested only for paused, low-opportunity work with no measured value. Recommendations are deterministic, make no model call, do not mutate process state, and never promote autonomy automatically.
+
+Real customer outcome evidence can now enter that portfolio without a database script. An administrator, owner, or operator records a bounded period, item volume, actual aggregate human effort, optional cycle time, overrides, failures, and a customer report/ticket reference. Workrr loads the same-tenant discovery baseline, calculates effort returned and modeled labor value server-side, runs the reference and note through tenant DLP, and stores the measurement with its recorder. Owners and administrators can correct a bad import only by voiding the immutable original with a DLP-protected reason and optimistic revision; deletion and silent edits are unavailable. The dashboard unions active governed measurements with legacy snapshot evidence while showing the attributable measurement history separately.
 
 ## Remaining aggressive-MVP work
 

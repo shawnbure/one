@@ -100,24 +100,42 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
 }
 
 export async function getValueDashboard(env: Env, tenantId: string) {
-  const [totals, byProcess, discoveries, portfolioRows] = await Promise.all([
-    env.DB.prepare(`SELECT SUM(items_processed) items_processed, SUM(human_minutes_saved) human_minutes_saved,
+  const [totals, byProcess, discoveries, portfolioRows, measurements] = await Promise.all([
+    env.DB.prepare(`WITH evidence AS (
+      SELECT tenant_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
+        FROM value_snapshots
+      UNION ALL
+      SELECT tenant_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
+        FROM business_value_measurements WHERE status='active'
+      ) SELECT SUM(items_processed) items_processed, SUM(human_minutes_saved) human_minutes_saved,
       SUM(estimated_value) estimated_value, SUM(override_count) override_count, SUM(failure_count) failure_count
-      FROM value_snapshots WHERE tenant_id = ? AND period_start >= date('now','-30 days')`).bind(tenantId).first(),
-    env.DB.prepare(`SELECT v.blueprint_id, b.name process_name,
+      FROM evidence WHERE tenant_id = ? AND period_start >= date('now','-30 days')`).bind(tenantId).first(),
+    env.DB.prepare(`WITH evidence AS (
+      SELECT tenant_id, blueprint_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
+        FROM value_snapshots
+      UNION ALL
+      SELECT tenant_id, blueprint_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
+        FROM business_value_measurements WHERE status='active'
+      ) SELECT v.blueprint_id, b.name process_name,
       SUM(v.items_processed) items_processed, SUM(v.human_minutes_saved) human_minutes_saved,
       SUM(v.estimated_value) estimated_value, SUM(v.override_count) override_count,
       SUM(v.failure_count) failure_count
-      FROM value_snapshots v JOIN agent_blueprints b ON b.id=v.blueprint_id AND b.tenant_id=v.tenant_id
+      FROM evidence v JOIN agent_blueprints b ON b.id=v.blueprint_id AND b.tenant_id=v.tenant_id
       WHERE v.tenant_id=? AND v.period_start >= date('now','-30 days')
       GROUP BY v.blueprint_id, b.name ORDER BY estimated_value DESC`).bind(tenantId).all(),
     env.DB.prepare(`SELECT d.*, b.name process_name FROM process_discovery d JOIN agent_blueprints b ON b.id = d.blueprint_id
       WHERE d.tenant_id = ? ORDER BY d.opportunity_score DESC`).bind(tenantId).all(),
-    env.DB.prepare(`WITH value_30d AS (
+    env.DB.prepare(`WITH evidence AS (
+        SELECT tenant_id, blueprint_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
+          FROM value_snapshots
+        UNION ALL
+        SELECT tenant_id, blueprint_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
+          FROM business_value_measurements WHERE status='active'
+      ), value_30d AS (
         SELECT blueprint_id, SUM(items_processed) items_processed,
           SUM(human_minutes_saved) human_minutes_saved, SUM(estimated_value) estimated_value,
           SUM(override_count) override_count, SUM(failure_count) snapshot_failures
-        FROM value_snapshots WHERE tenant_id=? AND period_start >= date('now','-30 days')
+        FROM evidence WHERE tenant_id=? AND period_start >= date('now','-30 days')
         GROUP BY blueprint_id
       ), runs_30d AS (
         SELECT blueprint_id, COUNT(*) runs,
@@ -146,7 +164,17 @@ export async function getValueDashboard(env: Env, tenantId: string) {
       LEFT JOIN runs_30d r ON r.blueprint_id=b.id
       LEFT JOIN open_incidents i ON i.blueprint_id=b.id
       WHERE b.tenant_id=? ORDER BY estimated_value DESC, b.name`)
-      .bind(tenantId, tenantId, tenantId, tenantId).all<Record<string, unknown>>()
+      .bind(tenantId, tenantId, tenantId, tenantId).all<Record<string, unknown>>(),
+    env.DB.prepare(`SELECT m.id, m.blueprint_id, b.name process_name, m.period_start, m.period_end,
+      m.items_processed, m.actual_human_minutes, m.average_cycle_minutes, m.human_minutes_saved,
+      m.estimated_value, m.override_count, m.failure_count, m.evidence_reference, m.note,
+      m.status, m.void_reason, m.voided_at, m.recorded_at, m.revision,
+      recorder.display_name recorded_by_name, voider.display_name voided_by_name
+      FROM business_value_measurements m
+      JOIN agent_blueprints b ON b.id=m.blueprint_id AND b.tenant_id=m.tenant_id
+      JOIN tenant_members recorder ON recorder.id=m.recorded_by AND recorder.tenant_id=m.tenant_id
+      LEFT JOIN tenant_members voider ON voider.id=m.voided_by AND voider.tenant_id=m.tenant_id
+      WHERE m.tenant_id=? ORDER BY m.recorded_at DESC LIMIT 50`).bind(tenantId).all()
   ]);
   const portfolio = portfolioRows.results.map((row) => {
     const metrics = {
@@ -164,6 +192,7 @@ export async function getValueDashboard(env: Env, tenantId: string) {
     return { ...row, ...portfolioRates(metrics), recommendation: classifyPortfolioDecision(metrics) };
   });
   return { totals, byProcess: byProcess.results, discoveries: discoveries.results, portfolio,
+    measurements: measurements.results,
     decisionPolicy: {
       evidenceWindowDays: 30, minimumEvidenceItems: 10,
       correctAtFailurePercent: 10, correctAtOverridePercent: 15,

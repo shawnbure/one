@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 70, name: "0070_access_session_audit.sql", applied_at: "2026-07-23 19:00:00"
+            id: 71, name: "0071_business_value_measurements.sql", applied_at: "2026-07-23 19:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -115,6 +115,23 @@ describe("control-plane security boundary", () => {
     }), viewer.env as never, executionCtx as never);
     expect(change.status).toBe(403);
     expect(viewer.queries.some((sql) => sql.includes("SET fallback_enabled"))).toBe(false);
+  });
+
+  it("allows value evidence inspection but blocks viewers from recording customer outcomes", async () => {
+    const viewer = environment("viewer");
+    const read = await app.fetch(new Request("http://localhost/api/value", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(read.status).toBe(200);
+    const write = await app.fetch(new Request("http://localhost/api/value/measurements", {
+      method: "POST", headers: {
+        origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com"
+      }, body: JSON.stringify({ blueprintId: "process-1", periodStart: "2026-07-01",
+        periodEnd: "2026-07-20", itemsProcessed: 10, actualHumanMinutes: 20,
+        evidenceReference: "customer-report-1" })
+    }), viewer.env as never, executionCtx as never);
+    expect(write.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("INSERT INTO business_value_measurements"))).toBe(false);
   });
 
   it("rejects cross-origin browser mutations before business data changes", async () => {

@@ -563,7 +563,7 @@ export function App() {
           ) : active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
           ) : active === "Value & decisions" ? (
-            <ValuePortfolioView onNotice={setNotice} onOpenProcess={(id) => {
+            <ValuePortfolioView session={session} onNotice={setNotice} onOpenProcess={(id) => {
               setStudioProcessId(id); setActive("Processes");
             }}/>
           ) : active === "Notifications" ? (

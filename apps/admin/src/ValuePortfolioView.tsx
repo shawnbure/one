@@ -1,13 +1,28 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowRight, BarChart3, CircleDollarSign, Clock3, Gauge, RefreshCw, RotateCcw, ShieldCheck, TrendingUp } from "lucide-react";
-import { api, type ValueData } from "./api";
+import { AlertTriangle, ArrowRight, BarChart3, Check, CircleDollarSign, Clock3, FileCheck2, Gauge, Plus, RefreshCw, RotateCcw, ShieldCheck, TrendingUp, X } from "lucide-react";
+import { api, type SessionData, type ValueData } from "./api";
 import "./value-portfolio.css";
 
-export function ValuePortfolioView({ onNotice, onOpenProcess }: {
-  onNotice: (message: string) => void; onOpenProcess: (id: string) => void;
+interface ValueForm {
+  blueprintId: string; periodStart: string; periodEnd: string; itemsProcessed: string;
+  actualHumanMinutes: string; averageCycleMinutes: string; overrideCount: string;
+  failureCount: string; evidenceReference: string; note: string;
+}
+
+export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
+  session: SessionData | null; onNotice: (message: string) => void; onOpenProcess: (id: string) => void;
 }) {
   const [data, setData] = useState<ValueData | null>(null);
   const [filter, setFilter] = useState("all");
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [voiding, setVoiding] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [form, setForm] = useState<ValueForm>(() => ({
+    blueprintId: "", periodStart: monthStart(), periodEnd: today(), itemsProcessed: "",
+    actualHumanMinutes: "", averageCycleMinutes: "", overrideCount: "0", failureCount: "0",
+    evidenceReference: "", note: ""
+  }));
   async function load() {
     try { setData((await api.value()).data); }
     catch (error) { onNotice(error instanceof Error ? error.message : "Value portfolio could not load"); }
@@ -16,6 +31,8 @@ export function ValuePortfolioView({ onNotice, onOpenProcess }: {
   const processes = useMemo(() => data?.portfolio.filter((item) =>
     filter === "all" || item.recommendation.action === filter) ?? [], [data, filter]);
   if (!data) return <div className="loading-card">Loading value evidence…</div>;
+  const canRecord = ["admin", "owner", "operator"].includes(session?.user.role ?? "");
+  const canVoid = ["admin", "owner"].includes(session?.user.role ?? "");
   const totals = data.totals ?? { items_processed: 0, human_minutes_saved: 0, estimated_value: 0, override_count: 0, failure_count: 0 };
   const actions = data.portfolio.reduce<Record<string, number>>((counts, item) => {
     counts[item.recommendation.action] = (counts[item.recommendation.action] ?? 0) + 1; return counts;
@@ -23,7 +40,9 @@ export function ValuePortfolioView({ onNotice, onOpenProcess }: {
   return <section className="value-page">
     <div className="page-title"><div><span className="eyebrow"><TrendingUp size={14}/> EXECUTIVE VALUE PORTFOLIO</span>
       <h1>Value & decisions</h1><p>Measured business impact and transparent recommendations for where to expand, correct, observe, or retire.</p></div>
-      <button className="refresh-button" onClick={() => void load()}><RefreshCw size={15}/>Refresh evidence</button></div>
+      <div className="value-title-actions">{canRecord && <button className="primary" onClick={() => setCaptureOpen((open) => !open)}>
+        {captureOpen ? <X size={15}/> : <Plus size={15}/>}{captureOpen ? "Close capture" : "Record outcome"}</button>}
+        <button className="refresh-button" onClick={() => void load()}><RefreshCw size={15}/>Refresh evidence</button></div></div>
     <div className="value-metrics">
       <Metric icon={<CircleDollarSign size={18}/>} label="VALUE · 30 DAYS" value={money(totals.estimated_value)}
         detail={`${number(totals.items_processed)} measured items`} tone="green"/>
@@ -38,6 +57,22 @@ export function ValuePortfolioView({ onNotice, onOpenProcess }: {
       <p>Recommendations use a {data.decisionPolicy.evidenceWindowDays}-day window. Correct wins when an incident or safety cap is open,
         adverse runs exceed {data.decisionPolicy.correctAtFailurePercent}%, or overrides exceed {data.decisionPolicy.correctAtOverridePercent}%.
         Expand requires measured value and bounded exception rates. Workrr never increases autonomy automatically.</p></div></div>
+    {captureOpen && <ValueCapture data={data} form={form} setForm={setForm} busy={busy} onSave={async () => {
+      setBusy(true); try {
+        const result = await api.recordValueMeasurement({
+          blueprintId: form.blueprintId, periodStart: form.periodStart, periodEnd: form.periodEnd,
+          itemsProcessed: Number(form.itemsProcessed), actualHumanMinutes: Number(form.actualHumanMinutes),
+          averageCycleMinutes: form.averageCycleMinutes === "" ? null : Number(form.averageCycleMinutes),
+          overrideCount: Number(form.overrideCount), failureCount: Number(form.failureCount),
+          evidenceReference: form.evidenceReference, note: form.note
+        });
+        onNotice(`${result.data.processName}: ${money(result.data.estimatedValue)} of governed value evidence recorded.`);
+        setForm({ ...form, itemsProcessed: "", actualHumanMinutes: "", averageCycleMinutes: "",
+          overrideCount: "0", failureCount: "0", evidenceReference: "", note: "" });
+        setCaptureOpen(false); await load();
+      } catch (error) { onNotice(error instanceof Error ? error.message : "Value evidence could not be recorded"); }
+      finally { setBusy(false); }
+    }}/>}
     <div className="decision-filters" role="group" aria-label="Filter portfolio recommendations">
       {(["all","expand","correct","observe","hold","retire"] as const).map((action) =>
         <button key={action} className={filter === action ? "active" : ""} onClick={() => setFilter(action)}>
@@ -67,6 +102,62 @@ export function ValuePortfolioView({ onNotice, onOpenProcess }: {
           <button onClick={() => onOpenProcess(item.blueprint_id)}>Open Process Studio<ArrowRight size={14}/></button></footer>
       </article>)}
     </div>
+    <section className="measurement-history panel"><div className="section-head"><div><span className="eyebrow"><FileCheck2 size={14}/> ATTRIBUTABLE EVIDENCE</span>
+      <h2>Recorded outcomes</h2><p>Corrections void the original record; they never rewrite or delete it.</p></div></div>
+      {data.measurements.length === 0 && <p className="portfolio-empty">No customer-recorded outcome evidence yet.</p>}
+      {data.measurements.map((item) => <article className={item.status} key={item.id}><div><strong>{item.process_name}</strong>
+        <small>{item.period_start} – {item.period_end} · recorded by {item.recorded_by_name}</small></div>
+        <span><strong>{number(item.items_processed)}</strong><small>items</small></span>
+        <span><strong>{number(item.human_minutes_saved / 60, 1)}h</strong><small>returned</small></span>
+        <span><strong>{money(item.estimated_value)}</strong><small>estimated</small></span>
+        <span className={`measurement-status ${item.status}`}>{item.status}</span>
+        {canVoid && item.status === "active" && (voiding === item.id ? <div className="measurement-void">
+          <input value={voidReason} placeholder="Correction reason (10+ characters)" onChange={(event) => setVoidReason(event.target.value)}/>
+          <button disabled={busy || voidReason.trim().length < 10} onClick={async () => {
+            setBusy(true); try { await api.voidValueMeasurement(item.id, voidReason, item.revision);
+              setVoiding(null); setVoidReason(""); await load(); onNotice("Value evidence voided with attributable correction.");
+            } catch (error) { onNotice(error instanceof Error ? error.message : "Value evidence could not be voided"); }
+            finally { setBusy(false); }
+          }}>Confirm void</button><button onClick={() => { setVoiding(null); setVoidReason(""); }}>Cancel</button></div> :
+          <button className="void-measurement" onClick={() => setVoiding(item.id)}>Correct</button>)}
+        {item.status === "void" && <small className="void-detail">{item.void_reason} · {item.voided_by_name}</small>}
+      </article>)}
+    </section>
+  </section>;
+}
+
+function ValueCapture({ data, form, setForm, busy, onSave }: {
+  data: ValueData; form: ValueForm; setForm: (value: ValueForm) => void;
+  busy: boolean; onSave: () => Promise<void>;
+}) {
+  const selected = data.portfolio.find((item) => item.blueprint_id === form.blueprintId);
+  const items = Number(form.itemsProcessed || 0); const actual = Number(form.actualHumanMinutes || 0);
+  const saved = selected ? Math.max(0, selected.baseline_minutes * items - actual) : 0;
+  const projected = selected ? saved / 60 * selected.hourly_cost : 0;
+  const valid = form.blueprintId && items >= 1 && actual >= 0 && Number(form.overrideCount) <= items &&
+    Number(form.failureCount) <= items && form.evidenceReference.trim().length >= 5;
+  return <section className="value-capture panel"><div className="section-head"><div><h2>Record measured business outcome</h2>
+    <p>Enter aggregate evidence only. Workrr calculates effort returned from the customer-approved discovery baseline.</p></div>
+    <span><strong>{number(saved / 60, 1)}h</strong><small>{money(projected)} modeled value</small></span></div>
+    <div className="value-capture-grid">
+      <label>Process<select value={form.blueprintId} onChange={(e) => setForm({ ...form, blueprintId: e.target.value })}>
+        <option value="">Choose a process</option>{data.portfolio.map((item) =>
+          <option value={item.blueprint_id} key={item.blueprint_id}>{item.process_name}</option>)}</select></label>
+      <label>Period start<input type="date" value={form.periodStart} onChange={(e) => setForm({ ...form, periodStart: e.target.value })}/></label>
+      <label>Period end<input type="date" value={form.periodEnd} onChange={(e) => setForm({ ...form, periodEnd: e.target.value })}/></label>
+      <label>Items processed<input type="number" min="1" value={form.itemsProcessed} onChange={(e) => setForm({ ...form, itemsProcessed: e.target.value })}/></label>
+      <label>Actual human minutes<input type="number" min="0" value={form.actualHumanMinutes} onChange={(e) => setForm({ ...form, actualHumanMinutes: e.target.value })}/></label>
+      <label>Average cycle minutes <small>optional</small><input type="number" min="0" value={form.averageCycleMinutes} onChange={(e) => setForm({ ...form, averageCycleMinutes: e.target.value })}/></label>
+      <label>Human overrides<input type="number" min="0" value={form.overrideCount} onChange={(e) => setForm({ ...form, overrideCount: e.target.value })}/></label>
+      <label>Failures<input type="number" min="0" value={form.failureCount} onChange={(e) => setForm({ ...form, failureCount: e.target.value })}/></label>
+      <label>Evidence reference<input value={form.evidenceReference} placeholder="Report, ticket, or customer evidence ID"
+        onChange={(e) => setForm({ ...form, evidenceReference: e.target.value })}/></label>
+      <label className="capture-note">Notes <small>optional; DLP protected</small><textarea rows={3} value={form.note}
+        onChange={(e) => setForm({ ...form, note: e.target.value })}/></label>
+    </div>
+    <footer><p>{selected ? `${selected.baseline_minutes} baseline minutes/item · ${money(selected.hourly_cost)}/hour` :
+      "Select a process to load its approved baseline."}</p>
+      <button className="primary" disabled={busy || !valid} onClick={() => void onSave()}><Check size={15}/>{busy ? "Recording…" : "Record evidence"}</button></footer>
   </section>;
 }
 
@@ -90,3 +181,5 @@ function duration(value: number | null) {
   if (value < 60_000) return `${(value / 1000).toFixed(1)}s`;
   return `${(value / 60_000).toFixed(1)}m`;
 }
+function monthStart() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-01`; }
+function today() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }

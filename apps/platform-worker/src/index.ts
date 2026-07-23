@@ -13,6 +13,7 @@ import { createWebhookEndpoint, listWebhookReceipts, setWebhookEndpointStatus,
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
+import { recordValueMeasurement, voidValueMeasurement } from "./value-evidence";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotification, emitNotification, enqueueDueNotificationDeliveries, failNotificationDelivery,
   safeEmailDestination, safeWebhookDestination } from "./notifications";
@@ -923,6 +924,32 @@ app.post("/api/process-packages/import", requireRoles("admin", "builder", "owner
 
 app.get("/api/value", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await getValueDashboard(c.env, c.get("tenantId")) }));
+
+app.post("/api/value/measurements", requireRoles("admin", "owner", "operator"), async (c) => {
+  try {
+    return c.json({ data: await recordValueMeasurement(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Value measurement could not be recorded" },
+      isDlpBlocked(error) ? 422 : 400);
+  }
+});
+
+app.post("/api/value/measurements/:id/void", requireRoles("admin", "owner"), async (c) => {
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Value measurement ID is required" }, 400);
+  const body: { reason?: string; expectedRevision?: number } =
+    await c.req.json<{ reason?: string; expectedRevision?: number }>().catch(() => ({}));
+  try {
+    return c.json({ data: await voidValueMeasurement(
+      c.env, c.get("tenantId"), c.get("actorId"), id, body.reason, body.expectedRevision
+    ) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Value measurement could not be corrected" },
+      isDlpBlocked(error) ? 422 : 409);
+  }
+});
 
 app.get("/api/usage", requireRoles("admin", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await getUsageLedger(c.env, c.get("tenantId")) }));

@@ -768,6 +768,14 @@ export interface ValueData {
     recommendation: { action: "expand" | "correct" | "retire" | "observe" | "hold";
       confidence: "high" | "medium" | "low"; reason: string; nextStep: string };
   }>;
+  measurements: Array<{
+    id: string; blueprint_id: string; process_name: string; period_start: string; period_end: string;
+    items_processed: number; actual_human_minutes: number; average_cycle_minutes: number | null;
+    human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number;
+    evidence_reference: string; note: string | null; status: "active" | "void";
+    void_reason: string | null; voided_at: string | null; recorded_at: string; revision: number;
+    recorded_by_name: string; voided_by_name: string | null;
+  }>;
   decisionPolicy: { evidenceWindowDays: number; minimumEvidenceItems: number;
     correctAtFailurePercent: number; correctAtOverridePercent: number;
     expandAtMaximumFailurePercent: number; expandAtMaximumOverridePercent: number };
@@ -1386,6 +1394,19 @@ export const api = {
       method: "PATCH", body: JSON.stringify(body),
     }),
   value: () => request<{ data: ValueData }>("/api/value"),
+  recordValueMeasurement: (body: {
+    blueprintId: string; periodStart: string; periodEnd: string; itemsProcessed: number;
+    actualHumanMinutes: number; averageCycleMinutes: number | null; overrideCount: number;
+    failureCount: number; evidenceReference: string; note: string;
+  }) => request<{ data: { id: string; processName: string; humanMinutesSaved: number;
+    estimatedValue: number; status: "active" } }>("/api/value/measurements", {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  voidValueMeasurement: (id: string, reason: string, expectedRevision: number) =>
+    request<{ data: { id: string; status: "void" } }>(
+      `/api/value/measurements/${encodeURIComponent(id)}/void`, {
+        method: "POST", body: JSON.stringify({ reason, expectedRevision }),
+      }),
   runEvaluation: (id: string, releaseId?: string) => request<{ data: { id: string; status: string; score: number;
     passedAssertions: number; assertionCount: number; caseCount: number; totalTokens: number; estimatedCostUsd: number } }>(
       `/api/evaluations/${id}/run`, { method: "POST", body: JSON.stringify({ releaseId }) }),
