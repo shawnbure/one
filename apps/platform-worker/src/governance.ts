@@ -1,10 +1,12 @@
 import type { Env } from "./types";
 import { getDeploymentVerification } from "./deployment-verification";
 import { getAiGatewaySetting } from "./ai-gateway";
+import { listDataEgressPolicies } from "./data-governance";
 
 export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
   const aiGatewayPromise = getAiGatewaySetting(env, tenantId);
+  const dataEgressPromise = listDataEgressPolicies(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, emailRoutes,
     credentials, tenantControl, dlpRules, customDlpEntries, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.execution_profile, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
@@ -87,6 +89,7 @@ export async function getGovernance(env: Env, tenantId: string) {
   const toolRows = tools.results as Array<Record<string, unknown>>;
   const deploymentVerification = await deploymentVerificationPromise;
   const aiGateway = await aiGatewayPromise;
+  const dataEgressPolicies = await dataEgressPromise;
   const requiredConnectionRows = connectionRows.filter((row) => row.kind !== "oauth" || row.status !== "disconnected");
   const lifecycleConnectionRows = requiredConnectionRows.filter((row) => row.kind !== "model_provider");
   const lifecycleReadyRows = lifecycleConnectionRows.filter((row) =>
@@ -113,6 +116,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     models,
     modelPolicy: modelPolicy.results,
     aiGateway,
+    dataEgressPolicies,
     governanceReviews: governanceReviews.results,
     readiness: [
       { id: "identity", label: "Cloudflare Access trust boundary", ready: Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), detail: env.ACCESS_TEAM_DOMAIN ? "JWT verification configured" : "Access application configuration required", action: "Customer setup", actionLabel: "Open setup" },

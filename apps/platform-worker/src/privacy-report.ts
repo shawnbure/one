@@ -16,6 +16,7 @@ export interface PrivacyArchitectureReport {
   externalDestinations: Row[];
   credentials: Row[];
   tools: Row[];
+  dataEgressPolicies?: Row[];
   humanOversight: { pendingDecisions: number; consequentialActions: number; processPolicies: Row[] };
   loggingAndExport: string[];
   releaseInventory: Row[];
@@ -28,12 +29,12 @@ export interface PrivacyArchitectureReport {
 export async function getPrivacyArchitectureReport(env: Env, tenantId: string, generatedBy: string,
   readiness: PrivacyArchitectureReport["readiness"]): Promise<PrivacyArchitectureReport> {
   const [tenant, processes, knowledge, webhooks, emailRoutes, retention, connections, tools, notifications, approvals,
-    governanceReviews] =
+    governanceReviews, dataEgressPolicies] =
     await Promise.all([
       env.DB.prepare("SELECT id, name FROM tenants WHERE id=?").bind(tenantId).first<Row>(),
       env.DB.prepare(`SELECT b.id, b.name, b.department, b.business_owner, b.risk_level, b.status,
         b.execution_profile, b.autonomy, b.operating_mode, b.model_profile, b.prompt_release_id,
-        b.active_release_id, r.model_id
+        b.active_release_id, COALESCE(r.data_classification,b.data_classification,'internal') data_classification, r.model_id
         FROM agent_blueprints b LEFT JOIN process_releases r
           ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
         WHERE b.tenant_id=? ORDER BY b.name`).bind(tenantId).all<Row>(),
@@ -70,7 +71,12 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
         CASE WHEN julianday(next_due_at) < julianday('now') THEN 'overdue'
           WHEN julianday(next_due_at) <= julianday('now', '+14 days') THEN 'due'
           ELSE 'current' END status
-        FROM tenant_governance_reviews WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>()
+        FROM tenant_governance_reviews WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>(),
+      env.DB.prepare(`SELECT classification, external_model_allowed, external_tool_allowed,
+        revision, updated_by, updated_at FROM tenant_data_egress_policies
+        WHERE tenant_id=? ORDER BY CASE classification
+          WHEN 'public' THEN 1 WHEN 'internal' THEN 2 WHEN 'confidential' THEN 3 ELSE 4 END`)
+        .bind(tenantId).all<Row>()
     ]);
   const processRows = processes.results;
   const connectionRows = connections.results;
@@ -127,7 +133,7 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
     processes: processRows.map((row) => ({
       name: row.name, department: row.department, businessOwner: row.business_owner, risk: row.risk_level,
       status: row.status, executionProfile: row.execution_profile, autonomy: row.autonomy,
-      operatingMode: row.operating_mode
+      operatingMode: row.operating_mode, dataClassification: row.data_classification
     })),
     dataSources: {
       knowledge: knowledge.results, inboundWebhooks: webhooks.results, inboundEmail: emailRoutes.results
@@ -154,6 +160,12 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       status: row.status, credential: row.credential_status
     })),
     tools: tools.results,
+    dataEgressPolicies: dataEgressPolicies.results.map((row) => ({
+      dataClassification: row.classification,
+      externalModelHandoff: Number(row.external_model_allowed) ? "Allowed" : "Blocked",
+      externalToolEgress: Number(row.external_tool_allowed) ? "Allowed" : "Blocked",
+      revision: row.revision, updatedBy: row.updated_by, updatedAt: row.updated_at
+    })),
     humanOversight: {
       pendingDecisions, consequentialActions,
       processPolicies: processRows.map((row) => ({
@@ -168,7 +180,7 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
     ],
     releaseInventory: processRows.map((row) => ({
       process: row.name, promptRelease: row.prompt_release_id, processRelease: row.active_release_id,
-      modelProfile: row.model_profile
+      modelProfile: row.model_profile, dataClassification: row.data_classification
     })),
     governanceReviews: governanceReviews.results,
     readiness,
@@ -209,6 +221,7 @@ ${section("Operating posture", `<div class="posture">${report.posture.map((item)
 ${section("Cloudflare architecture", rows(report.services))}
 ${section("AI processes and human oversight", rows(report.processes) + `<p><strong>${report.humanOversight.pendingDecisions}</strong> pending decisions · <strong>${report.humanOversight.consequentialActions}</strong> enabled write tools</p>`)}
 ${section("Models", rows(report.models))}
+${section("Classification and external egress", rows(report.dataEgressPolicies ?? []))}
 ${section("Data sources", "<h3>Knowledge</h3>" + rows(report.dataSources.knowledge) +
   "<h3>Inbound webhooks</h3>" + rows(report.dataSources.inboundWebhooks) +
   "<h3>Inbound email</h3>" + rows(report.dataSources.inboundEmail))}

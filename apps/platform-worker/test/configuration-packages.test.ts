@@ -24,6 +24,12 @@ function packageData() {
       "email", "phone", "ssn", "payment_card", "api_secret", "ip_address"
     ].map((detector) => ({ detector, action: detector === "email" ? "redact" : "block",
       direction: "both", enabled: true })),
+    dataEgressPolicies: [
+      { dataClassification: "public", externalModelAllowed: true, externalToolAllowed: true },
+      { dataClassification: "internal", externalModelAllowed: false, externalToolAllowed: true },
+      { dataClassification: "confidential", externalModelAllowed: false, externalToolAllowed: false },
+      { dataClassification: "restricted", externalModelAllowed: false, externalToolAllowed: false }
+    ],
     notificationPolicies: [{
       eventType: "approval.pending", channel: "in_app", enabled: true, severity: "warning",
       acknowledgementRequired: true, escalationMinutes: 240, quietHoursEnabled: false,
@@ -67,7 +73,8 @@ describe("configuration packages", () => {
     });
     expect(first.checksum).toBe(second.checksum);
     expect(first.counts).toEqual({
-      organization: 1, lifecycle: 1, retention: 1, dlpRules: 6, notificationPolicies: 2
+      organization: 1, lifecycle: 1, retention: 1, dlpRules: 6,
+      dataEgressPolicies: 4, notificationPolicies: 2
     });
     expect(first.warnings.join(" ")).toContain("external notification policies");
   });
@@ -95,6 +102,7 @@ describe("configuration packages", () => {
     const updates = statements.filter(({ sql }) => sql.includes("UPDATE notification_policies"));
     expect(updates).toHaveLength(2);
     expect(updates.find(({ bindings }) => bindings.includes("webhook"))?.bindings[0]).toBe(0);
+    expect(statements.filter(({ sql }) => sql.includes("UPDATE tenant_data_egress_policies"))).toHaveLength(4);
     expect(JSON.stringify(statements)).not.toContain("destination=");
     expect(JSON.stringify(statements)).not.toContain("legal_hold=");
     expect(statements.every(({ sql }) => !sql.includes("DELETE "))).toBe(true);

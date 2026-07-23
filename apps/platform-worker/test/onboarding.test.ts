@@ -59,7 +59,9 @@ function bootstrapEnvironment() {
           id: release.releaseId, prompt_release_id: release.promptReleaseId, version: release.version,
           checksum: release.checksum, status: release.status
         } : null;
-        if (sql.includes("SELECT execution_profile FROM agent_blueprints")) return processId ? { execution_profile: "conversation" } : null;
+        if (sql.includes("SELECT execution_profile, data_classification FROM agent_blueprints")) {
+          return processId ? { execution_profile: "conversation", data_classification: "internal" } : null;
+        }
         if (sql.includes("MAX(version)")) return { version: 1 };
         if (sql.includes("SELECT id FROM tenant_members")) return { id: memberId };
         return null;

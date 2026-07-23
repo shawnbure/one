@@ -174,6 +174,9 @@ function Studio({
   const [modelProfile, setModelProfile] = useState("balanced");
   const [modelId, setModelId] = useState<SupportedInferenceModel>(modelProfiles.balanced.model);
   const [autonomy, setAutonomy] = useState("approve");
+  const [dataClassification, setDataClassification] = useState<
+    "public" | "internal" | "confidential" | "restricted"
+  >("internal");
   const [notes, setNotes] = useState("");
   const [inputSchema, setInputSchema] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
@@ -213,6 +216,8 @@ function Studio({
           : modelProfiles[loadedProfile].model,
       );
       setAutonomy(result.blueprint.autonomy ?? "approve");
+      setDataClassification(active?.data_classification ??
+        (result.blueprint.data_classification as typeof dataClassification) ?? "internal");
       setSafetyForm({
         enabled: result.autonomySafety.state.enabled,
         minTerminalRuns: result.autonomySafety.state.minTerminalRuns,
@@ -280,6 +285,7 @@ function Studio({
         modelProfile,
         modelId,
         autonomy,
+        dataClassification,
         releaseNotes: notes,
         inputSchema: parsedInputSchema,
         outputSchema: parsedOutputSchema,
@@ -606,6 +612,17 @@ function Studio({
                   {inferenceModelCatalog[modelId].boundary === "workers_ai" ? "Cloudflare hosted" : "AI Gateway handoff"}
                 </span>
               </div>
+              <label>
+                Process data classification
+                <select value={dataClassification} onChange={(event) =>
+                  setDataClassification(event.target.value as typeof dataClassification)}>
+                  <option value="public">Public</option>
+                  <option value="internal">Internal</option>
+                  <option value="confidential">Confidential</option>
+                  <option value="restricted">Restricted</option>
+                </select>
+                <small>The release cannot under-classify a bound tool. External model and tool handoffs must also be approved in Governance.</small>
+              </label>
               <label>
                 Release model
                 <select

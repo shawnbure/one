@@ -11,6 +11,7 @@ export interface PortableProcessPackage {
   process: {
     name: string; description: string; executionProfile: string; modelProfile: string; modelId?: string; autonomy: string;
     tools: string[]; toolDefinitions?: PortableToolPolicy[]; businessOwner: string; department: string; riskLevel: string;
+    dataClassification?: "public" | "internal" | "confidential" | "restricted";
   };
   behavior: { systemPrompt: string; instructions: string[]; guardrails: string[]; releaseNotes?: string;
     inputSchema?: Record<string, unknown> | null; outputSchema?: Record<string, unknown> | null;
@@ -35,7 +36,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
       modelId: row.model_id?.startsWith("@cf/") ? row.model_id : undefined,
       autonomy: row.autonomy!, tools: toolDefinitions.length ? toolDefinitions.map((tool) => tool.name) : parseStringArray(row.tools_json),
       toolDefinitions, businessOwner: row.business_owner || "Operations",
-      department: row.department || "Operations", riskLevel: row.risk_level || "medium" },
+      department: row.department || "Operations", riskLevel: row.risk_level || "medium",
+      dataClassification: (row.data_classification as PortableProcessPackage["process"]["dataClassification"]) || "internal" },
     behavior: { systemPrompt: row.system_prompt!, instructions: parseStringArray(row.instructions_json),
       guardrails: parseStringArray(row.guardrails_json), releaseNotes: row.release_notes || "Imported process package",
       inputSchema: parseOptionalObject(row.input_schema_json), outputSchema: parseOptionalObject(row.output_schema_json),
@@ -51,10 +53,11 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
   const now = new Date().toISOString();
   await env.DB.prepare(`INSERT INTO agent_blueprints
     (id, tenant_id, name, description, execution_profile, model_profile, prompt_release_id, autonomy, status, tools_json,
-     updated_at, business_owner, department, risk_level, operating_mode)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'draft', ?, ?, ?, ?, ?, 'paused')`)
+     updated_at, business_owner, department, risk_level, data_classification, operating_mode)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'draft', ?, ?, ?, ?, ?, ?, 'paused')`)
     .bind(id, tenantId, pkg.process.name, pkg.process.description, pkg.process.executionProfile, pkg.process.modelProfile,
-      pkg.process.autonomy, JSON.stringify(pkg.process.tools), now, pkg.process.businessOwner, pkg.process.department, pkg.process.riskLevel).run();
+      pkg.process.autonomy, JSON.stringify(pkg.process.tools), now, pkg.process.businessOwner, pkg.process.department,
+      pkg.process.riskLevel, pkg.process.dataClassification ?? "internal").run();
   try {
     if (pkg.process.toolDefinitions?.length) {
       await ensurePortableTools(env, tenantId, id, actorId, pkg.process.toolDefinitions.map((tool, index) => ({
@@ -76,6 +79,7 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
       instructions: pkg.behavior.instructions, guardrails: pkg.behavior.guardrails, modelProfile: pkg.process.modelProfile,
       modelId: pkg.process.modelId,
       autonomy: pkg.process.autonomy, inputSchema: pkg.behavior.inputSchema, outputSchema: pkg.behavior.outputSchema,
+      dataClassification: pkg.process.dataClassification ?? "internal",
       topology: pkg.behavior.topology,
       releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
     return { id, status: "draft", release, source: pkg.provenance ?? null };
@@ -102,12 +106,17 @@ function validatePackage(value: unknown): PortableProcessPackage {
     process.modelId as typeof supportedWorkersAIModels[number])) throw new Error("Package Workers AI model is unsupported");
   if (!["observe", "suggest", "approve", "guarded", "autonomous"].includes(process.autonomy)) throw new Error("Package autonomy is invalid");
   if (!["low", "medium", "high"].includes(process.riskLevel)) throw new Error("Package risk level is invalid");
+  if (process.dataClassification !== undefined &&
+      !["public", "internal", "confidential", "restricted"].includes(process.dataClassification)) {
+    throw new Error("Package data classification is invalid");
+  }
   if (![process.tools, behavior.instructions, behavior.guardrails].every((list) => Array.isArray(list) && list.every((item) => typeof item === "string"))) throw new Error("Package lists must contain only strings");
   const toolDefinitions = validateToolDefinitions(process.toolDefinitions);
   if (JSON.stringify(value).length > 256_000) throw new Error("Process package exceeds 256 KB");
   return { ...pkg, schemaVersion: 1, process: { ...process, name: process.name.trim(), description: process.description.trim(), tools: process.tools.slice(0, 50),
     toolDefinitions,
-    businessOwner: process.businessOwner || "Unassigned", department: process.department || "Operations", riskLevel: process.riskLevel },
+    businessOwner: process.businessOwner || "Unassigned", department: process.department || "Operations",
+    riskLevel: process.riskLevel, dataClassification: process.dataClassification ?? "internal" },
     behavior: { ...behavior, systemPrompt: behavior.systemPrompt.trim(), instructions: behavior.instructions.slice(0, 100), guardrails: behavior.guardrails.slice(0, 100) }, secrets: "excluded" } as PortableProcessPackage;
 }
 

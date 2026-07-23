@@ -38,6 +38,7 @@ interface ReleaseRow {
   published_at: string;
   input_schema_json: string | null;
   output_schema_json: string | null;
+  data_classification: "public" | "internal" | "confidential" | "restricted";
 }
 
 export interface PreparedEvaluation {
@@ -52,6 +53,7 @@ export interface PreparedEvaluation {
   modelRate: { model: string; input: number; output: number } | null;
   judgeRate: { model: string; input: number; output: number } | null;
   contracts: { inputSchemaJson: string | null; outputSchemaJson: string | null };
+  dataClassification: "public" | "internal" | "confidential" | "restricted";
 }
 
 export interface EvaluationCaseResult {
@@ -95,7 +97,7 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
   const releaseId = requestedReleaseId || String(scenario.active_release_id || "");
   const release = releaseId ? await env.DB.prepare(`SELECT r.id, r.prompt_release_id, r.model_profile, r.model_id, p.version,
     p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum, p.published_at,
-    r.input_schema_json, r.output_schema_json
+    r.input_schema_json, r.output_schema_json, r.data_classification
     FROM process_releases r JOIN prompt_releases p ON p.id = r.prompt_release_id
     WHERE r.id = ? AND r.tenant_id = ? AND r.blueprint_id = ?`).bind(releaseId, tenantId, String(scenario.blueprint_id)).first<ReleaseRow>() : null;
   const boundedMaxCases = Math.max(1, Math.min(100, Math.round(maxCases)));
@@ -154,7 +156,8 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     input: Number(judgeRateRow?.input_usd_per_million ?? 0),
     output: Number(judgeRateRow?.output_usd_per_million ?? 0)
   };
-  return { scenario, releaseId, modelProfile, modelId, controls, prompt, cases: cases.results, dlpRules, modelRate, judgeRate, contracts };
+  return { scenario, releaseId, modelProfile, modelId, controls, prompt, cases: cases.results,
+    dlpRules, modelRate, judgeRate, contracts, dataClassification: release?.data_classification ?? "internal" };
 }
 
 export async function evaluatePreparedCase(env: Env, tenantId: string, runId: string, prepared: PreparedEvaluation,
@@ -174,7 +177,8 @@ export async function evaluatePreparedCase(env: Env, tenantId: string, runId: st
     const modelInput = outputContractInstruction(contractedInput.value, contracts.outputSchema);
     const rawResult = await runModel(env, prepared.modelProfile, prepared.prompt, modelInput,
       `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`, {
-        tenantId, executionId: `${runId}:${item.id}`, autonomy: "suggest", policies: []
+        tenantId, executionId: `${runId}:${item.id}`, autonomy: "suggest", policies: [],
+        dataClassification: prepared.dataClassification
       }, [], prepared.modelId);
     const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
       direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`,

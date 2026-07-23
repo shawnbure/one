@@ -54,6 +54,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
 - Microsoft 365 delegated OAuth with PKCE, one-time state, selectable least-privilege Graph scopes, AES-256-GCM refresh-token storage, rotation-aware health checks, Mail.Send notification delivery, and disconnect evidence.
 - Tenant-configurable DLP detectors with audit, redact, and block actions enforced before Queue, Workflow, Durable Agent, model, evaluation, and persisted-preview boundaries.
+- Release-pinned public/internal/confidential/restricted classification with independent, revisioned external-model and external-tool egress gates; native Workers AI remains the private Cloudflare-default path.
 - Shared typed contracts and tests for sticky identity routing.
 
 ## Architecture boundary

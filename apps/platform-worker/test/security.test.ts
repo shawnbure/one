@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 90, name: "0090_custom_dlp_entries.sql", applied_at: "2026-07-23 23:00:00"
+            id: 91, name: "0091_data_egress_policies.sql", applied_at: "2026-07-23 23:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -857,6 +857,17 @@ describe("control-plane security boundary", () => {
       expect(response.status).toBe(403);
       expect(queries.some((sql) => sql.includes("custom_dlp_entries"))).toBe(false);
     }
+  });
+
+  it("prevents viewers from changing classification egress policy", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/governance/data-egress/restricted", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ externalModelAllowed: true, externalToolAllowed: true, expectedRevision: 1 })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("tenant_data_egress_policies"))).toBe(false);
   });
 
   it("allows viewers to export but not import portable evaluation packages", async () => {

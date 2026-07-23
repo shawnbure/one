@@ -4,6 +4,7 @@ import { getMicrosoftAccessToken } from "./oauth";
 import type { Env } from "./types";
 import { markConnectionSuccess } from "./connection-operations";
 import { invokeMcpConnectorTool } from "./mcp-connectors";
+import { assertExternalToolAllowed, normalizeDataClassification } from "./data-governance";
 
 export const boundAdapterCatalog = {
   "microsoft.profile.get": {
@@ -78,6 +79,7 @@ export async function invokeBoundAdapter(env: Env, tenantId: string, executionId
     }
     const prefix = `mcp.${policy.connectionId}.`;
     if (!policy.handlerKey.startsWith(prefix)) throw new Error("MCP tool identity does not match its connector");
+    await assertExternalToolAllowed(env, tenantId, normalizeDataClassification(policy.dataClassification));
     const aiToolName = policy.handlerKey.slice(prefix.length);
     const raw = await invokeMcpConnectorTool(env, tenantId, policy.connectionId, aiToolName, input);
     const protectedOutput = await applyDlp(env, tenantId, JSON.stringify(raw ?? {}), {
@@ -96,6 +98,7 @@ export async function invokeBoundAdapter(env: Env, tenantId: string, executionId
   if (policy.accessMode !== "read" || policy.riskLevel !== "low") {
     throw new Error("Bound execution is limited to low-risk read tools");
   }
+  await assertExternalToolAllowed(env, tenantId, normalizeDataClassification(policy.dataClassification));
   const adapter = boundAdapterCatalog[policy.handlerKey];
   const token = await getMicrosoftAccessToken(env, tenantId, adapter.scope, fetcher, policy.connectionId);
   const endpoint = graphEndpoint(policy.handlerKey, input);
@@ -147,6 +150,7 @@ export async function invokeApprovedBoundAdapter(env: Env, tenantId: string, exe
     throw new Error("Approved action policy does not match a consequential write");
   }
   const event = calendarEventInput(input);
+  await assertExternalToolAllowed(env, tenantId, normalizeDataClassification(policy.dataClassification));
   const token = await getMicrosoftAccessToken(env, tenantId, "Calendars.ReadWrite", fetcher, policy.connectionId);
   const endpoint = "https://graph.microsoft.com/v1.0/me/events";
   const started = performance.now();

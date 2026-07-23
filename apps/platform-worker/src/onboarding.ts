@@ -425,7 +425,16 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
     ].map(([detector, label, action]) => env.DB.prepare(`INSERT OR IGNORE INTO dlp_rules
       (id, tenant_id, detector, label, action, direction, enabled, updated_by)
       VALUES (?, ?, ?, ?, ?, 'both', 1, ?)`)
-      .bind(`dlp-${detector}-${suffix}`, tenantId, detector, label, action, actorId))
+      .bind(`dlp-${detector}-${suffix}`, tenantId, detector, label, action, actorId)),
+    ...[
+      ["public", 1, 1],
+      ["internal", 0, 1],
+      ["confidential", 0, 0],
+      ["restricted", 0, 0]
+    ].map(([classification, externalModel, externalTool]) => env.DB.prepare(`INSERT OR IGNORE INTO tenant_data_egress_policies
+      (tenant_id, classification, external_model_allowed, external_tool_allowed, updated_by)
+      VALUES (?, ?, ?, ?, ?)`)
+      .bind(tenantId, classification, externalModel, externalTool, actorId))
   ]);
 }
 

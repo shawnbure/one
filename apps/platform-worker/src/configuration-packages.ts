@@ -19,6 +19,9 @@ type ConfigurationPackage = {
   dlpRules: Array<{
     detector: string; action: string; direction: string; enabled: boolean;
   }>;
+  dataEgressPolicies?: Array<{
+    dataClassification: string; externalModelAllowed: boolean; externalToolAllowed: boolean;
+  }>;
   notificationPolicies: Array<{
     eventType: string; channel: string; enabled: boolean; severity: string;
     acknowledgementRequired: boolean; escalationMinutes: number;
@@ -35,9 +38,10 @@ const channels = ["in_app", "email", "webhook"];
 const severities = ["info", "warning", "critical"];
 const digests = ["immediate", "hourly", "daily"];
 const models = ["fast", "balanced", "reasoning"];
+const dataClassifications = ["public", "internal", "confidential", "restricted"];
 
 export async function exportConfigurationPackage(env: Env, tenantId: string): Promise<ConfigurationPackage> {
-  const [organization, lifecycle, retention, dlp, notifications] = await Promise.all([
+  const [organization, lifecycle, retention, dlp, notifications, dataEgress] = await Promise.all([
     env.DB.prepare(`SELECT organization_name, support_email, accent_color, default_model_profile, data_region
       FROM tenant_settings WHERE tenant_id=?`).bind(tenantId).first<Record<string, unknown>>(),
     env.DB.prepare(`SELECT escalation_email, maintenance_day_utc, maintenance_hour_utc, recovery_review_due_at
@@ -50,7 +54,11 @@ export async function exportConfigurationPackage(env: Env, tenantId: string): Pr
     env.DB.prepare(`SELECT event_type, channel, enabled, severity, acknowledgement_required,
       escalation_minutes, quiet_hours_enabled, quiet_start_hour_utc, quiet_end_hour_utc,
       critical_bypass, digest_mode, digest_hour_utc FROM notification_policies
-      WHERE tenant_id=? ORDER BY event_type, channel`).bind(tenantId).all<Record<string, unknown>>()
+      WHERE tenant_id=? ORDER BY event_type, channel`).bind(tenantId).all<Record<string, unknown>>(),
+    env.DB.prepare(`SELECT classification, external_model_allowed, external_tool_allowed
+      FROM tenant_data_egress_policies WHERE tenant_id=? ORDER BY CASE classification
+      WHEN 'public' THEN 1 WHEN 'internal' THEN 2 WHEN 'confidential' THEN 3 ELSE 4 END`)
+      .bind(tenantId).all<Record<string, unknown>>()
   ]);
   if (!organization) throw new Error("Customer organization settings are not initialized");
   return {
@@ -78,6 +86,11 @@ export async function exportConfigurationPackage(env: Env, tenantId: string): Pr
     dlpRules: dlp.results.map((row) => ({
       detector: String(row.detector), action: String(row.action), direction: String(row.direction),
       enabled: Boolean(row.enabled)
+    })),
+    dataEgressPolicies: dataEgress.results.map((row) => ({
+      dataClassification: String(row.classification),
+      externalModelAllowed: Boolean(row.external_model_allowed),
+      externalToolAllowed: Boolean(row.external_tool_allowed)
     })),
     notificationPolicies: notifications.results.map((row) => ({
       eventType: String(row.event_type), channel: String(row.channel), enabled: Boolean(row.enabled),
@@ -107,6 +120,9 @@ export async function previewConfigurationRestore(input: unknown) {
     warnings: [
       "This restore changes configuration only; it never imports credentials, destinations, identities, processes, content, or audit history.",
       "Current lifecycle owner assignments and tenant legal holds are preserved.",
+      ...(packageData.dataEgressPolicies
+        ? ["Classification egress controls will be restored; runtime remains fail-closed for missing policy rows."]
+        : ["This legacy package has no classification egress controls; current local egress policy will be preserved."]),
       ...(externalPolicies.length
         ? [`${externalPolicies.length} external notification policies will be restored disabled until their local destination and credential are reviewed.`]
         : [])
@@ -149,6 +165,12 @@ export async function applyConfigurationRestore(env: Env, tenantId: string, acto
   for (const rule of data.dlpRules) statements.push(env.DB.prepare(`UPDATE dlp_rules SET action=?, direction=?,
     enabled=?, updated_by=?, updated_at=? WHERE tenant_id=? AND detector=?`).bind(
     rule.action, rule.direction, Number(rule.enabled), actorId, now, tenantId, rule.detector));
+  for (const policy of data.dataEgressPolicies ?? []) statements.push(
+    env.DB.prepare(`UPDATE tenant_data_egress_policies SET external_model_allowed=?,
+      external_tool_allowed=?, revision=revision+1, updated_by=?, updated_at=?
+      WHERE tenant_id=? AND classification=?`).bind(
+      Number(policy.externalModelAllowed), Number(policy.externalToolAllowed), actorId, now,
+      tenantId, policy.dataClassification));
   for (const policy of data.notificationPolicies) statements.push(env.DB.prepare(`UPDATE notification_policies SET
     enabled=?, severity=?, acknowledgement_required=?, escalation_minutes=?, quiet_hours_enabled=?,
     quiet_start_hour_utc=?, quiet_end_hour_utc=?, critical_bypass=?, digest_mode=?, digest_hour_utc=?,
@@ -191,6 +213,13 @@ function validatePackage(input: unknown): ConfigurationPackage {
     throw new Error("Configuration package must contain exactly the six unique DLP detectors");
   }
   const notificationPolicies = array(value.notificationPolicies, "notification policies", 80);
+  const dataEgressPolicies = value.dataEgressPolicies === undefined
+    ? undefined : array(value.dataEgressPolicies, "data egress policies", 4);
+  if (dataEgressPolicies && (dataEgressPolicies.length !== 4 ||
+      new Set(dataEgressPolicies.map((item) =>
+        String(object(item, "data egress policy").dataClassification))).size !== 4)) {
+    throw new Error("Configuration package must contain exactly four unique data egress classifications");
+  }
   const notificationKeys = notificationPolicies.map((item) => {
     const policy = object(item, "notification policy");
     return `${String(policy.eventType)}\u0000${String(policy.channel)}`;
@@ -233,6 +262,14 @@ function validatePackage(input: unknown): ConfigurationPackage {
         direction: oneOf(rule.direction, directions, "DLP direction"),
         enabled: boolean(rule.enabled, "DLP enabled") };
     }),
+    dataEgressPolicies: dataEgressPolicies?.map((item) => {
+      const policy = object(item, "data egress policy");
+      return {
+        dataClassification: oneOf(policy.dataClassification, dataClassifications, "data classification"),
+        externalModelAllowed: boolean(policy.externalModelAllowed, "external model egress"),
+        externalToolAllowed: boolean(policy.externalToolAllowed, "external tool egress")
+      };
+    }),
     notificationPolicies: notificationPolicies.map((item) => {
       const policy = object(item, "notification policy");
       return {
@@ -266,7 +303,8 @@ async function packageChecksum(value: ConfigurationPackage) {
 
 function sectionCounts(value: ConfigurationPackage) {
   return { organization: 1, lifecycle: value.lifecycle ? 1 : 0, retention: value.retention ? 1 : 0,
-    dlpRules: value.dlpRules.length, notificationPolicies: value.notificationPolicies.length };
+    dlpRules: value.dlpRules.length, dataEgressPolicies: value.dataEgressPolicies?.length ?? 0,
+    notificationPolicies: value.notificationPolicies.length };
 }
 function object(value: unknown, label: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Invalid ${label}`);

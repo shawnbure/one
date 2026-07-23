@@ -275,6 +275,13 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 88. `0088_mcp_connector_health.sql`: bounded connector health checks and accountable alert state.
 89. `0089_ai_gateway_handoff.sql`: tenant AI Gateway policy, disabled external-model approval, and per-execution routing evidence.
 90. `0090_custom_dlp_entries.sql`: encrypted tenant-specific DLP phrases and revisioned policy metadata.
+91. `0091_data_egress_policies.sql`: release-pinned process classification and tenant-controlled external model/tool egress policy.
+
+### Classification and egress boundary
+
+Every process release is pinned to one of `public`, `internal`, `confidential`, or `restricted`. A release cannot under-classify any bound tool. Native Workers AI remains available for every classification inside the customer Cloudflare deployment, while external AI Gateway handoff and external Microsoft/MCP tool traffic are independently controlled per classification. Runtime checks fail before provider access, missing policy rows fail closed, and owner/admin changes use optimistic revisions with metadata-only audit evidence.
+
+The Governance workspace exposes the complete matrix with conservative defaults: public permits both external routes, internal permits external tools but blocks external models, and confidential/restricted block both. Process packages carry their classification; configuration packages carry the tenant egress matrix while older packages preserve the destination policy. Opportunity conversion preserves the discovery classification, rollback restores the release-pinned classification, and the printable privacy/architecture report inventories both process classifications and current egress policy.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

@@ -86,6 +86,7 @@ import { createEmailRoute, listEmailReceipts, listEmailRoutes, receiveProcessEma
 import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector, disconnectMcpConnector,
   discoverMcpTools, governMcpTool, listMcpConnectors } from "./mcp-connectors";
 import { checkMcpConnectorHealth } from "./mcp-connector-health";
+import { updateDataEgressPolicy } from "./data-governance";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -2471,6 +2472,18 @@ app.post("/api/dlp/preview", requireRoles("admin", "owner"), async (c) => {
       body.direction ?? "input") });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "DLP preview failed" }, 400);
+  }
+});
+
+app.patch("/api/governance/data-egress/:classification", requireRoles("admin", "owner"), async (c) => {
+  const classification = c.req.param("classification");
+  if (!classification) return c.json({ error: "Data classification is required" }, 400);
+  try {
+    return c.json({ data: await updateDataEgressPolicy(c.env, c.get("tenantId"), c.get("actorId"),
+      classification, await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Data egress policy could not be updated";
+    return c.json({ error: message }, message.includes("changed") ? 409 : 400);
   }
 });
 

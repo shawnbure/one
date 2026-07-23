@@ -31,6 +31,7 @@ export interface BlueprintRow {
   input_schema_json?: string | null;
   output_schema_json?: string | null;
   tool_policy_json?: string | null;
+  data_classification?: "public" | "internal" | "confidential" | "restricted";
 }
 
 export interface PromptRow {

@@ -1016,6 +1016,14 @@ The six built-in pattern detectors are supplemented by up to 25 tenant-defined e
 
 The Governance workspace includes a non-persistent policy tester for authorized owners and administrators. It runs the same tenant rules and returns the always-redacted safe representation, never the model-visible audit representation. Test samples are bounded, request-local, absent from DLP evidence and content logs, and do not enter any durable execution path. This gives forward-deployed engineers a launch-time proof surface without manufacturing operational incidents.
 
+### Data classification and external egress
+
+Process classification is an immutable release input, not a mutable label on a request. The four levels are `public`, `internal`, `confidential`, and `restricted`; a process may not be classified below any tool it binds. Discovery opportunities preserve their classification when converted, portable process packages retain it, and rollback restores the selected release's classification.
+
+Native Workers AI is the private Cloudflare-default inference path and is not treated as an external handoff. AI Gateway external models and Microsoft/MCP provider calls cross separate policy gates, allowing a customer to permit one without permitting the other. Tenant policy rows are revisioned and fail closed when absent. Checks run immediately before the external provider boundary so isolates, Queues, Workflows, and durable Agent turns all enforce the same current tenant policy without relying on process memory or KV.
+
+Conservative defaults permit both routes for public data, permit external tools but not external models for internal data, and block both routes for confidential and restricted data. Owners and administrators can change the matrix with auditable optimistic concurrency. Configuration packages carry the matrix, privacy reports inventory it, and no matched content or provider credential is written to policy evidence.
+
 Deliverables:
 
 - `AiGatewayProvider`;

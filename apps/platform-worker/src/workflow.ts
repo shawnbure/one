@@ -47,7 +47,8 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
     const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
       runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput, undefined, {
         tenantId, executionId: event.instanceId, autonomy: autonomyPlan(context.blueprint).effective,
-        policies: context.blueprint.toolPolicies ?? []
+        policies: context.blueprint.toolPolicies ?? [],
+        dataClassification: context.blueprint.dataClassification ?? "internal"
       }, [], context.blueprint.modelId));
     const result = await step.do("enforce output DLP policy", async () => {
       const protectedOutput = await applyDlp(this.env, tenantId, rawResult.output, {

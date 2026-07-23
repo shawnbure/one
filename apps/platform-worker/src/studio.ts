@@ -6,6 +6,7 @@ import { inferenceModelCatalog, modelProfiles, supportedInferenceModels } from "
 import { getAutonomySafety } from "./autonomy-safety";
 import { assertTenantModelAllowed } from "./model-governance";
 import { requireAiGatewaySetting } from "./ai-gateway";
+import { assertExternalModelAllowed, dataClassifications, normalizeDataClassification } from "./data-governance";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -18,6 +19,7 @@ interface ReleaseInput {
   inputSchema?: unknown;
   outputSchema?: unknown;
   topology?: unknown;
+  dataClassification?: string;
 }
 
 export interface BusinessTopologyStep {
@@ -53,7 +55,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, model_id, autonomy, status, release_notes,
       created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at,
-      input_schema_json, output_schema_json, tool_policy_json, topology_json FROM process_releases
+      input_schema_json, output_schema_json, tool_policy_json, topology_json, data_classification FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND blueprint_id = ?
       AND started_at >= datetime('now','-7 days') GROUP BY status`).bind(tenantId, blueprintId).all(),
@@ -140,16 +142,26 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   if (selectedModel.profile !== input.modelProfile) {
     throw new Error(`The selected model requires the ${selectedModel.profile} model profile`);
   }
-  if (selectedModel.boundary === "ai_gateway") await requireAiGatewaySetting(env, tenantId);
   await assertTenantModelAllowed(env, tenantId, modelId);
   const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
   const outputSchema = normalizeProcessSchema(input.outputSchema, "output");
   const [blueprint, toolPolicies] = await Promise.all([
-    env.DB.prepare("SELECT execution_profile FROM agent_blueprints WHERE tenant_id = ? AND id = ?")
-      .bind(tenantId, blueprintId).first<{ execution_profile: string }>(),
+    env.DB.prepare("SELECT execution_profile, data_classification FROM agent_blueprints WHERE tenant_id = ? AND id = ?")
+      .bind(tenantId, blueprintId).first<{ execution_profile: string; data_classification: string }>(),
     releaseToolPolicies(env, tenantId, blueprintId)
   ]);
   if (!blueprint) throw new Error("Process not found");
+  const dataClassification = normalizeDataClassification(input.dataClassification ?? blueprint.data_classification ?? "internal");
+  const classificationRank = dataClassifications.indexOf(dataClassification);
+  const higherTool = toolPolicies.find((tool) =>
+    dataClassifications.indexOf(tool.dataClassification) > classificationRank);
+  if (higherTool) {
+    throw new Error(`Process classification must cover its ${higherTool.dataClassification} tool ${higherTool.name}`);
+  }
+  if (selectedModel.boundary === "ai_gateway") {
+    await requireAiGatewaySetting(env, tenantId);
+    await assertExternalModelAllowed(env, tenantId, dataClassification);
+  }
   const topology = normalizeWorkflowTopology(
     blueprint.execution_profile, input.autonomy, toolPolicies.map((tool) => tool.name), input.topology
   );
@@ -159,6 +171,7 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   const releaseId = `release-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const promptReleaseId = `prompt-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const compiled = { promptReleaseId, modelProfile: input.modelProfile, modelId, autonomy: input.autonomy,
+    dataClassification,
     executionProfile: blueprint.execution_profile, inputSchema, outputSchema, toolPolicies, topology };
   const checksum = await sha256(JSON.stringify({ ...input, inputSchema, outputSchema, compiled }));
   await env.DB.batch([
@@ -168,12 +181,13 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
       .bind(promptReleaseId, blueprintId, version, input.systemPrompt.trim(), JSON.stringify(input.instructions), JSON.stringify(input.guardrails), checksum, input.releaseNotes ?? "", actorId),
     env.DB.prepare(`INSERT INTO process_releases
       (id, tenant_id, blueprint_id, version, prompt_release_id, model_profile, model_id, autonomy, compiled_json,
-       checksum, status, release_notes, created_by, input_schema_json, output_schema_json, tool_policy_json, topology_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`)
+       checksum, status, release_notes, created_by, input_schema_json, output_schema_json, tool_policy_json,
+       topology_json, data_classification)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`)
       .bind(releaseId, tenantId, blueprintId, version, promptReleaseId, input.modelProfile, modelId, input.autonomy,
         JSON.stringify(compiled), checksum, input.releaseNotes ?? "", actorId,
         inputSchema ? JSON.stringify(inputSchema) : null, outputSchema ? JSON.stringify(outputSchema) : null,
-        JSON.stringify(toolPolicies), JSON.stringify(topology))
+        JSON.stringify(toolPolicies), JSON.stringify(topology), dataClassification)
   ]);
   return { releaseId, promptReleaseId, version, checksum, status: "draft" as const };
 }
@@ -195,8 +209,10 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
     env.DB.prepare("UPDATE process_releases SET status = 'published', published_at = ?, published_by = ? WHERE id = ?").bind(now, actorId, releaseId),
     env.DB.prepare("UPDATE prompt_releases SET status = 'published', published_at = ? WHERE id = ?").bind(now, release.prompt_release_id),
     env.DB.prepare(`UPDATE agent_blueprints SET prompt_release_id = ?, model_profile = ?, autonomy = ?, active_release_id = ?,
-      status = CASE WHEN status = 'draft' THEN 'testing' ELSE status END, updated_at = ? WHERE tenant_id = ? AND id = ?`)
-      .bind(release.prompt_release_id, release.model_profile, release.autonomy, releaseId, now, tenantId, blueprintId),
+      data_classification=?, status = CASE WHEN status = 'draft' THEN 'testing' ELSE status END,
+      updated_at = ? WHERE tenant_id = ? AND id = ?`)
+      .bind(release.prompt_release_id, release.model_profile, release.autonomy, releaseId,
+        release.data_classification, now, tenantId, blueprintId),
     env.DB.prepare(`INSERT INTO release_activations
       (id, tenant_id, blueprint_id, from_release_id, to_release_id, activation_type, reason, activated_by, activated_at)
       VALUES (?, ?, ?, ?, ?, 'publish', ?, ?, ?)`)
@@ -255,7 +271,8 @@ export async function rollbackRelease(env: Env, tenantId: string, blueprintId: s
   const [blueprint, target] = await Promise.all([
     env.DB.prepare("SELECT active_release_id FROM agent_blueprints WHERE tenant_id=? AND id=?")
       .bind(tenantId, blueprintId).first<{ active_release_id: string | null }>(),
-    env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, model_id, autonomy, status, evaluation_status
+    env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, model_id, autonomy,
+      data_classification, status, evaluation_status
       FROM process_releases WHERE id=? AND tenant_id=? AND blueprint_id=?`)
       .bind(releaseId, tenantId, blueprintId).first<Record<string, string | number>>()
   ]);
@@ -282,8 +299,8 @@ export async function rollbackRelease(env: Env, tenantId: string, blueprintId: s
     env.DB.prepare("UPDATE prompt_releases SET status='published', published_at=? WHERE id=?")
       .bind(now, target.prompt_release_id),
     env.DB.prepare(`UPDATE agent_blueprints SET prompt_release_id=?, model_profile=?, autonomy=?,
-      active_release_id=?, updated_at=? WHERE tenant_id=? AND id=? AND active_release_id=?`)
-      .bind(target.prompt_release_id, target.model_profile, target.autonomy, releaseId, now,
+      data_classification=?, active_release_id=?, updated_at=? WHERE tenant_id=? AND id=? AND active_release_id=?`)
+      .bind(target.prompt_release_id, target.model_profile, target.autonomy, target.data_classification, releaseId, now,
         tenantId, blueprintId, blueprint.active_release_id),
     env.DB.prepare(`INSERT INTO release_activations
       (id, tenant_id, blueprint_id, from_release_id, to_release_id, activation_type, reason, activated_by, activated_at)

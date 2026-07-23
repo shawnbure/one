@@ -1492,6 +1492,7 @@ function Governance({
   const [dlpPreviewForm, setDlpPreviewForm] = useState({ sample: "", direction: "input" as "input" | "output" });
   const [dlpPreview, setDlpPreview] = useState<Awaited<ReturnType<typeof api.previewDlp>>["data"] | null>(null);
   const [dlpPreviewBusy, setDlpPreviewBusy] = useState(false);
+  const [dataPolicyBusy, setDataPolicyBusy] = useState<string | null>(null);
   const [modelPolicyBusy, setModelPolicyBusy] = useState<string | null>(null);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [gatewayForm, setGatewayForm] = useState({
@@ -1679,6 +1680,20 @@ function Governance({
       onNotice("DLP policy evaluated without storing the sample or detection evidence.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "DLP preview failed"); }
     finally { setDlpPreviewBusy(false); }
+  }
+  async function changeDataPolicy(policy: GovernanceData["dataEgressPolicies"][number],
+    patch: { externalModelAllowed?: boolean; externalToolAllowed?: boolean }) {
+    setDataPolicyBusy(policy.classification);
+    try {
+      await api.updateDataEgressPolicy(policy.classification, {
+        externalModelAllowed: patch.externalModelAllowed ?? Boolean(policy.external_model_allowed),
+        externalToolAllowed: patch.externalToolAllowed ?? Boolean(policy.external_tool_allowed),
+        expectedRevision: policy.revision
+      });
+      await onReload();
+      onNotice(`${policy.classification} data handling policy updated.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Data handling policy update failed"); }
+    finally { setDataPolicyBusy(null); }
   }
   return (
     <section className="foundation-page">
@@ -1870,6 +1885,28 @@ function Governance({
             </span>)}</div>
           </section>}
         </div>}
+      </article>
+      <article className="data-egress-center panel">
+        <div className="section-head"><div><span className="eyebrow"><ShieldCheck size={14}/> DATA HANDLING</span>
+          <h2>Classification and egress</h2>
+          <p>Cloudflare-hosted Workers AI remains inside the deployment boundary. External model and connected-tool handoffs require an explicit policy for the release or tool classification.</p></div>
+          <span className="private-boundary"><LockKeyhole size={14}/> Fail closed</span></div>
+        <div className="data-egress-head"><span>Classification</span><span>External AI Gateway model</span>
+          <span>Connected external tools</span><span>Policy evidence</span></div>
+        {data.dataEgressPolicies.map((policy) => <div className={`data-egress-row level-${policy.classification}`}
+          key={policy.classification}>
+          <span><strong>{policy.classification}</strong><small>{dataClassificationGuidance(policy.classification)}</small></span>
+          <label><input type="checkbox" checked={Boolean(policy.external_model_allowed)}
+            disabled={!canManageDlp || dataPolicyBusy === policy.classification}
+            onChange={(event) => void changeDataPolicy(policy, { externalModelAllowed: event.target.checked })}/>
+            <span>{policy.external_model_allowed ? "Approved" : "Blocked"}</span></label>
+          <label><input type="checkbox" checked={Boolean(policy.external_tool_allowed)}
+            disabled={!canManageDlp || dataPolicyBusy === policy.classification}
+            onChange={(event) => void changeDataPolicy(policy, { externalToolAllowed: event.target.checked })}/>
+            <span>{policy.external_tool_allowed ? "Approved" : "Blocked"}</span></label>
+          <span><strong>Revision {policy.revision}</strong><small>{policy.updated_by} · {policy.updated_at}</small></span>
+        </div>)}
+        <p className="data-egress-note">Changing this control never rewrites an immutable release. A newly blocked runtime handoff fails before provider access, while a newly approved classification becomes eligible only when all existing model, connection, release, risk, and approval gates also pass.</p>
       </article>
       <div className="governance-section panel">
         <div className="section-head">
@@ -2109,6 +2146,13 @@ function nextIncidentActions(status: string) {
   if (status === "monitoring") return ["resolved", "investigating"];
   if (status === "resolved") return ["closed", "investigating"];
   return [];
+}
+
+function dataClassificationGuidance(classification: string) {
+  if (classification === "public") return "Approved public information";
+  if (classification === "internal") return "Ordinary non-public operations";
+  if (classification === "confidential") return "Customer, employee, or commercial data";
+  return "Highly sensitive or regulated data";
 }
 
 function Title({

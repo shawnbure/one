@@ -64,16 +64,18 @@ describe("model conversation context", () => {
   it("routes an approved external model through the tenant gateway without response caching", async () => {
     const env = {
       AI: {},
-      DB: { prepare() { return {
+      DB: { prepare(sql: string) { return {
         bind() { return this; },
         async first() {
+          if (sql.includes("external_model_allowed")) return { external_model_allowed: 1 };
           return { gateway_id: "customer-ai", enabled: 1, collect_logs: 0,
             evidence_reference: "privacy-review-42", updated_by: "owner-1", updated_at: "2026-07-23" };
         }
       }; } }
     };
     const result = await runModel(env as never, "balanced", prompt, "gateway request", undefined, {
-      tenantId: "tenant-1", executionId: "execution-1", autonomy: "suggest", policies: []
+      tenantId: "tenant-1", executionId: "execution-1", autonomy: "suggest", policies: [],
+      dataClassification: "internal"
     }, [], "openai/gpt-4.1-mini");
     expect(createWorkersAI).toHaveBeenCalledWith(expect.objectContaining({
       gateway: expect.objectContaining({ id: "customer-ai", skipCache: true, collectLog: false }),

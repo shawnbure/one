@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 90,
-  "requiredMigrationName": "0090_custom_dlp_entries.sql"
+  "requiredMigrationId": 91,
+  "requiredMigrationName": "0091_data_egress_policies.sql"
 }

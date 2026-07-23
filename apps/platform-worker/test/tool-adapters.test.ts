@@ -29,6 +29,7 @@ async function environment() {
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
+          if (sql.includes("external_tool_allowed")) return { external_tool_allowed: 1 };
           if (sql.includes("FROM oauth_connections")) return {
             id: "oauth-ms", connection_id: "conn-ms", account_email: null, account_name: "Operator",
             scopes_json: '["openid","offline_access","User.Read","Calendars.ReadWrite"]',

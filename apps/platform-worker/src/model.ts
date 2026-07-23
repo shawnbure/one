@@ -5,6 +5,7 @@ import { openai } from "workers-ai-provider/openai";
 import type { Env } from "./types";
 import { buildExecutionTools, type ToolRuntimeContext, type ToolInvocationEvidence } from "./tool-runtime";
 import { requireAiGatewaySetting } from "./ai-gateway";
+import { assertExternalModelAllowed } from "./data-governance";
 
 type ModelProfileName = keyof typeof modelProfiles;
 
@@ -28,6 +29,10 @@ export async function runModel(
   }
   const modelId = pinnedModelId || selected.model;
   const gatewayModel = !modelId.startsWith("@cf/");
+  if (gatewayModel) {
+    await assertExternalModelAllowed(env, toolContext?.tenantId ?? "",
+      toolContext?.dataClassification ?? "internal");
+  }
   const gatewaySetting = gatewayModel
     ? await requireAiGatewaySetting(env, toolContext?.tenantId ?? "")
     : null;

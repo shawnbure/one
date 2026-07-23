@@ -9,6 +9,7 @@ export interface CreateProcessInput {
   businessOwner: string;
   department: string;
   riskLevel: "low" | "medium" | "high";
+  dataClassification?: "public" | "internal" | "confidential" | "restricted";
   baseline: { volumePerMonth: number; minutesPerItem: number; hourlyCost: number; errorRate: number };
 }
 
@@ -34,6 +35,10 @@ interface StarterKit {
 
 export async function createProcessFromTemplate(env: Env, tenantId: string, actorId: string, input: CreateProcessInput, processIdOverride?: string) {
   if (!input.name?.trim() || !input.purpose?.trim() || !input.templateId) throw new Error("Template, process name, and purpose are required");
+  if (input.dataClassification !== undefined &&
+      !["public", "internal", "confidential", "restricted"].includes(input.dataClassification)) {
+    throw new Error("Process data classification is invalid");
+  }
   if (![input.baseline.volumePerMonth, input.baseline.minutesPerItem, input.baseline.hourlyCost, input.baseline.errorRate].every(Number.isFinite) ||
       input.baseline.volumePerMonth < 0 || input.baseline.minutesPerItem < 0 || input.baseline.hourlyCost < 0 ||
       input.baseline.errorRate < 0 || input.baseline.errorRate > 1) {
@@ -58,9 +63,12 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO agent_blueprints
       (id, tenant_id, name, description, execution_profile, model_profile, prompt_release_id, autonomy, status, tools_json,
-       updated_at, business_owner, department, risk_level, operating_mode)
-      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'draft', ?, ?, ?, ?, ?, 'paused')`)
-        .bind(id, tenantId, input.name.trim(), input.purpose.trim(), template.execution_profile, template.model_profile, template.autonomy, template.tools_json, now, input.businessOwner || "Unassigned", input.department || "Operations", input.riskLevel || "medium"),
+       updated_at, business_owner, department, risk_level, data_classification, operating_mode)
+      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'draft', ?, ?, ?, ?, ?, ?, 'paused')`)
+        .bind(id, tenantId, input.name.trim(), input.purpose.trim(), template.execution_profile,
+          template.model_profile, template.autonomy, template.tools_json, now,
+          input.businessOwner || "Unassigned", input.department || "Operations", input.riskLevel || "medium",
+          input.dataClassification ?? "internal"),
       env.DB.prepare(`INSERT INTO process_discovery
       (id, tenant_id, blueprint_id, purpose, current_steps, systems_json, exceptions_json,
        volume_per_month, minutes_per_item, hourly_cost, error_rate, opportunity_score, created_by,
@@ -95,6 +103,7 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
       guardrails: JSON.parse(template.guardrails_json) as string[],
       modelProfile: template.model_profile,
       autonomy: template.autonomy,
+      dataClassification: input.dataClassification ?? "internal",
       releaseNotes: `Initial draft from ${input.templateId}`
     });
   return { id, name: input.name.trim(), status: "draft", opportunityScore: score, release };

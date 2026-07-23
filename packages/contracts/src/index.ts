@@ -50,6 +50,7 @@ export interface AgentBlueprint {
   inputSchemaJson?: string | null;
   outputSchemaJson?: string | null;
   toolPolicies?: ToolPolicy[];
+  dataClassification?: ToolPolicy["dataClassification"];
 }
 
 export interface PromptBundle {

@@ -1,5 +1,6 @@
 import { Agent } from "agents";
 import type { AutonomyLevel, PromptBundle, ToolPolicy } from "@workrr/contracts";
+import type { DataClassification } from "./data-governance";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { applyDlp, DlpBlockedError } from "./dlp";
@@ -205,7 +206,8 @@ export class ProcessAgent extends Agent<Env, AgentState> {
 
   async execute(input: string, safeInput: string, modelProfile: string, modelId: string | null, executionId: string,
     outputSchema: ProcessSchema | null = null, persistAssistant = true,
-    autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = []): Promise<{
+    autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = [],
+    dataClassification: DataClassification = "internal"): Promise<{
     output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
     turnCount: number; toolApprovalRequired: boolean; inferenceProvider: "workers_ai" | "ai_gateway";
     gatewayId: string | null; gatewayStep: number | null; gatewayCacheStatus: string | null;
@@ -229,7 +231,8 @@ export class ProcessAgent extends Agent<Env, AgentState> {
       (id, role, content, source_execution_id, status, revision, created_at, updated_at)
       VALUES (${userTurnId}, 'user', ${safeInput}, ${executionId}, 'active', 1, ${now}, ${now})`;
     const result = await runModel(this.env, modelProfile, JSON.parse(row.bundle_json) as PromptBundle, input,
-      this.sessionAffinity, { tenantId: this.state.tenantId!, executionId, autonomy, policies: toolPolicies },
+      this.sessionAffinity, { tenantId: this.state.tenantId!, executionId, autonomy, policies: toolPolicies,
+        dataClassification },
       history, modelId, durableFacts);
     if (!this.state.tenantId) throw new Error("Agent tenant identity is not installed");
     const outputDlp = await applyDlp(this.env, this.state.tenantId, result.output, {

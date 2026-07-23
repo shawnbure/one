@@ -370,6 +370,7 @@ export interface ProcessRelease {
   output_schema_json: string | null;
   tool_policy_json: string | null;
   topology_json: string | null;
+  data_classification: "public" | "internal" | "confidential" | "restricted";
 }
 export interface AutonomySafetyData {
   state: {
@@ -543,6 +544,11 @@ export interface GovernanceData {
   customDlpEntries: Array<{ id: string; label: string; action: "audit" | "redact" | "block";
     direction: "input" | "output" | "both"; enabled: number; revision: number;
     updated_by: string; updated_at: string }>;
+  dataEgressPolicies: Array<{
+    classification: "public" | "internal" | "confidential" | "restricted";
+    external_model_allowed: number; external_tool_allowed: number; revision: number;
+    updated_by: string; updated_at: string;
+  }>;
   dlpEvents: Array<{ direction: string; stage: string; detector: string; action: string; match_count: number;
     execution_id: string | null; blueprint_id: string | null; created_at: string; display_label: string | null }>;
   webhooks: WebhookEndpoint[];
@@ -1394,6 +1400,7 @@ export const api = {
       topology?: {
         businessSteps: Array<{ id: string; type: "step" | "decision" | "checkpoint"; label: string }>;
       };
+      dataClassification: "public" | "internal" | "confidential" | "restricted";
     },
   ) =>
     request<{ releaseId: string; version: number; status: string }>(
@@ -1685,6 +1692,12 @@ export const api = {
     request<{ data: { safeText: string; blocked: boolean; count: number;
       matches: Array<{ detector: string; label: string; action: string; count: number }> } }>(
       "/api/dlp/preview", { method: "POST", body: JSON.stringify(body) }),
+  updateDataEgressPolicy: (classification: string, body: {
+    externalModelAllowed: boolean; externalToolAllowed: boolean; expectedRevision: number;
+  }) => request<{ data: { classification: string; externalModelAllowed: boolean;
+    externalToolAllowed: boolean; revision: number } }>(
+    `/api/governance/data-egress/${encodeURIComponent(classification)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   promoteEvaluationSample: (id: string, body: { executionId: string; name?: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(

@@ -27,6 +27,7 @@ Promise<AgentBlueprint | null> {
   const statement = env.DB.prepare(`SELECT b.*, r.id resolved_release_id, r.prompt_release_id resolved_prompt_release_id,
     r.model_profile resolved_model_profile, r.autonomy resolved_autonomy,
     r.model_id, r.input_schema_json, r.output_schema_json,
+    COALESCE(r.data_classification, b.data_classification, 'internal') resolved_data_classification,
     COALESCE((SELECT json_group_array(json_set(policy.value, '$.connectionReady',
       CASE
         WHEN json_extract(policy.value, '$.adapterKind')='mock'
@@ -69,6 +70,7 @@ Promise<AgentBlueprint | null> {
     .first<BlueprintRow & {
       resolved_release_id?: string | null; resolved_prompt_release_id?: string | null;
       resolved_model_profile?: string | null; resolved_autonomy?: string | null;
+      resolved_data_classification?: AgentBlueprint["dataClassification"];
     }>();
   if (!row) return null;
   const configuredAutonomy = (row.resolved_autonomy ?? row.autonomy) as AgentBlueprint["autonomy"];
@@ -95,7 +97,8 @@ Promise<AgentBlueprint | null> {
     toolPolicies: (JSON.parse(row.tool_policy_json || "[]") as Array<Record<string, unknown>>).map((tool) => ({
       ...tool,
       connectionReady: Boolean(tool.connectionReady)
-    })) as AgentBlueprint["toolPolicies"]
+    })) as AgentBlueprint["toolPolicies"],
+    dataClassification: row.resolved_data_classification ?? row.data_classification ?? "internal"
   };
 }
 

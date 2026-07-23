@@ -235,6 +235,7 @@ export async function convertOpportunity(env: Env, tenantId: string, actorId: st
     businessOwner: String(row.business_owner),
     department: String(row.department),
     riskLevel: String(row.risk_level) as "low" | "medium" | "high",
+    dataClassification: String(row.data_classification) as "public" | "internal" | "confidential" | "restricted",
     baseline: {
       volumePerMonth: Number(row.volume_per_month),
       minutesPerItem: Number(row.minutes_per_item),

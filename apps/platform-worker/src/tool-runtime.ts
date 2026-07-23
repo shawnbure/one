@@ -3,12 +3,14 @@ import { jsonSchema, tool, type ToolSet } from "ai";
 import { invokeBoundAdapter, isBoundAdapter } from "./tool-adapters";
 import { applyDlp, DlpBlockedError } from "./dlp";
 import type { Env } from "./types";
+import type { DataClassification } from "./data-governance";
 
 export interface ToolRuntimeContext {
   tenantId: string;
   executionId: string;
   autonomy: AutonomyLevel;
   policies: ToolPolicy[];
+  dataClassification: DataClassification;
 }
 
 export interface ToolInvocationEvidence {
