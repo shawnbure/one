@@ -845,6 +845,11 @@ describe("control-plane security boundary", () => {
         method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
           "x-workrr-user": "operator@example.com" },
         body: JSON.stringify({ action: "audit", direction: "both", enabled: false, expectedRevision: 1 })
+      }),
+      new Request("http://localhost/api/dlp/preview", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ sample: "Project Falcon", direction: "input" })
       })
     ]) {
       const { env, queries } = environment("viewer");

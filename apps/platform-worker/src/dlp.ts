@@ -63,11 +63,40 @@ export async function applyDlp(env: Env, tenantId: string, value: string, contex
   executionId?: string;
   blueprintId?: string;
 }, preparedRules?: DlpRule[]) {
+  const evaluated = await evaluateTenantPolicy(env, tenantId, value, context.direction, preparedRules);
+  return recordDlpEvidence(env, tenantId, evaluated.result, context);
+}
+
+export async function previewDlpPolicy(env: Env, tenantId: string, value: string, direction: DlpDirection) {
+  if (typeof value !== "string" || !value.trim()) throw new Error("A sample is required");
+  if (value.length > 10_000) throw new Error("DLP samples are limited to 10,000 characters");
+  if (!["input", "output"].includes(direction)) throw new Error("Valid DLP direction is required");
+  const evaluated = await evaluateTenantPolicy(env, tenantId, value, direction);
+  const { result } = evaluated;
+  const customLabels = new Map(evaluated.custom.map((entry) => [entry.id, entry.label]));
+  return {
+    safeText: result.safeText,
+    blocked: result.blocked,
+    count: result.count,
+    matches: result.matches.map((match) => ({
+      detector: match.detector,
+      label: match.detector.startsWith("custom:")
+        ? customLabels.get(match.detector.slice("custom:".length)) ?? "Organization phrase"
+        : match.detector.replaceAll("_", " "),
+      action: match.action,
+      count: match.count
+    }))
+  };
+}
+
+async function evaluateTenantPolicy(env: Env, tenantId: string, value: string, direction: DlpDirection,
+  preparedRules?: DlpRule[]) {
   const configured = preparedRules ?? await loadDlpRules(env, tenantId);
   const active = configured.filter((rule) => Number(rule.enabled) === 1 &&
-    (rule.direction === context.direction || rule.direction === "both"));
-  const custom = await loadCustomDlpEntries(env, tenantId, context.direction);
-  return enforceRules(env, tenantId, value, active, custom, context);
+    (rule.direction === direction || rule.direction === "both"));
+  const custom = await loadCustomDlpEntries(env, tenantId, direction);
+  const customResult = evaluateCustom(evaluate(value, []), custom);
+  return { result: evaluate(value, active, customResult), custom };
 }
 
 export async function loadDlpRules(env: Env, tenantId: string) {
@@ -165,14 +194,9 @@ async function loadCustomDlpEntries(env: Env, tenantId: string, direction: DlpDi
   })));
 }
 
-async function enforceRules(env: Env, tenantId: string, value: string, rules: DlpRule[],
-  custom: CustomDlpRuntimeEntry[], context: {
+async function recordDlpEvidence(env: Env, tenantId: string, result: DlpEvaluation, context: {
   direction: DlpDirection; stage: string; executionId?: string; blueprintId?: string;
 }) {
-  // Tenant phrases run first so a built-in redaction inside a phrase cannot bypass a
-  // more specific organization block policy.
-  const customResult = evaluateCustom(evaluate(value, []), custom);
-  const result = evaluate(value, rules, customResult);
   if (result.matches.length) {
     await env.DB.batch(result.matches.map((match) => env.DB.prepare(`INSERT INTO dlp_events
       (id, tenant_id, execution_id, blueprint_id, direction, stage, detector, action, match_count)

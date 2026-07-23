@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDlp, createCustomDlpEntry, DlpBlockedError, scanSensitiveText,
+import { applyDlp, createCustomDlpEntry, DlpBlockedError, previewDlpPolicy, scanSensitiveText,
   updateCustomDlpEntry, updateDlpRule } from "../src/dlp";
 import { sanitizeAsyncExecutionInput } from "../src/execution";
 
@@ -85,6 +85,20 @@ describe("tenant DLP policy", () => {
     expect(writes[0]?.sql).toContain("WHERE tenant_id=? AND detector=?");
     expect(writes[0]?.bindings.slice(-2)).toEqual(["tenant-1", "email"]);
     expect(writes[1]?.sql).toContain("dlp.rule_updated");
+  });
+
+  it("previews the current policy without writing detection evidence or returning audit-only values", async () => {
+    const { env, writes } = dlpEnvironment([
+      { detector: "email", action: "redact" },
+      { detector: "ip_address", action: "audit" }
+    ]);
+    const result = await previewDlpPolicy(env, "tenant-1", "sam@example.com from 10.0.0.8", "input");
+    expect(result.safeText).toBe("[REDACTED_EMAIL] from [REDACTED_IP]");
+    expect(result.matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({ detector: "email", action: "redact" }),
+      expect.objectContaining({ detector: "ip_address", action: "audit" })
+    ]));
+    expect(writes).toHaveLength(0);
   });
 
   it("stores custom phrases only as encrypted values and content-free audit evidence", async () => {

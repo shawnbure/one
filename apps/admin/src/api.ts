@@ -1681,6 +1681,10 @@ export const api = {
     direction: "input" | "output" | "both"; enabled: boolean; expectedRevision: number }) =>
     request<{ data: { id: string; revision: number } }>(
       `/api/dlp/custom-entries/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  previewDlp: (body: { sample: string; direction: "input" | "output" }) =>
+    request<{ data: { safeText: string; blocked: boolean; count: number;
+      matches: Array<{ detector: string; label: string; action: string; count: number }> } }>(
+      "/api/dlp/preview", { method: "POST", body: JSON.stringify(body) }),
   promoteEvaluationSample: (id: string, body: { executionId: string; name?: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(

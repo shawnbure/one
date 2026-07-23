@@ -31,7 +31,7 @@ import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate,
 import { getUsageLedger, importBillingEvidence, updateProcessBudget, voidBillingEvidence } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
-import { createCustomDlpEntry, isDlpBlocked, updateCustomDlpEntry, updateDlpRule } from "./dlp";
+import { createCustomDlpEntry, isDlpBlocked, previewDlpPolicy, updateCustomDlpEntry, updateDlpRule } from "./dlp";
 import { getShadowReview, listShadowReviews, reviewShadowExecution, ShadowReviewConflict } from "./shadow";
 import { getProviderAcceptance, runMicrosoftAcceptance } from "./provider-acceptance";
 import { getPlatformVersion } from "./platform-version";
@@ -2461,6 +2461,16 @@ app.patch("/api/dlp/custom-entries/:id", requireRoles("admin", "owner"), async (
   } catch (error) {
     const message = error instanceof Error ? error.message : "Custom DLP entry could not be updated";
     return c.json({ error: message }, message.includes("changed") ? 409 : 400);
+  }
+});
+
+app.post("/api/dlp/preview", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const body = await c.req.json<{ sample?: string; direction?: "input" | "output" }>();
+    return c.json({ data: await previewDlpPolicy(c.env, c.get("tenantId"), body.sample ?? "",
+      body.direction ?? "input") });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "DLP preview failed" }, 400);
   }
 });
 

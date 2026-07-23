@@ -1014,6 +1014,8 @@ Implemented MVP boundary: the tenant Gateway is disabled by default, requires ow
 
 The six built-in pattern detectors are supplemented by up to 25 tenant-defined exact phrases. These policies stay in the control plane rather than KV, Cache API, Agent SQLite, or Workflow state. D1 stores AES-GCM ciphertext, IV, safe label, policy metadata, and a keyed duplicate digest; the deployment encryption root is separated into encryption and digest keys with distinct HKDF contexts. The browser never receives the phrase after submission. At each protected boundary the Worker performs a bounded tenant read, decrypts enabled phrases only in request memory, evaluates longer phrases first, and discards the clear values with the isolate/request lifetime. Evidence contains an opaque custom-entry ID and count, never the label or match. Configuration packages intentionally exclude these non-portable encrypted values.
 
+The Governance workspace includes a non-persistent policy tester for authorized owners and administrators. It runs the same tenant rules and returns the always-redacted safe representation, never the model-visible audit representation. Test samples are bounded, request-local, absent from DLP evidence and content logs, and do not enter any durable execution path. This gives forward-deployed engineers a launch-time proof surface without manufacturing operational incidents.
+
 Deliverables:
 
 - `AiGatewayProvider`;

@@ -1489,6 +1489,9 @@ function Governance({
     label: "", term: "", action: "redact" as "audit" | "redact" | "block",
     direction: "both" as "input" | "output" | "both"
   });
+  const [dlpPreviewForm, setDlpPreviewForm] = useState({ sample: "", direction: "input" as "input" | "output" });
+  const [dlpPreview, setDlpPreview] = useState<Awaited<ReturnType<typeof api.previewDlp>>["data"] | null>(null);
+  const [dlpPreviewBusy, setDlpPreviewBusy] = useState(false);
   const [modelPolicyBusy, setModelPolicyBusy] = useState<string | null>(null);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [gatewayForm, setGatewayForm] = useState({
@@ -1666,6 +1669,17 @@ function Governance({
     } catch (error) { onNotice(error instanceof Error ? error.message : "Custom DLP policy update failed"); }
     finally { setDlpBusy(null); }
   }
+  async function testDlpPolicy() {
+    if (!dlpPreviewForm.sample.trim()) { onNotice("Enter a bounded sample to test."); return; }
+    setDlpPreviewBusy(true);
+    try {
+      const result = await api.previewDlp(dlpPreviewForm);
+      setDlpPreview(result.data);
+      setDlpPreviewForm({ ...dlpPreviewForm, sample: "" });
+      onNotice("DLP policy evaluated without storing the sample or detection evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "DLP preview failed"); }
+    finally { setDlpPreviewBusy(false); }
+  }
   return (
     <section className="foundation-page">
       <div className="governance-title">
@@ -1828,6 +1842,34 @@ function Governance({
             </article>) : <p className="empty-copy">No sensitive-pattern detections recorded.</p>}
           </div>
         </div>
+        {canManageDlp && <div className="dlp-preview">
+          <div>
+            <span className="eyebrow"><ShieldCheck size={13}/> POLICY TEST</span>
+            <h3>Validate before launch</h3>
+            <p>The sample is evaluated inside this Worker request and is not stored in D1, Agent memory, Workflow state, logs, or detection evidence.</p>
+          </div>
+          <label><span>Boundary</span><select value={dlpPreviewForm.direction}
+            onChange={(event) => setDlpPreviewForm({ ...dlpPreviewForm,
+              direction: event.target.value as "input" | "output" })}>
+            <option value="input">Input boundary</option><option value="output">Output boundary</option>
+          </select></label>
+          <label className="dlp-preview-sample"><span>Sample · 10,000 characters maximum</span>
+            <textarea value={dlpPreviewForm.sample} maxLength={10_000}
+              placeholder="Paste a representative test sample. It is discarded after evaluation."
+              onChange={(event) => setDlpPreviewForm({ ...dlpPreviewForm, sample: event.target.value })}/></label>
+          <button className="primary-button" disabled={dlpPreviewBusy} onClick={() => void testDlpPolicy()}>
+            {dlpPreviewBusy ? "Evaluating…" : "Test current policy"}
+          </button>
+          {dlpPreview && <section className={`dlp-preview-result ${dlpPreview.blocked ? "blocked" : ""}`}>
+            <header><span><strong>{dlpPreview.blocked ? "Would block" : "Would pass"}</strong>
+              <small>{dlpPreview.count} protected match{dlpPreview.count === 1 ? "" : "es"}</small></span>
+              <button onClick={() => setDlpPreview(null)}>Clear result</button></header>
+            <pre>{dlpPreview.safeText}</pre>
+            <div>{dlpPreview.matches.map((match) => <span key={match.detector}>
+              <strong>{match.label}</strong><small>{match.action} · {match.count}</small>
+            </span>)}</div>
+          </section>}
+        </div>}
       </article>
       <div className="governance-section panel">
         <div className="section-head">
