@@ -280,6 +280,12 @@ export interface StudioData {
     checksum: string;
   };
   releases: ProcessRelease[];
+  activations: Array<{
+    id: string; from_release_id: string | null; to_release_id: string;
+    activation_type: "initial" | "publish" | "rollback"; reason: string;
+    activated_by: string; activated_by_name: string | null; activated_at: string;
+    from_version: number | null; to_version: number;
+  }>;
   runStats: Array<{ status: string; count: number }>;
   activeTools: string[];
   topology: {
@@ -879,6 +885,12 @@ export const api = {
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
     ),
+  rollbackRelease: (processId: string, releaseId: string, body: {
+    reason: string; confirmVersion: number;
+  }) => request<{ releaseId: string; previousReleaseId: string; version: number;
+    status: "published"; rolledBackAt: string; reason: string }>(
+      `/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/rollback`,
+      { method: "POST", body: JSON.stringify(body) }),
   processRetirement: (id: string) =>
     request<{ data: ProcessRetirementData }>(`/api/processes/${encodeURIComponent(id)}/retirement`),
   requestProcessRetirement: (id: string, body: { reason: string; confirmName: string;

@@ -385,6 +385,20 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_bootstrap_runs"))).toBe(false);
   });
 
+  it("prevents builders and viewers from activating a rollback", async () => {
+    for (const role of ["builder", "viewer"]) {
+      const principal = environment(role);
+      const response = await app.fetch(new Request(
+        "http://localhost/api/processes/process-1/releases/release-1/rollback", {
+          method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" },
+          body: JSON.stringify({ reason: "Unauthorized rollback.", confirmVersion: 1 })
+        }), principal.env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(principal.queries.some((sql) => sql.includes("release_activations"))).toBe(false);
+    }
+  });
+
   it("prevents viewers from exporting the Access member allowlist", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/onboarding/access-handoff", {

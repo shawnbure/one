@@ -927,8 +927,54 @@ a:focus-visible {
   align-items: center;
 }
 .retention-actions input { flex: 1 1 240px; min-width: 0; padding: 9px; border: 1px solid #ccd8d2; border-radius: 7px; }
+.rollback-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, .45fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 16px;
+  border: 1px solid #e3c79b;
+  border-radius: 10px;
+  background: #fff9ed;
+}
+.rollback-editor header { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 12px; }
+.rollback-editor header div { flex: 1; }
+.rollback-editor header strong,
+.rollback-editor header small { display: block; }
+.rollback-editor header strong { color: #704d20; font-size: 15px; }
+.rollback-editor header small { margin-top: 3px; }
+.rollback-editor header button { min-height: 32px; border: 0; background: transparent; color: #735629; }
+.rollback-editor label { display: grid; gap: 5px; color: #59462d; font-weight: 700; }
+.rollback-editor textarea,
+.rollback-editor input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid #d8c19d;
+  border-radius: 7px;
+  background: #fff;
+  color: #2d281f;
+  font-size: 13px;
+}
+.rollback-editor textarea { min-height: 74px; resize: vertical; }
+.rollback-editor .rollback-confirm { min-height: 40px; padding: 9px 12px; border: 1px solid #9b6b2d;
+  border-radius: 7px; background: #8a5d25; color: #fff; font-weight: 800; }
+.rollback-editor .rollback-confirm:disabled { opacity: .45; }
+.activation-history { margin: 18px; padding: 16px; border: 1px solid #dce5e0; border-radius: 10px; background: #f8faf9; }
+.activation-history > div { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 10px; color: #356c56; }
+.activation-history > div span,
+.activation-history > div strong,
+.activation-history > div small { display: block; }
+.activation-history article { padding: 10px 0; border-top: 1px solid #e0e7e3; }
+.activation-history article strong { color: #2c4037; font-size: 13px; text-transform: capitalize; }
+.activation-history article p { margin: 4px 0; color: #4f6158; font-size: 13px; line-height: 1.5; }
+.activation-history article small { color: #68776f; }
 @media (max-width: 980px) {
   .retention-grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+  .rollback-editor { grid-template-columns: 1fr; }
+  .rollback-editor header { grid-column: 1; }
 }
 @media (max-width: 640px) {
   .retention-grid,

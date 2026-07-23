@@ -164,6 +164,9 @@ function Studio({
   const [inputSchema, setInputSchema] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
   const [busy, setBusy] = useState(false);
+  const [rollbackTarget, setRollbackTarget] = useState<ProcessRelease | null>(null);
+  const [rollbackReason, setRollbackReason] = useState("");
+  const [rollbackVersion, setRollbackVersion] = useState("");
 
   async function load() {
     try {
@@ -243,8 +246,24 @@ function Studio({
     }
   }
 
+  async function rollback() {
+    if (!rollbackTarget) return;
+    setBusy(true);
+    try {
+      const result = await api.rollbackRelease(processId, rollbackTarget.id, {
+        reason: rollbackReason.trim(), confirmVersion: Number(rollbackVersion)
+      });
+      onNotice(`Release v${result.version} restored with governed rollback evidence.`);
+      setRollbackTarget(null); setRollbackReason(""); setRollbackVersion("");
+      await load();
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Could not roll back release");
+    } finally { setBusy(false); }
+  }
+
   if (!data) return <div className="loading-card">Loading Process Studio…</div>;
   const blueprint = data.blueprint;
+  const canActivate = Boolean(session && ["admin", "owner"].includes(session.user.role));
   const executionProfile = blueprint.execution_profile ?? "instant";
   const tools = data.activeTools ?? JSON.parse(blueprint.tools_json ?? "[]") as string[];
   return (
@@ -546,23 +565,46 @@ function Studio({
                   <ShieldCheck size={12}/> Evaluation {release.evaluation_status.replaceAll("_", " ")}
                 </span>
               </span>
-              {release.status !== "published" ? (
-                <button disabled={busy} onClick={() => void publish(release)}>
-                  {release.status === "draft" ? (
-                    <Rocket size={14} />
-                  ) : (
-                    <History size={14} />
-                  )}{" "}
-                  {release.status === "draft" ? "Publish" : "Roll back"}
+              {release.status !== "published" && canActivate &&
+                (release.status === "draft" || release.evaluation_status === "passing") ? (
+                <button disabled={busy} onClick={() => release.status === "draft"
+                  ? void publish(release) : (setRollbackTarget(release), setRollbackReason(""), setRollbackVersion(""))}>
+                  {release.status === "draft" ? <Rocket size={14} /> : <History size={14} />}{" "}
+                  {release.status === "draft" ? "Publish" : "Restore"}
                 </button>
               ) : (
-                <span className="active-label">
+                <span className={`active-label ${release.status}`}>
                   <Check size={14} />
-                  Active
+                  {release.status === "published" ? "Active" :
+                    release.status === "retired" && release.evaluation_status !== "passing"
+                      ? "Evaluation required" : "History"}
                 </span>
               )}
+              {rollbackTarget?.id === release.id && <div className="rollback-editor">
+                <header><div><strong>Restore release v{release.version}</strong>
+                  <small>This immediately retires v{activeRelease?.version} and restores this exact immutable bundle.</small>
+                </div><button onClick={() => setRollbackTarget(null)}>Cancel</button></header>
+                <label>Operational reason<textarea maxLength={500} value={rollbackReason}
+                  placeholder="Why is the current release being rolled back?"
+                  onChange={(event) => setRollbackReason(event.target.value)}/></label>
+                <label>Enter version {release.version} to confirm<input inputMode="numeric"
+                  value={rollbackVersion} onChange={(event) => setRollbackVersion(event.target.value)}/></label>
+                <button className="rollback-confirm" disabled={busy || rollbackReason.trim().length < 5 ||
+                  Number(rollbackVersion) !== release.version} onClick={() => void rollback()}>
+                  <History size={14}/>{busy ? "Restoring…" : `Restore v${release.version}`}
+                </button>
+              </div>}
             </div>
           ))}
+          {data.activations.length > 0 && <section className="activation-history">
+            <div><History size={16}/><span><strong>Activation evidence</strong>
+              <small>Publish and rollback history cannot be rewritten by later release changes.</small></span></div>
+            {data.activations.slice(0, 8).map((activation) => <article key={activation.id}>
+              <strong>{activation.activation_type === "rollback" ? "Rollback" : activation.activation_type} · v{activation.to_version}</strong>
+              <p>{activation.reason}</p>
+              <small>{activation.activated_by_name ?? activation.activated_by} · {activation.activated_at}</small>
+            </article>)}
+          </section>}
         </div>
       )}
       {tab === "retirement" && retirementData && <RetirementStudio processId={processId}

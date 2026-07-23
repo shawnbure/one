@@ -34,6 +34,8 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Incident response | Tenant and process emergency stops, drain/defer admission behavior, incident ownership/lifecycle, evidence timeline, recovery gates, audit, and critical notifications |
 | Evaluation lab | Curated golden cases, expected/prohibited output assertions, exact-release model runs, weighted scoring, release comparison, durable Workflow suites, side-by-side Cloudflare model trials, automatic sensitive-pattern masking, human scorecards, explicit production-sample promotion, evidence, and budgeted usage |
 
+Process release activation is governed separately from release authoring. Publishing is restricted to a draft whose current evaluation gate passes. Rollback can restore only an immutable retired release with prior passing evaluation evidence; an owner or administrator must enter the exact version and a bounded operational reason. Workrr atomically retires the current release, restores the target prompt/model/autonomy bundle, and records immutable from/to activation evidence plus a metadata-only audit event. Process Studio exposes the activation timeline so an operator can verify what changed without Wrangler.
+
 ## Execution architecture
 
 Every process declares one execution profile:

@@ -5,7 +5,7 @@ import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } 
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
-import { createDraftRelease, getStudio, publishRelease } from "./studio";
+import { createDraftRelease, getStudio, publishRelease, rollbackRelease } from "./studio";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
@@ -828,6 +828,24 @@ app.post("/api/processes/:id/releases/:releaseId/publish", requireRoles("admin",
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_release.published", "process", processId, result);
     return c.json(result);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Release publication failed" }, 400); }
+});
+
+app.post("/api/processes/:id/releases/:releaseId/rollback", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    const releaseId = c.req.param("releaseId");
+    if (!processId || !releaseId) return c.json({ error: "Process and release IDs are required" }, 400);
+    const result = await rollbackRelease(c.env, c.get("tenantId"), processId, releaseId,
+      c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_release.rolled_back",
+      "process", processId, {
+        fromReleaseId: result.previousReleaseId, toReleaseId: result.releaseId,
+        version: result.version, reason: result.reason
+      });
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Release rollback failed" }, 400);
+  }
 });
 
 app.get("/api/overview", async (c) => {
