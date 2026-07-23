@@ -584,6 +584,23 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
 app.get("/api/queue-operations", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await getQueueOperations(c.env, c.get("tenantId")) }));
 
+app.get("/api/tool-actions", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  const tenantId = c.get("tenantId");
+  const [summary, actions] = await Promise.all([
+    c.env.DB.prepare(`SELECT status, COUNT(*) count FROM tool_action_dispatches
+      WHERE tenant_id=? GROUP BY status ORDER BY status`).bind(tenantId).all(),
+    c.env.DB.prepare(`SELECT d.*, i.tool_name, i.handler_key, i.input_json, i.output_json,
+      b.name process_name, a.title approval_title
+      FROM tool_action_dispatches d
+      JOIN tool_invocations i ON i.id=d.invocation_id AND i.tenant_id=d.tenant_id
+      JOIN executions e ON e.id=d.execution_id AND e.tenant_id=d.tenant_id
+      JOIN agent_blueprints b ON b.id=e.blueprint_id AND b.tenant_id=e.tenant_id
+      JOIN approvals a ON a.id=d.approval_id AND a.tenant_id=d.tenant_id
+      WHERE d.tenant_id=? ORDER BY d.updated_at DESC LIMIT 100`).bind(tenantId).all()
+  ]);
+  return c.json({ data: { summary: summary.results, actions: actions.results } });
+});
+
 app.post("/api/queue-jobs/:id/replay", requireRoles("admin", "owner", "operator"), async (c) => {
   const queueJobId = c.req.param("id");
   if (!queueJobId) return c.json({ error: "Queue job ID is required" }, 400);

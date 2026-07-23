@@ -358,7 +358,7 @@ export function App() {
               onNotice={setNotice}
             />
           ) : active === "Activity" ? (
-            <ActivityView processes={processes} onNotice={setNotice} />
+            <ActivityView processes={processes} session={session} onNotice={setNotice} />
           ) : active === "API logs" ? (
             <ApiLogsView onNotice={setNotice} />
           ) : active === "Processes" ? (

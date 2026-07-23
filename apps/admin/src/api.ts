@@ -75,6 +75,14 @@ export interface ToolActionDispatch {
   completed_at: string | null;
   updated_at: string;
 }
+export interface ToolActionOperation extends ToolActionDispatch {
+  process_name: string;
+  approval_title: string | null;
+}
+export interface ToolActionOperationsData {
+  summary: Array<{ status: ToolActionDispatch["status"]; count: number }>;
+  actions: ToolActionOperation[];
+}
 
 export interface Execution {
   id: string;
@@ -530,6 +538,7 @@ export const api = {
     ),
   executions: () => request<{ data: Execution[] }>("/api/executions"),
   queueOperations: () => request<{ data: QueueOperationsData }>("/api/queue-operations"),
+  toolActions: () => request<{ data: ToolActionOperationsData }>("/api/tool-actions"),
   replayQueueJob: (id: string) =>
     request<{ data: { queueJobId: string; executionId: string; status: string } }>(
       `/api/queue-jobs/${encodeURIComponent(id)}/replay`, { method: "POST" },

@@ -18,18 +18,20 @@ import {
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
-  type QueueOperationsData, type ToolInvocation } from "./api";
-import type { ToolActionDispatch } from "./api";
+  type QueueOperationsData, type SessionData, type ToolActionDispatch, type ToolActionOperationsData,
+  type ToolInvocation } from "./api";
 import "./queue-operations.css";
 
 interface Props {
   processes: AgentBlueprint[];
+  session: SessionData | null;
   onNotice: (message: string) => void;
 }
 
-export function ActivityView({ processes, onNotice }: Props) {
+export function ActivityView({ processes, session, onNotice }: Props) {
   const [runs, setRuns] = useState<Execution[]>([]);
   const [queue, setQueue] = useState<QueueOperationsData>({ summary: [], jobs: [] });
+  const [actionQueue, setActionQueue] = useState<ToolActionOperationsData>({ summary: [], actions: [] });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Execution | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -43,9 +45,12 @@ export function ActivityView({ processes, onNotice }: Props) {
 
   async function load() {
     try {
-      const [executions, queueOperations] = await Promise.all([api.executions(), api.queueOperations()]);
+      const [executions, queueOperations, actionOperations] = await Promise.all([
+        api.executions(), api.queueOperations(), api.toolActions()
+      ]);
       setRuns(executions.data);
       setQueue(queueOperations.data);
+      setActionQueue(actionOperations.data);
     } catch (error) {
       onNotice(
         error instanceof Error ? error.message : "Could not load activity",
@@ -101,6 +106,7 @@ export function ActivityView({ processes, onNotice }: Props) {
     [runs],
   );
   const queueCount = (status: string) => Number(queue.summary.find((item) => item.status === status)?.count ?? 0);
+  const actionCount = (status: string) => Number(actionQueue.summary.find((item) => item.status === status)?.count ?? 0);
 
   async function replayQueueJob(id: string) {
     setBusy(true);
@@ -127,6 +133,18 @@ export function ActivityView({ processes, onNotice }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function operateAction(id: string, operation: "retry" | "cancel") {
+    setBusy(true);
+    try {
+      const result = operation === "retry" ? await api.retryToolAction(id) : await api.cancelToolAction(id);
+      onNotice(operation === "retry"
+        ? `Approved action is ${result.status.replaceAll("_", " ")} with its original provider idempotency key.`
+        : "Approved action delivery was cancelled before provider processing.");
+      await load();
+    } catch (error) { onNotice(error instanceof Error ? error.message : `Action ${operation} failed`); }
+    finally { setBusy(false); }
   }
 
   if (selectedId)
@@ -436,6 +454,31 @@ export function ActivityView({ processes, onNotice }: Props) {
         </div>)}
         {!queue.jobs.length && <div className="queue-empty">No asynchronous process work has been dispatched yet.</div>}
       </article>
+      <article className="queue-operations action-operations panel">
+        <div className="section-head"><div><span className="eyebrow"><ShieldCheck size={14}/> APPROVED ACTIONS</span>
+          <h2>External action delivery</h2><p>Human authorization, Queue delivery, provider attempts, and completion remain separate evidence.</p></div>
+          <div className="queue-badges"><span>{actionCount("queued") + actionCount("processing")} active</span>
+            <span className={actionCount("retrying") + actionCount("enqueue_failed") ? "attention" : ""}>
+              {actionCount("retrying") + actionCount("enqueue_failed")} recovering</span>
+            <span className={actionCount("failed") ? "danger" : ""}>{actionCount("failed")} failed</span></div>
+        </div>
+        <div className="action-head"><span>Process / action</span><span>Status</span><span>Attempts</span><span>Updated</span><span>Control</span></div>
+        {actionQueue.actions.slice(0, 20).map((action) => <div className="action-row" key={action.id}>
+          <button className="action-inspect" onClick={() => setSelectedId(action.execution_id)}>
+            <strong>{action.process_name}</strong><small>{action.tool_name.replaceAll("_", " ")} · {action.execution_id.slice(0, 10)}</small>
+          </button>
+          <span className={`queue-state ${action.status}`}>{action.status.replaceAll("_", " ")}</span>
+          <span>{action.attempt_count}</span><span>{formatDate(action.updated_at)}</span>
+          <span className="action-controls">
+            {canOperate(session) && action.status === "failed" &&
+              <button disabled={busy} onClick={() => void operateAction(action.id, "retry")}><RefreshCw size={13}/>Retry safely</button>}
+            {canOperate(session) && ["pending", "queued", "retrying", "enqueue_failed"].includes(action.status) &&
+              <button disabled={busy} onClick={() => void operateAction(action.id, "cancel")}>Cancel</button>}
+          </span>
+          {action.last_error && <small className="queue-error">{action.last_error}</small>}
+        </div>)}
+        {!actionQueue.actions.length && <div className="queue-empty">No external actions have been approved yet.</div>}
+      </article>
       <div className="activity-toolbar">
         <div>
           <Search size={16} />
@@ -587,4 +630,7 @@ function toolEvidence(value: string | null | undefined) {
     return parsed.filter((item): item is { id: string; name: string; accessMode: string; riskLevel: string; connectionReady: boolean } =>
       Boolean(item && typeof item === "object" && "id" in item && "name" in item));
   } catch { return []; }
+}
+function canOperate(session: SessionData | null) {
+  return Boolean(session && ["admin", "owner", "operator"].includes(session.user.role));
 }

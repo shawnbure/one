@@ -221,6 +221,11 @@ describe("control-plane security boundary", () => {
   });
 
   it("prevents reviewers and viewers from retrying or cancelling approved action delivery", async () => {
+    const inspection = environment("viewer");
+    const inspectionResponse = await app.fetch(new Request("http://localhost/api/tool-actions", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), inspection.env as never, executionCtx as never);
+    expect(inspectionResponse.status).toBe(200);
     for (const role of ["reviewer", "viewer"]) {
       for (const operation of ["retry", "cancel"]) {
         const { env, queries } = environment(role);
