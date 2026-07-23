@@ -101,14 +101,14 @@ Development migrations are applied before each matching development deploy. Prod
 | Environment | Worker | Domain | Branch | State |
 | --- | --- | --- | --- | --- |
 | Development | `workrr-platform-dev` | `one-dev.workrr.ai` | `dev` | Auto-deploying and Access-protected |
-| Production | `workrr-platform` | `one.workrr.ai` | `main` | Promotion-gated |
+| Production | `workrr-platform` | `one.workrr.ai` | `main` | Access-protected; promoted from reviewed dev releases |
 
 Cloudflare Workers Builds owns deployment. GitHub Actions must not duplicate it. Non-production branch builds are disabled to control build usage.
 
-Before a production promotion:
+Before each production promotion:
 
-1. Create the production Access application and explicit customer allow policy.
-2. Set the production `ACCESS_TEAM_DOMAIN` and production-specific `ACCESS_AUD`.
+1. Verify the production Access application and explicit customer allow policy.
+2. Verify the production `ACCESS_TEAM_DOMAIN` and production-specific `ACCESS_AUD`; never reuse dev's audience.
 3. Validate tenant memberships and least-privilege roles.
 4. Configure integration secrets with `wrangler secret put` when a real sender exists.
 5. Review and apply pending D1 migrations to the production database.

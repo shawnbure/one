@@ -35,7 +35,11 @@
   },
   "workflows": [{ "name": "workrr-process-workflow", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" }],
   "triggers": { "crons": ["0 * * * *"] },
-  "vars": { "ENVIRONMENT": "production" },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "ACCESS_TEAM_DOMAIN": "https://workrr-one.cloudflareaccess.com",
+    "ACCESS_AUD": "37177f7d83f8b4f4905fccf2f0f04785a17ee9e46809ef2bd2cbb09e15c44ee0"
+  },
   "env": {
     "dev": {
       "name": "workrr-platform-dev",
