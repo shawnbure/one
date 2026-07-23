@@ -37,6 +37,8 @@ describe("product readability contract", () => {
 
   it("keeps the six-template creation wizard readable and scroll-safe", () => {
     expect(wizardCss).toContain("width: min(1040px");
+    expect(wizardCss).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(wizardCss).toContain(".process-wizard > footer { grid-column: 1; }");
     expect(wizardCss).toContain("overflow-y: auto");
     expect(wizardCss).toContain(".template-grid { grid-template-columns: repeat(3");
     expect(wizardCss).toContain(".template-grid small");
