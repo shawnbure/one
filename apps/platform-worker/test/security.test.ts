@@ -111,6 +111,33 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("UPDATE connections SET credential_expires_at"))).toBe(false);
   });
 
+  it("lets viewers inspect opportunities but not capture, qualify, or convert them", async () => {
+    const viewer = environment("viewer");
+    const list = await app.fetch(new Request("http://localhost/api/opportunities", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(list.status).toBe(200);
+    for (const request of [
+      new Request("http://localhost/api/opportunities", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }),
+      new Request("http://localhost/api/opportunities/opp-1/qualification", {
+        method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ status: "qualified" })
+      }),
+      new Request("http://localhost/api/opportunities/opp-1/convert", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ templateId: "template-document-intake" })
+      })
+    ]) {
+      const response = await app.fetch(request, viewer.env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+    }
+    expect(viewer.queries.some((sql) => sql.includes("INSERT INTO process_opportunities") ||
+      sql.includes("UPDATE process_opportunities"))).toBe(false);
+  });
+
   it("prevents viewers from creating smoke fixtures or machine identities", async () => {
     for (const path of ["/api/smoke-fixtures", "/api/service-principals"]) {
       const { env, queries } = environment("viewer");

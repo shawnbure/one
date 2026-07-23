@@ -13,6 +13,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Surface | Current capability |
 | --- | --- |
 | Overview | Live process, review, execution, health, and value indicators |
+| Opportunities | Manual-process intake, transparent impact/feasibility scoring, qualification, and secure conversion to paused draft processes |
 | Discover | Intake wizard, process templates, baseline capture, and opportunity scoring |
 | Process Studio | Visual topology, explicit execution profile, enforced five-level autonomy, immutable prompt/model/input-output contract releases, publish/rollback, and recurring process schedules with dispatch history |
 | Work Inbox | Evidence and rationale review, validated assignment, comments, information request/response, escalation, approval/decline, and audit trail |
@@ -119,6 +120,8 @@ The customer-facing privacy and architecture report is a printable, self-contain
 
 Connection operations distinguish configuration from evidence: “credential configured” means secret metadata exists, “last health check” is the latest explicit or provider-backed check, and “last successful use” advances only after a real provider request succeeds. Operators can assign an eligible same-tenant rotation owner and record credential expiry/last rotation dates. The daily Cron emits an in-app warning for configured credentials within 30 days of expiry and marks expired connections for attention. Cloudflare Workers AI is shown as an account binding rather than a customer credential; Microsoft delegated OAuth is provider-rotated and can record an explicit organizational expiry when one applies. Generic connectors remain visibly metadata-only until a provider-specific live probe exists.
 
+The opportunity backlog separates customer discovery from agent deployment. Operators can capture the observed manual steps, systems, exceptions, volume, handling time, labor assumption, rework rate, data class, business risk, human judgment, and whether the process changes another system. Workrr calculates impact from volume, monthly human effort, estimated labor, and rework; feasibility is scored separately from integration count, exceptions, judgment, data sensitivity, risk, and external writes. The combined 60/40 priority is visible decision support—not automatic authorization. Builders and owners record qualification evidence, approve or decline candidates, and can convert a qualified candidate through the same process factory used by onboarding. Conversion is idempotent and creates a paused blueprint, draft prompt/release, release-gate evaluation, typed tool starting points, and baseline value record; it never launches autonomous work.
+
 ## Database migration order
 
 Migrations are additive and ordered in `apps/platform-worker/migrations`:
@@ -161,6 +164,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 36. `0036_approved_tool_actions.sql`: approval-linked Queue dispatch lifecycle and the fixed-endpoint Microsoft calendar write tool.
 37. `0037_approval_collaboration.sql`: attributable review discussion, information-request state, escalation level, and activity evidence.
 38. `0038_connection_lifecycle.sql`: credential expiry, rotation ownership, last-success evidence, truthful health detail, and expiry notification policy.
+39. `0039_process_opportunities.sql`: pre-build manual-process intake, transparent prioritization evidence, qualification lifecycle, and conversion lineage.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

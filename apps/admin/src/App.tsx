@@ -27,6 +27,7 @@ import {
   X,
   Code2,
   CircleDollarSign,
+  Lightbulb,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import {
@@ -54,6 +55,7 @@ import { TeamRolesView } from "./TeamRolesView";
 import { CustomerSetupView } from "./CustomerSetupView";
 import { NotificationsView } from "./NotificationsView";
 import { UsageView } from "./UsageView";
+import { OpportunitiesView } from "./OpportunitiesView";
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -100,6 +102,7 @@ const previewProcesses: AgentBlueprint[] = [
 const nav = [
   ["Overview", CircleGauge],
   ["Processes", Workflow],
+  ["Opportunities", Lightbulb],
   ["Work inbox", Inbox],
   ["Activity", Activity],
   ["API logs", Code2],
@@ -370,6 +373,10 @@ export function App() {
               onCreate={() => setCreatingProcess(true)}
               onRefresh={refresh}
             />
+          ) : active === "Opportunities" ? (
+            <OpportunitiesView session={session} onNotice={setNotice} onProcessCreated={async (id) => {
+              await refresh(); setStudioProcessId(id); setActive("Processes");
+            }}/>
           ) : [
               "Connections",
               "Knowledge",

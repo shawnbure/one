@@ -353,6 +353,34 @@ export interface ProcessTemplate {
   tools_json: string;
   category: string;
 }
+export interface ProcessOpportunity {
+  id: string;
+  name: string;
+  purpose: string;
+  business_owner: string;
+  department: string;
+  current_steps: string;
+  systems_json: string;
+  exceptions_json: string;
+  volume_per_month: number;
+  minutes_per_item: number;
+  hourly_cost: number;
+  error_rate: number;
+  risk_level: "low" | "medium" | "high";
+  data_classification: "public" | "internal" | "confidential" | "restricted";
+  external_action: number;
+  human_judgment: "low" | "some" | "high";
+  impact_score: number;
+  feasibility_score: number;
+  priority_score: number;
+  status: "captured" | "qualified" | "approved" | "declined" | "converted";
+  recommended_template_id: string | null;
+  recommended_template_name: string | null;
+  qualification_note: string | null;
+  blueprint_id: string | null;
+  blueprint_name: string | null;
+  created_at: string;
+}
 export interface Member {
   id: string;
   email: string;
@@ -656,6 +684,18 @@ export const api = {
     ),
   processTemplates: () =>
     request<{ data: ProcessTemplate[] }>("/api/process-templates"),
+  opportunities: () => request<{ data: ProcessOpportunity[] }>("/api/opportunities"),
+  createOpportunity: (body: Record<string, unknown>) =>
+    request<{ data: { id: string; status: string; impactScore: number; feasibilityScore: number; priorityScore: number } }>(
+      "/api/opportunities", { method: "POST", body: JSON.stringify(body) }),
+  qualifyOpportunity: (id: string, status: "qualified" | "approved" | "declined", qualificationNote: string) =>
+    request<{ data: { id: string; status: string; qualificationNote: string | null } }>(
+      `/api/opportunities/${encodeURIComponent(id)}/qualification`,
+      { method: "PATCH", body: JSON.stringify({ status, qualificationNote }) }),
+  convertOpportunity: (id: string, templateId: string) =>
+    request<{ data: { id: string; status: string; opportunityScore: number; reused: boolean } }>(
+      `/api/opportunities/${encodeURIComponent(id)}/convert`,
+      { method: "POST", body: JSON.stringify({ templateId }) }),
   createProcess: (body: {
     templateId: string;
     name: string;

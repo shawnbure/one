@@ -30,6 +30,7 @@ import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./p
 import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
   updateConnectionLifecycle } from "./connection-operations";
+import { convertOpportunity, createOpportunity, listOpportunities, qualifyOpportunity } from "./opportunities";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -391,10 +392,50 @@ app.post("/api/process-schedules/:id/run", requireRoles("admin", "builder", "own
   }
 });
 
-app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "viewer"), async (c) => {
+app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, name, description, execution_profile, model_profile, autonomy,
     tools_json, category FROM process_templates ORDER BY category, name`).all();
   return c.json({ data: results });
+});
+
+app.get("/api/opportunities", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await listOpportunities(c.env, c.get("tenantId")) }));
+
+app.post("/api/opportunities", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  try {
+    return c.json({ data: await createOpportunity(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Opportunity could not be captured" }, 400);
+  }
+});
+
+app.patch("/api/opportunities/:id/qualification", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const opportunityId = c.req.param("id");
+    if (!opportunityId) return c.json({ error: "Opportunity id is required" }, 400);
+    return c.json({ data: await qualifyOpportunity(
+      c.env, c.get("tenantId"), c.get("actorId"), opportunityId, await c.req.json()
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Opportunity could not be qualified";
+    return c.json({ error: message }, message === "Opportunity was not found" ? 404 : 400);
+  }
+});
+
+app.post("/api/opportunities/:id/convert", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const opportunityId = c.req.param("id");
+    if (!opportunityId) return c.json({ error: "Opportunity id is required" }, 400);
+    const body = await c.req.json<{ templateId?: string }>();
+    return c.json({ data: await convertOpportunity(
+      c.env, c.get("tenantId"), c.get("actorId"), opportunityId, body.templateId
+    ) }, 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Opportunity could not become a process";
+    return c.json({ error: message }, message === "Opportunity was not found" ? 404 : 400);
+  }
 });
 
 app.post("/api/processes", requireRoles("admin", "builder", "owner"), async (c) => {
