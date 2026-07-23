@@ -340,6 +340,24 @@ export interface StudioData {
     edges: Array<{ from: string; to: string }>;
   };
 }
+export interface ActorReleaseRollout {
+  id: string;
+  target_release_id: string;
+  target_version: number;
+  percentage: number;
+  selected_actor_count: number;
+  status: "queued" | "running" | "completed" | "partial" | "failed";
+  completed_count: number;
+  skipped_count: number;
+  failed_count: number;
+  reason: string;
+  requested_by: string;
+  requested_by_name: string | null;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
 export interface ProcessRetirement {
   id: string;
   status: "requested" | "approved" | "disposing" | "disposed" | "cancelled" | "failed";
@@ -963,6 +981,16 @@ export const api = {
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
     ),
+  actorReleaseRollouts: (id: string) =>
+    request<{ data: ActorReleaseRollout[] }>(
+      `/api/processes/${encodeURIComponent(id)}/actor-release-rollouts`,
+    ),
+  createActorReleaseRollout: (id: string, body: {
+    percentage: number; targetReleaseId: string; reason: string;
+  }) => request<{ data: { id: string; status: "queued"; targetReleaseId: string;
+    targetVersion: number | null; percentage: number; eligibleActors: number; selectedActorCount: number } }>(
+    `/api/processes/${encodeURIComponent(id)}/actor-release-rollouts`,
+    { method: "POST", body: JSON.stringify(body) }),
   rollbackRelease: (processId: string, releaseId: string, body: {
     reason: string; confirmVersion: number;
   }) => request<{ releaseId: string; previousReleaseId: string; version: number;

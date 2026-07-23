@@ -23,7 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
+import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
 import "./schedule-studio.css";
 
 interface Props {
@@ -154,6 +154,7 @@ function Studio({
   const [data, setData] = useState<StudioData | null>(null);
   const [scheduleData, setScheduleData] = useState<ScheduleData>({ schedules: [], dispatches: [] });
   const [retirementData, setRetirementData] = useState<ProcessRetirementData | null>(null);
+  const [rollouts, setRollouts] = useState<ActorReleaseRollout[]>([]);
   const [tab, setTab] = useState<"design" | "behavior" | "schedules" | "releases" | "retirement">("design");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -167,17 +168,21 @@ function Studio({
   const [rollbackTarget, setRollbackTarget] = useState<ProcessRelease | null>(null);
   const [rollbackReason, setRollbackReason] = useState("");
   const [rollbackVersion, setRollbackVersion] = useState("");
+  const [rolloutPercentage, setRolloutPercentage] = useState(25);
+  const [rolloutReason, setRolloutReason] = useState("");
 
   async function load() {
     try {
-      const [result, schedules, retirement] = await Promise.all([
+      const [result, schedules, retirement, actorRollouts] = await Promise.all([
         api.studio(processId).then((response) => response.data),
         api.schedules(processId).then((response) => response.data),
         api.processRetirement(processId).then((response) => response.data),
+        api.actorReleaseRollouts(processId).then((response) => response.data),
       ]);
       setData(result);
       setScheduleData(schedules);
       setRetirementData(retirement);
+      setRollouts(actorRollouts);
       setSystemPrompt(result.prompt.system_prompt);
       setInstructions(parseList(result.prompt.instructions_json).join("\n"));
       setGuardrails(parseList(result.prompt.guardrails_json).join("\n"));
@@ -261,9 +266,25 @@ function Studio({
     } finally { setBusy(false); }
   }
 
+  async function startActorRollout() {
+    if (!activeRelease) return;
+    setBusy(true);
+    try {
+      const result = await api.createActorReleaseRollout(processId, {
+        percentage: rolloutPercentage, targetReleaseId: activeRelease.id, reason: rolloutReason.trim()
+      });
+      setRolloutReason("");
+      await load();
+      onNotice(`Queued ${result.data.selectedActorCount} actor migration${result.data.selectedActorCount === 1 ? "" : "s"} in a durable Workflow.`);
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Actor release rollout could not start");
+    } finally { setBusy(false); }
+  }
+
   if (!data) return <div className="loading-card">Loading Process Studio…</div>;
   const blueprint = data.blueprint;
   const canActivate = Boolean(session && ["admin", "owner"].includes(session.user.role));
+  const activeActorRollout = rollouts.find((rollout) => ["queued", "running"].includes(rollout.status));
   const executionProfile = blueprint.execution_profile ?? "instant";
   const tools = data.activeTools ?? JSON.parse(blueprint.tools_json ?? "[]") as string[];
   return (
@@ -551,6 +572,37 @@ function Studio({
             </article>)}
             {!data.actorAdoption.cohorts.length && <p>No durable actor has been created for this process yet.</p>}
           </div>
+          {(rollouts.length > 0 || data.actorAdoption.pinnedPreviousActors > 0) &&
+            <section className="actor-rollout-control">
+              <header><div><strong>Staged release rollout</strong>
+                <small>Cloudflare Workflows migrates a bounded cohort one serialized actor at a time.</small></div>
+                <button disabled={busy} onClick={() => void load()}>Refresh status</button></header>
+              {activeActorRollout ?
+                <article className="rollout-active">
+                  <span><strong>Release v{activeActorRollout.target_version} · {activeActorRollout.percentage}% cohort</strong>
+                    <small>{activeActorRollout.selected_actor_count} selected · requested by {activeActorRollout.requested_by_name ?? activeActorRollout.requested_by}</small></span>
+                  <em>{activeActorRollout.status}</em>
+                </article>
+                : canActivate && data.actorAdoption.pinnedPreviousActors > 0 ? <div className="rollout-form">
+                  <label>Cohort size<select value={rolloutPercentage}
+                    onChange={(event) => setRolloutPercentage(Number(event.target.value))}>
+                    <option value={10}>10% staged</option><option value={25}>25% staged</option>
+                    <option value={50}>50% staged</option><option value={100}>100% remaining</option>
+                  </select></label>
+                  <label>Operational reason<textarea maxLength={500} value={rolloutReason}
+                    placeholder="Why should this actor cohort adopt the current evaluated release?"
+                    onChange={(event) => setRolloutReason(event.target.value)}/></label>
+                  <button disabled={busy || rolloutReason.trim().length < 10 ||
+                    activeRelease?.evaluation_status !== "passing"} onClick={() => void startActorRollout()}>
+                    <Rocket size={14}/>{busy ? "Queuing…" : "Start durable rollout"}</button>
+                  {activeRelease?.evaluation_status !== "passing" &&
+                    <small className="rollout-blocked">The current release needs passing evaluation evidence before actor migration.</small>}
+                </div> : null}
+              {rollouts.length > 0 && <div className="rollout-history">{rollouts.slice(0, 5).map((rollout) =>
+                <article key={rollout.id}><span><strong>v{rollout.target_version} · {rollout.percentage}%</strong>
+                  <small>{rollout.reason}</small></span><span>{rollout.completed_count} completed · {rollout.skipped_count} skipped · {rollout.failed_count} failed</span>
+                  <em className={rollout.status}>{rollout.status}</em></article>)}</div>}
+            </section>}
           {data.actorAdoption.actors.length > 0 && <details className="actor-inventory">
             <summary>Inspect {data.actorAdoption.actors.length} recent actor identities</summary>
             <div><header><span>Actor identity</span><span>Release</span><span>State</span><span>Last evidence</span></header>

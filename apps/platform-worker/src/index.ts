@@ -56,10 +56,12 @@ import { DelegationConflict, listApprovalDelegations, setApprovalDelegation } fr
 import { getDeploymentVerification } from "./deployment-verification";
 import { applyConfigurationRestore, ConfigurationRestoreConflict, exportConfigurationPackage,
   previewConfigurationRestore } from "./configuration-packages";
+import { createActorReleaseRollout, listActorReleaseRollouts } from "./actor-release-rollouts";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
 export { EvaluationWorkflow } from "./evaluation-workflow";
+export { ActorReleaseRolloutWorkflow } from "./actor-release-rollout-workflow";
 
 export const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
@@ -861,9 +863,35 @@ app.patch("/api/usage/budget", requireRoles("admin", "owner"), async (c) => {
   return c.json({ updated: true });
 });
 
-app.get("/api/processes/:id/studio", async (c) => {
-  const studio = await getStudio(c.env, c.get("tenantId"), c.req.param("id"));
+app.get("/api/processes/:id/studio",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  const processId = c.req.param("id");
+  if (!processId) return c.json({ error: "Process ID is required" }, 400);
+  const studio = await getStudio(c.env, c.get("tenantId"), processId);
   return studio ? c.json({ data: studio }) : c.json({ error: "Process not found" }, 404);
+});
+
+app.get("/api/processes/:id/actor-release-rollouts",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    return c.json({ data: await listActorReleaseRollouts(c.env, c.get("tenantId"), processId) });
+  });
+
+app.post("/api/processes/:id/actor-release-rollouts", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    const result = await createActorReleaseRollout(c.env, c.get("tenantId"), c.get("actorId"),
+      processId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "actor_release.rollout_queued",
+      "process", processId, result);
+    return c.json({ data: result }, 202);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Actor release rollout could not be started";
+    return c.json({ error: message }, message.includes("already active") || message.includes("changed") ||
+      message.includes("Confirm") ? 409 : 400);
+  }
 });
 
 app.post("/api/processes/:id/releases", requireRoles("admin", "builder", "owner"), async (c) => {

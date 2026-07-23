@@ -10,6 +10,7 @@ export interface Env {
   PROCESS_QUEUE: Queue<WorkrrQueueJob>;
   PROCESS_WORKFLOW: Workflow;
   EVALUATION_WORKFLOW: Workflow;
+  ACTOR_RELEASE_ROLLOUT: Workflow;
   ENVIRONMENT: "development" | "production";
   APP_DOMAIN: "one-dev.workrr.ai" | "one.workrr.ai";
   ACCESS_TEAM_DOMAIN: "https://workrr-one.cloudflareaccess.com";
