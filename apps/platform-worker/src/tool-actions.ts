@@ -27,7 +27,8 @@ interface DispatchRow {
 }
 
 export async function decideApproval(env: Env, tenantId: string, actorId: string, approvalId: string,
-  decision: "approved" | "rejected", note?: string) {
+  decision: "approved" | "rejected", expectedRevision: number, note?: string) {
+  if (!Number.isInteger(expectedRevision)) throw new Error("Expected proposal revision is required");
   const decidedAt = new Date().toISOString();
   if (decision === "approved") {
     const state = await env.DB.prepare("SELECT review_state FROM approvals WHERE id=? AND tenant_id=?")
@@ -38,8 +39,9 @@ export async function decideApproval(env: Env, tenantId: string, actorId: string
   }
   const result = await env.DB.prepare(`UPDATE approvals SET status=?, decided_at=?, decided_by=?, decision_note=?
     WHERE id=? AND tenant_id=? AND status='pending'
-      AND (?='rejected' OR review_state!='information_requested')`)
-    .bind(decision, decidedAt, actorId, note?.slice(0, 2000) ?? null, approvalId, tenantId, decision).run();
+      AND revision=? AND (?='rejected' OR review_state!='information_requested')`)
+    .bind(decision, decidedAt, actorId, note?.slice(0, 2000) ?? null,
+      approvalId, tenantId, expectedRevision, decision).run();
   if (result.meta.changes !== 1) return { updated: false, dispatched: 0, enqueueFailed: 0 };
   const approval = await env.DB.prepare("SELECT execution_id FROM approvals WHERE id=? AND tenant_id=?")
     .bind(approvalId, tenantId).first<{ execution_id: string }>();

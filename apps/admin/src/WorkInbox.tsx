@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, Check, ChevronRight, Clock3, FileText, Inbox, MessageSquare,
-  Send, ShieldCheck, UserRound, X } from "lucide-react";
+  Pencil, Send, ShieldCheck, UserRound, X } from "lucide-react";
 import { api, type Approval, type ApprovalAssignee, type ApprovalDetail, type ApprovalMessage, type AuditEvent,
   type SessionData, type ToolActionDispatch } from "./api";
 
@@ -21,6 +21,10 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
   const [assignees, setAssignees] = useState<ApprovalAssignee[]>([]);
   const [messageText, setMessageText] = useState("");
   const [note, setNote] = useState("");
+  const [editingProposal, setEditingProposal] = useState(false);
+  const [editedOutput, setEditedOutput] = useState("");
+  const [editedTools, setEditedTools] = useState<Record<string, string>>({});
+  const [editReason, setEditReason] = useState("");
   const [busy, setBusy] = useState(false);
   const filtered = useMemo(() => items.filter((item) => filter === "all" || (filter === "pending" ? item.status === "pending" : item.status !== "pending")), [items, filter]);
 
@@ -47,7 +51,7 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
     if (!detail) return;
     setBusy(true);
     try {
-      const result = await api.decideApproval(detail.id, decision, note.trim() || undefined);
+      const result = await api.decideApproval(detail.id, decision, detail.revision, note.trim() || undefined);
       if (!result.updated) throw new Error("This item was already resolved by another reviewer.");
       onNotice(decision === "approved"
         ? result.dispatched
@@ -100,6 +104,38 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
             : "Comment added to the review record.");
       await refreshDetail(); await onRefresh();
     } catch (error) { onNotice(error instanceof Error ? error.message : "Collaboration update failed"); }
+    finally { setBusy(false); }
+  }
+
+  function startProposalEdit() {
+    if (!detail) return;
+    setEditedOutput(detail.output_preview ?? "");
+    setEditedTools(Object.fromEntries(proposedActions(detail.action_input_json)
+      .map((action) => [action.id, prettyJson(action.input_json)])));
+    setEditReason(""); setEditingProposal(true);
+  }
+
+  async function saveProposalEdit() {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      const actions = proposedActions(detail.action_input_json);
+      const toolEdits = actions.map((action) => {
+        const value = editedTools[action.id] ?? "{}";
+        try { return { invocationId: action.id, input: JSON.parse(value) as unknown }; }
+        catch { throw new Error(`${action.tool_name.replaceAll("_", " ")} input must be valid JSON`); }
+      }).filter((edit, index) => editedTools[actions[index]!.id] !== prettyJson(actions[index]!.input_json));
+      const outputChanged = editedOutput.trim() !== (detail.output_preview ?? "").trim();
+      if (!outputChanged && !toolEdits.length) throw new Error("Change the proposal before saving.");
+      await api.reviseApprovalProposal(detail.id, {
+        expectedRevision: detail.revision,
+        proposedOutput: outputChanged ? editedOutput.trim() : undefined,
+        toolEdits, reason: editReason.trim()
+      });
+      setEditingProposal(false);
+      await refreshDetail(); await onRefresh();
+      onNotice("Proposal corrected with revision and audit evidence. Review the updated content before approval.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Proposal could not be edited"); }
     finally { setBusy(false); }
   }
 
@@ -169,6 +205,26 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
             </div>
           </>}
         </div>}
+        {detail.status === "pending" && canEditProposal(session) && <div className="proposal-edit-control">
+          <div><Pencil size={17}/><span><strong>Correct before approval</strong>
+            <small>Edits are DLP-scanned, contract-checked, revision-locked, and audited. Saving does not approve or execute anything.</small></span>
+            {!editingProposal && <button onClick={startProposalEdit}>Edit proposal</button>}</div>
+          {editingProposal && <div className="proposal-editor">
+            {detail.output_preview !== null && <label>Proposed output<textarea maxLength={4000}
+              value={editedOutput} onChange={(event) => setEditedOutput(event.target.value)}/></label>}
+            {proposedActions(detail.action_input_json).map((action) => <label key={action.id}>
+              {action.tool_name.replaceAll("_", " ")} input
+              <textarea className="proposal-json" maxLength={8000} value={editedTools[action.id] ?? "{}"}
+                onChange={(event) => setEditedTools((current) => ({ ...current, [action.id]: event.target.value }))}/>
+            </label>)}
+            <label>Edit reason<textarea maxLength={500} value={editReason}
+              placeholder="What was corrected and why?"
+              onChange={(event) => setEditReason(event.target.value)}/></label>
+            <footer><button onClick={() => setEditingProposal(false)}>Cancel</button>
+              <button className="save" disabled={busy || editReason.trim().length < 5}
+                onClick={() => void saveProposalEdit()}>{busy ? "Saving…" : "Save corrected proposal"}</button></footer>
+          </div>}
+        </div>}
         {detail.status === "pending" && <div className="decision-box"><label htmlFor="decision-note">Decision rationale <em>optional</em></label><textarea id="decision-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add context for the process owner and audit record…"/><div><button disabled={busy} onClick={() => void decide("rejected")}><X size={16}/>Decline</button><button disabled={busy || detail.review_state === "information_requested"} className="approve" onClick={() => void decide("approved")}><Check size={16}/>{busy ? "Recording…" : detail.review_state === "information_requested" ? "Waiting for information" : proposedActions(detail.action_input_json).length ? "Approve & queue action" : "Approve outcome"}</button></div></div>}
       </article>
       <aside className="review-side panel"><h2>Decision record</h2><dl><div><dt>Process</dt><dd>{detail.blueprint_id.replaceAll("-", " ")}</dd></div><div><dt>Requested</dt><dd>{formatDate(detail.requested_at)}</dd></div><div><dt>Due</dt><dd>{detail.due_at ? formatDate(detail.due_at) : "No deadline"}</dd></div><div><dt>Model</dt><dd>{detail.model?.split("/").at(-1) ?? "Not recorded"}</dd></div></dl><h3>Audit timeline</h3><div className="audit-line"><span><i/><strong>Approval requested</strong><small>{formatDate(detail.requested_at)}</small></span>{audit.map((event) => <span key={`${event.event_type}-${event.created_at}`}><i/><strong>{event.event_type.replaceAll(".", " ")}</strong><small>{formatDate(event.created_at)} · {event.actor_id}</small></span>)}</div></aside>
@@ -186,9 +242,9 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
   </section>;
 }
 
-function proposedActions(value: string): Array<{ tool_name: string; risk_level: string; input_json: string }> {
+function proposedActions(value: string): Array<{ id: string; tool_name: string; risk_level: string; input_json: string }> {
   try {
-    const parsed = JSON.parse(value) as { proposedActions?: Array<{ tool_name: string; risk_level: string; input_json: string }> };
+    const parsed = JSON.parse(value) as { proposedActions?: Array<{ id: string; tool_name: string; risk_level: string; input_json: string }> };
     return Array.isArray(parsed.proposedActions) ? parsed.proposedActions : [];
   } catch { return []; }
 }
@@ -223,6 +279,9 @@ function canRespondInfo(session: SessionData | null) {
 }
 function canEscalate(session: SessionData | null) {
   return Boolean(session && ["admin", "owner", "operator", "reviewer"].includes(session.user.role));
+}
+function canEditProposal(session: SessionData | null) {
+  return Boolean(session && ["admin", "owner", "reviewer"].includes(session.user.role));
 }
 
 function formatDate(value: string): string {

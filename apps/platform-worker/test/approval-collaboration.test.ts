@@ -79,7 +79,7 @@ describe("approval collaboration", () => {
       id: "approval-1", execution_id: "run-1", title: "Review action", status: "pending",
       review_state: "information_requested", escalation_level: 0
     } });
-    await expect(decideApproval(env, "tenant-1", "reviewer-1", "approval-1", "approved"))
+    await expect(decideApproval(env, "tenant-1", "reviewer-1", "approval-1", "approved", 1))
       .rejects.toThrow("must be answered");
     expect(writes).toHaveLength(0);
   });

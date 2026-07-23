@@ -35,6 +35,7 @@ import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markTo
 import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
 import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
 import { escalateOverdueApprovals } from "./approval-sla";
+import { ApprovalProposalConflict, reviseApprovalProposal } from "./approval-proposals";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
   updateConnectionLifecycle } from "./connection-operations";
 import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpportunities, listOpportunityRevisions,
@@ -1138,6 +1139,21 @@ app.post("/api/approvals/:id/assign", requireRoles("admin", "owner", "operator",
   }
 });
 
+app.patch("/api/approvals/:id/proposal", requireRoles("admin", "owner", "reviewer"), async (c) => {
+  try {
+    const approvalId = c.req.param("id");
+    if (!approvalId) return c.json({ error: "Approval ID is required" }, 400);
+    const result = await reviseApprovalProposal(c.env, c.get("tenantId"), c.get("actorId"),
+      approvalId, await c.req.json());
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Proposal could not be edited";
+    return c.json({ error: message }, error instanceof ApprovalProposalConflict ? 409 :
+      isDlpBlocked(error) || isContractViolation(error) ? 422 :
+        message.includes("not found") ? 404 : 400);
+  }
+});
+
 app.get("/api/approval-assignees", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role FROM tenant_members
     WHERE tenant_id=? AND status='active' AND role IN ('admin','owner','operator','reviewer')
@@ -1723,10 +1739,11 @@ app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewe
   const decisionParam = c.req.param("decision");
   if (!approvalId || (decisionParam !== "approved" && decisionParam !== "rejected")) return c.json({ error: "Invalid decision" }, 400);
   const decision: "approved" | "rejected" = decisionParam;
-  const body: { note?: string } = await c.req.json<{ note?: string }>().catch(() => ({}));
+  const body: { note?: string; expectedRevision?: number } =
+    await c.req.json<{ note?: string; expectedRevision?: number }>().catch(() => ({}));
   try {
     return c.json(await decideApproval(c.env, c.get("tenantId"), c.get("actorId"),
-      approvalId, decision, body.note));
+      approvalId, decision, Number(body.expectedRevision), body.note));
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Approval decision failed" }, 409);
   }

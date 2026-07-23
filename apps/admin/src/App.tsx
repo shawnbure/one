@@ -196,7 +196,9 @@ export function App() {
     setBusy(id);
     setNotice(null);
     try {
-      const result = await api.decideApproval(id, decision);
+      const approval = approvals.find((item) => item.id === id);
+      if (!approval) throw new Error("Review item is no longer available");
+      const result = await api.decideApproval(id, decision, approval.revision);
       if (!result.updated)
         throw new Error("This review item was already resolved");
       setNotice(

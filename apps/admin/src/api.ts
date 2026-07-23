@@ -36,6 +36,9 @@ export interface Approval {
   age_minutes?: number;
   sla_escalated_at?: string | null;
   sla_escalation_count?: number;
+  revision: number;
+  proposal_edited_at?: string | null;
+  proposal_edited_by?: string | null;
 }
 
 export interface SessionData {
@@ -817,12 +820,20 @@ export const api = {
   decideApproval: (
     id: string,
     decision: "approved" | "rejected",
+    expectedRevision: number,
     note?: string,
   ) =>
     request<{ updated: boolean; dispatched: number; enqueueFailed: number }>(
       `/api/approvals/${encodeURIComponent(id)}/${decision}`,
-      { method: "POST", body: JSON.stringify({ note }) },
+      { method: "POST", body: JSON.stringify({ note, expectedRevision }) },
     ),
+  reviseApprovalProposal: (id: string, body: {
+    expectedRevision: number; proposedOutput?: string;
+    toolEdits?: Array<{ invocationId: string; input: unknown }>; reason: string;
+  }) => request<{ data: { id: string; revision: number; proposedOutput: string | null;
+    toolEdits: number; editedAt: string } }>(
+      `/api/approvals/${encodeURIComponent(id)}/proposal`,
+      { method: "PATCH", body: JSON.stringify(body) }),
   retryToolAction: (id: string) =>
     request<{ updated: boolean; status: string }>(
       `/api/tool-actions/${encodeURIComponent(id)}/retry`,

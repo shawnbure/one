@@ -141,6 +141,21 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("approval_messages"))).toBe(false);
   });
 
+  it("restricts proposal correction to authorized decision roles", async () => {
+    for (const role of ["builder", "operator", "viewer", "consumer"]) {
+      const principal = environment(role);
+      const response = await app.fetch(new Request(
+        "http://localhost/api/approvals/approval-1/proposal", {
+          method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" },
+          body: JSON.stringify({ expectedRevision: 1, proposedOutput: "Unauthorized",
+            reason: "Attempted unauthorized correction." })
+        }), principal.env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(principal.queries.some((sql) => sql.includes("proposal_edited_at"))).toBe(false);
+    }
+  });
+
   it("keeps tenant-wide execution activity and redacted evidence exports out of consumer sessions", async () => {
     const consumer = environment("consumer");
     for (const path of [
