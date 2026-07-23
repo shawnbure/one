@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "../src/notification-response";
+import { enqueueDueNotificationDeliveries, nextDeliveryTime } from "../src/notifications";
 
 type Write = { sql: string; bindings: unknown[] };
 
@@ -65,5 +66,35 @@ describe("notification human response", () => {
     await expect(escalateUnacknowledgedNotifications(duplicate.env, new Date("2026-07-23T12:00:00Z")))
       .resolves.toEqual({ escalated: 0 });
     expect(duplicate.writes.filter(({ sql }) => sql.includes("INSERT INTO notification_events"))).toHaveLength(0);
+  });
+});
+
+describe("notification quiet hours", () => {
+  it("defers noncritical delivery until the UTC quiet window ends and permits critical bypass", () => {
+    const policy = { id: "policy-1", channel: "email", severity: "warning", quiet_hours_enabled: 1,
+      quiet_start_hour_utc: 22, quiet_end_hour_utc: 7, critical_bypass: 1 };
+    expect(nextDeliveryTime(policy, new Date("2026-07-23T23:34:00Z")).toISOString())
+      .toBe("2026-07-24T07:00:00.000Z");
+    expect(nextDeliveryTime({ ...policy, severity: "critical" }, new Date("2026-07-23T23:34:00Z")).toISOString())
+      .toBe("2026-07-23T23:34:00.000Z");
+  });
+
+  it("claims a due external delivery before queueing it", async () => {
+    const sends: unknown[] = [];
+    const DB = {
+      prepare(sql: string) {
+        const statement = {
+          bind() { return statement; },
+          async all() { return { results: [{ id: "event-1", tenant_id: "tenant-1", channel: "email" }] }; },
+          async run() { return { meta: { changes: sql.includes("delivery_queued_at=?") ? 1 : 0 } }; }
+        };
+        return statement;
+      }
+    };
+    const env = { DB, PROCESS_QUEUE: { async send(value: unknown) { sends.push(value); } } } as never;
+    await expect(enqueueDueNotificationDeliveries(env, new Date("2026-07-23T12:00:00Z")))
+      .resolves.toEqual({ queued: 1 });
+    expect(sends).toEqual([{ kind: "notification_delivery", tenantId: "tenant-1",
+      eventId: "event-1", channel: "email" }]);
   });
 });

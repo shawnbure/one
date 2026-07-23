@@ -666,13 +666,49 @@ a:focus-visible {
   background: #edf5f1;
   color: #315e4b !important;
 }
+.delivery-scheduled {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fff5df;
+  color: #785b28 !important;
+}
+.quiet-hours-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid #dce4e0;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+.quiet-hours-editor label {
+  display: grid;
+  gap: 3px;
+  color: #46584f;
+  font-size: 12px !important;
+  font-weight: 700;
+}
+.quiet-hours-editor label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+.quiet-hours-editor input[type="number"] {
+  width: 76px;
+  padding: 7px 8px;
+  border: 1px solid #ccd8d2;
+  border-radius: 6px;
+  background: #fff;
+}
+.quiet-hours-editor button { padding: 8px 10px; font-weight: 800; }
 /* The fixed application rail leaves less usable width than the viewport suggests.
    Stack notification evidence before controls become compressed or clipped. */
 @media (max-width: 1450px) {
   .notification-layout { grid-template-columns: 1fr; }
   .event-list { max-height: none; }
-}
-@media (max-width: 1100px) {
   .policy-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
   .policy-row > .delivery { justify-self: start; }
   .policy-row > button { grid-column: 2; justify-self: start; padding: 7px 12px; }

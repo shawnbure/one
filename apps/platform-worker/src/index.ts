@@ -10,7 +10,8 @@ import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
-import { deliverNotification, emitNotification, failNotificationDelivery, safeEmailDestination, safeWebhookDestination } from "./notifications";
+import { deliverNotification, emitNotification, enqueueDueNotificationDeliveries, failNotificationDelivery,
+  safeEmailDestination, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust, updateRubricTemplate } from "./evaluation";
 import { getUsageLedger } from "./usage";
@@ -174,13 +175,17 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
   const policyId = c.req.param("id");
   if (!policyId) return c.json({ error: "Notification policy ID is required" }, 400);
   const body = await c.req.json<{ enabled?: boolean; destination?: string | null; ownerId?: string | null;
-    acknowledgementRequired?: boolean; escalationMinutes?: number }>();
+    acknowledgementRequired?: boolean; escalationMinutes?: number; quietHoursEnabled?: boolean;
+    quietStartHourUtc?: number; quietEndHourUtc?: number; criticalBypass?: boolean }>();
   const policy = await c.env.DB.prepare(`SELECT p.channel, p.destination, p.owner_id,
-    p.acknowledgement_required, p.escalation_minutes, r.secret_binding
+    p.acknowledgement_required, p.escalation_minutes, p.quiet_hours_enabled,
+    p.quiet_start_hour_utc, p.quiet_end_hour_utc, p.critical_bypass, r.secret_binding
     FROM notification_policies p LEFT JOIN integration_credential_refs r ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
     WHERE p.id = ? AND p.tenant_id = ?`).bind(policyId, c.get("tenantId"))
     .first<{ channel: string; destination: string | null; owner_id: string | null;
-      acknowledgement_required: number; escalation_minutes: number; secret_binding: string | null }>();
+      acknowledgement_required: number; escalation_minutes: number; quiet_hours_enabled: number;
+      quiet_start_hour_utc: number; quiet_end_hour_utc: number; critical_bypass: number;
+      secret_binding: string | null }>();
   if (!policy) return c.json({ error: "Notification policy not found" }, 404);
   const destination = body.destination === undefined ? policy.destination : body.destination?.trim() || null;
   if (policy.channel === "webhook" && destination) {
@@ -226,20 +231,46 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
   if (policy.channel === "in_app" && acknowledgementRequired && (!ownerId || escalationMinutes < 1)) {
     return c.json({ error: "Acknowledged in-app alerts require an owner and escalation timing" }, 400);
   }
+  const quietHoursEnabled = body.quietHoursEnabled === undefined
+    ? Boolean(policy.quiet_hours_enabled) : body.quietHoursEnabled;
+  const quietStartHourUtc = body.quietStartHourUtc === undefined
+    ? Number(policy.quiet_start_hour_utc) : Number(body.quietStartHourUtc);
+  const quietEndHourUtc = body.quietEndHourUtc === undefined
+    ? Number(policy.quiet_end_hour_utc) : Number(body.quietEndHourUtc);
+  const criticalBypass = body.criticalBypass === undefined
+    ? Boolean(policy.critical_bypass) : body.criticalBypass;
+  if (policy.channel === "in_app" && (body.quietHoursEnabled !== undefined ||
+      body.quietStartHourUtc !== undefined || body.quietEndHourUtc !== undefined ||
+      body.criticalBypass !== undefined)) {
+    return c.json({ error: "Quiet hours apply only to external notification delivery" }, 400);
+  }
+  if (![quietStartHourUtc, quietEndHourUtc].every((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23) ||
+      (quietHoursEnabled && quietStartHourUtc === quietEndHourUtc)) {
+    return c.json({ error: "Quiet-hour start and end must be different UTC hours from 0–23" }, 400);
+  }
   const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled),
     destination = CASE WHEN ? = 1 THEN ? ELSE destination END,
     owner_id = CASE WHEN ? = 1 THEN ? ELSE owner_id END,
     acknowledgement_required = CASE WHEN ? = 1 THEN ? ELSE acknowledgement_required END,
     escalation_minutes = CASE WHEN ? = 1 THEN ? ELSE escalation_minutes END,
+    quiet_hours_enabled = CASE WHEN ? = 1 THEN ? ELSE quiet_hours_enabled END,
+    quiet_start_hour_utc = CASE WHEN ? = 1 THEN ? ELSE quiet_start_hour_utc END,
+    quiet_end_hour_utc = CASE WHEN ? = 1 THEN ? ELSE quiet_end_hour_utc END,
+    critical_bypass = CASE WHEN ? = 1 THEN ? ELSE critical_bypass END,
     updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
     .bind(typeof body.enabled === "boolean" ? Number(body.enabled) : null, Number(body.destination !== undefined),
       destination, Number(body.ownerId !== undefined), ownerId,
       Number(body.acknowledgementRequired !== undefined), Number(acknowledgementRequired),
       Number(body.escalationMinutes !== undefined), escalationMinutes,
+      Number(body.quietHoursEnabled !== undefined), Number(quietHoursEnabled),
+      Number(body.quietStartHourUtc !== undefined), quietStartHourUtc,
+      Number(body.quietEndHourUtc !== undefined), quietEndHourUtc,
+      Number(body.criticalBypass !== undefined), Number(criticalBypass),
       policyId, c.get("tenantId")).run();
   if (result.meta.changes) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "notification_policy.updated",
     "notification_policy", policyId, { enabled: body.enabled, destinationConfigured: Boolean(destination),
-      ownerId, acknowledgementRequired, escalationMinutes });
+      ownerId, acknowledgementRequired, escalationMinutes, quietHoursEnabled, quietStartHourUtc,
+      quietEndHourUtc, criticalBypass });
   return c.json({ updated: result.meta.changes === 1 });
 });
 
@@ -1497,7 +1528,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       enqueueRecoverableToolActions(env),
       expireKnowledgeSources(env, now),
       emitConnectionExpiryAlerts(env, now),
-      escalateUnacknowledgedNotifications(env, now)
+      escalateUnacknowledgedNotifications(env, now),
+      enqueueDueNotificationDeliveries(env, now)
     ]));
   }
 };

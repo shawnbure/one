@@ -17,6 +17,16 @@ interface DeliveryRow {
   secret_binding: string | null;
 }
 
+interface DeliveryPolicy {
+  id: string;
+  channel: string;
+  severity: string;
+  quiet_hours_enabled: number;
+  quiet_start_hour_utc: number;
+  quiet_end_hour_utc: number;
+  critical_bypass: number;
+}
+
 export async function emitNotification(env: Env, tenantId: string, event: {
   eventType: string; title: string; detail: string; targetType?: string; targetId?: string;
 }) {
@@ -29,16 +39,71 @@ export async function emitNotification(env: Env, tenantId: string, event: {
     ids.push(id);
     const channel = String(policy.channel);
     const status = channel === "in_app" ? "delivered" : "pending";
+    const now = new Date();
+    const scheduledFor = channel === "in_app" ? null : nextDeliveryTime(policy as unknown as DeliveryPolicy, now);
     await env.DB.prepare(`INSERT INTO notification_events
-      (id, tenant_id, policy_id, event_type, severity, title, detail, target_type, target_id, delivery_status, delivered_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, tenant_id, policy_id, event_type, severity, title, detail, target_type, target_id,
+       delivery_status, delivered_at, delivery_scheduled_for)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(id, tenantId, policy.id, event.eventType, policy.severity, event.title, event.detail,
-        event.targetType ?? null, event.targetId ?? null, status, status === "delivered" ? new Date().toISOString() : null).run();
+        event.targetType ?? null, event.targetId ?? null, status, status === "delivered" ? now.toISOString() : null,
+        scheduledFor?.toISOString() ?? null).run();
     if (channel === "webhook" || channel === "email") {
-      await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId: id, channel }, { contentType: "json" });
+      if (!scheduledFor || scheduledFor <= now) {
+        await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId: id, channel }, { contentType: "json" });
+        await env.DB.prepare(`UPDATE notification_events SET delivery_queued_at=?
+          WHERE id=? AND tenant_id=?`).bind(now.toISOString(), id, tenantId).run();
+      }
     }
   }
   return ids;
+}
+
+export function nextDeliveryTime(policy: DeliveryPolicy, now: Date): Date {
+  if (!Number(policy.quiet_hours_enabled) ||
+      (policy.severity === "critical" && Number(policy.critical_bypass))) return now;
+  const start = Number(policy.quiet_start_hour_utc);
+  const end = Number(policy.quiet_end_hour_utc);
+  if (start === end || !inQuietHours(now.getUTCHours(), start, end)) return now;
+  const candidate = new Date(now);
+  candidate.setUTCMinutes(0, 0, 0);
+  for (let hour = 0; hour < 24; hour += 1) {
+    candidate.setUTCHours(candidate.getUTCHours() + 1);
+    if (!inQuietHours(candidate.getUTCHours(), start, end)) return candidate;
+  }
+  return now;
+}
+
+export async function enqueueDueNotificationDeliveries(env: Env, now = new Date()) {
+  const { results } = await env.DB.prepare(`SELECT e.id, e.tenant_id, p.channel
+    FROM notification_events e JOIN notification_policies p
+      ON p.id=e.policy_id AND p.tenant_id=e.tenant_id
+    WHERE e.delivery_status='pending' AND e.delivery_queued_at IS NULL
+      AND e.delivery_scheduled_for IS NOT NULL AND datetime(e.delivery_scheduled_for) <= datetime(?)
+      AND p.enabled=1 AND p.channel IN ('email','webhook')
+    ORDER BY e.delivery_scheduled_for LIMIT 100`).bind(now.toISOString())
+    .all<{ id: string; tenant_id: string; channel: "email" | "webhook" }>();
+  let queued = 0;
+  for (const event of results) {
+    const claim = await env.DB.prepare(`UPDATE notification_events SET delivery_queued_at=?
+      WHERE id=? AND tenant_id=? AND delivery_status='pending' AND delivery_queued_at IS NULL`)
+      .bind(now.toISOString(), event.id, event.tenant_id).run();
+    if (claim.meta.changes !== 1) continue;
+    try {
+      await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId: event.tenant_id,
+        eventId: event.id, channel: event.channel }, { contentType: "json" });
+      queued += 1;
+    } catch (error) {
+      await env.DB.prepare(`UPDATE notification_events SET delivery_queued_at=NULL, last_error=?
+        WHERE id=? AND tenant_id=? AND delivery_status='pending'`)
+        .bind((error instanceof Error ? error.message : String(error)).slice(0, 500), event.id, event.tenant_id).run();
+    }
+  }
+  return { queued };
+}
+
+function inQuietHours(hour: number, start: number, end: number) {
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
 }
 
 export async function deliverNotificationWebhook(env: Env, tenantId: string, eventId: string) {

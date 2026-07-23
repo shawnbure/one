@@ -13,6 +13,9 @@ export function NotificationsView({ session, onNotice }: {
   const [responsePolicies, setResponsePolicies] = useState<Record<string, {
     ownerId: string; acknowledgementRequired: boolean; escalationMinutes: number;
   }>>({});
+  const [deliveryPolicies, setDeliveryPolicies] = useState<Record<string, {
+    quietHoursEnabled: boolean; quietStartHourUtc: number; quietEndHourUtc: number; criticalBypass: boolean;
+  }>>({});
   const [acknowledgementNotes, setAcknowledgementNotes] = useState<Record<string, string>>({});
   const canConfigure = session?.user.role === "admin" || session?.user.role === "owner";
   const canAcknowledge = canConfigure || session?.user.role === "operator";
@@ -26,6 +29,12 @@ export function NotificationsView({ session, onNotice }: {
     setResponsePolicies(Object.fromEntries(next.policies.map((policy) => [policy.id, {
       ownerId: policy.owner_id ?? "", acknowledgementRequired: Boolean(policy.acknowledgement_required),
       escalationMinutes: Number(policy.escalation_minutes)
+    }])));
+    setDeliveryPolicies(Object.fromEntries(next.policies.map((policy) => [policy.id, {
+      quietHoursEnabled: Boolean(policy.quiet_hours_enabled),
+      quietStartHourUtc: Number(policy.quiet_start_hour_utc),
+      quietEndHourUtc: Number(policy.quiet_end_hour_utc),
+      criticalBypass: Boolean(policy.critical_bypass)
     }])));
   } catch (error) { onNotice(error instanceof Error ? error.message : "Notification center could not load"); } }
   useEffect(() => { void load(); }, []);
@@ -45,6 +54,17 @@ export function NotificationsView({ session, onNotice }: {
     setBusy(id);
     try { await api.testNotificationPolicy(id); await load(); onNotice("External delivery test queued."); }
     catch (error) { onNotice(error instanceof Error ? error.message : "Delivery test failed"); }
+    finally { setBusy(null); }
+  }
+  async function saveDeliveryPolicy(id: string) {
+    const policy = deliveryPolicies[id];
+    if (!policy) return;
+    setBusy(id);
+    try {
+      await api.updateNotificationPolicy(id, policy);
+      await load();
+      onNotice("External delivery quiet hours saved.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Delivery schedule could not be saved"); }
     finally { setBusy(null); }
   }
   async function saveResponsePolicy(id: string) {
@@ -73,6 +93,9 @@ export function NotificationsView({ session, onNotice }: {
       <div className="credential-summary panel"><span className="foundation-icon"><Send size={18}/></span><span><strong>Microsoft 365 email</strong><small>{data.microsoftEmail?.account_email ?? data.microsoftEmail?.account_name ?? "Connect a delegated account with Mail.Send."}</small></span><span className={`connection-state ${data.microsoftEmail?.configured ? "healthy" : "attention"}`}><i/>{data.microsoftEmail?.configured ? "Ready" : "Required"}</span></div></div>
     <div className="notification-layout"><article className="policy-list panel"><div className="section-head"><div><h2>Routing policies</h2><p>In-app alerts are owned response tasks. Webhook and Microsoft email rows are provider-delivery evidence.</p></div></div>{data.policies.map((policy) => {
       const response = responsePolicies[policy.id] ?? { ownerId: "", acknowledgementRequired: false, escalationMinutes: 0 };
+      const deliveryPolicy = deliveryPolicies[policy.id] ?? {
+        quietHoursEnabled: false, quietStartHourUtc: 22, quietEndHourUtc: 7, criticalBypass: true
+      };
       return <div className={`policy-row ${policy.channel !== "in_app" ? "external-policy" : ""}`} key={policy.id}><span className={`severity ${policy.severity}`}><AlertTriangle size={16}/></span><span><strong>{policy.event_type.replaceAll("_", " ").replaceAll(".", " · ")}</strong><small>{policy.channel.replaceAll("_", " ")} · {policy.destination ?? "Workrr notification center"}</small>
         {policy.channel === "in_app" && canConfigure && <span className="response-policy-editor"><label>Owner<select value={response.ownerId} onChange={(event) =>
           setResponsePolicies({ ...responsePolicies, [policy.id]: { ...response, ownerId: event.target.value } })}><option value="">Unassigned</option>
@@ -83,9 +106,20 @@ export function NotificationsView({ session, onNotice }: {
           <label>Escalate after<input type="number" min="0" max="10080" value={response.escalationMinutes} onChange={(event) =>
             setResponsePolicies({ ...responsePolicies, [policy.id]: { ...response, escalationMinutes: Number(event.target.value) } })}/><small>minutes</small></label>
           <button disabled={busy === policy.id} onClick={() => void saveResponsePolicy(policy.id)}>Save response</button></span>}
-        {policy.channel !== "in_app" && canConfigure && <span className="destination-editor"><input aria-label={`${policy.channel === "email" ? "Email" : "Webhook"} destination`} placeholder={policy.channel === "email" ? "operations@customer.example" : "https://customer.example/workrr-events"} value={destinations[policy.id] ?? ""} onChange={(event) => setDestinations((current) => ({ ...current, [policy.id]: event.target.value }))}/><button disabled={busy === policy.id} onClick={() => void saveDestination(policy.id)}>{policy.channel === "email" ? "Save recipient" : "Save URL"}</button><button disabled={busy === policy.id || !policy.credential_configured || !policy.destination} onClick={() => void test(policy.id)}><Send size={13}/>Test</button></span>}</span><span className={`delivery ${policy.enabled ? "enabled" : "disabled"}`}>{policy.enabled ? "Enabled" : "Disabled"}</span>{canConfigure && <button disabled={busy === policy.id} onClick={() => void toggle(policy.id, !policy.enabled)}>{policy.enabled ? "Disable" : "Enable"}</button>}</div>;
+        {policy.channel !== "in_app" && canConfigure && <><span className="destination-editor"><input aria-label={`${policy.channel === "email" ? "Email" : "Webhook"} destination`} placeholder={policy.channel === "email" ? "operations@customer.example" : "https://customer.example/workrr-events"} value={destinations[policy.id] ?? ""} onChange={(event) => setDestinations((current) => ({ ...current, [policy.id]: event.target.value }))}/><button disabled={busy === policy.id} onClick={() => void saveDestination(policy.id)}>{policy.channel === "email" ? "Save recipient" : "Save URL"}</button><button disabled={busy === policy.id || !policy.credential_configured || !policy.destination} onClick={() => void test(policy.id)}><Send size={13}/>Test</button></span>
+          <span className="quiet-hours-editor"><label><input type="checkbox" checked={deliveryPolicy.quietHoursEnabled} onChange={(event) =>
+            setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy, quietHoursEnabled: event.target.checked } })}/>Quiet hours</label>
+            <label>Start UTC<input type="number" min="0" max="23" value={deliveryPolicy.quietStartHourUtc} onChange={(event) =>
+              setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy, quietStartHourUtc: Number(event.target.value) } })}/></label>
+            <label>End UTC<input type="number" min="0" max="23" value={deliveryPolicy.quietEndHourUtc} onChange={(event) =>
+              setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy, quietEndHourUtc: Number(event.target.value) } })}/></label>
+            <label><input type="checkbox" checked={deliveryPolicy.criticalBypass} onChange={(event) =>
+              setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy, criticalBypass: event.target.checked } })}/>Critical bypass</label>
+            <button disabled={busy === policy.id} onClick={() => void saveDeliveryPolicy(policy.id)}>Save schedule</button></span></>}</span><span className={`delivery ${policy.enabled ? "enabled" : "disabled"}`}>{policy.enabled ? "Enabled" : "Disabled"}</span>{canConfigure && <button disabled={busy === policy.id} onClick={() => void toggle(policy.id, !policy.enabled)}>{policy.enabled ? "Disable" : "Enable"}</button>}</div>;
     })}</article>
       <aside className="event-list panel"><div className="section-head"><div><h2>Recent events</h2><p>Human response and external delivery remain separate evidence.</p></div></div>{data.events.length ? data.events.map((event) => <div className={`event-row ${event.delivery_status} ${event.escalated_at ? "escalated" : ""}`} key={event.id}>{event.acknowledged_at || event.delivery_status === "delivered" ? <CheckCircle2 size={16}/> : <ShieldCheck size={16}/>}<span><strong>{event.title}</strong><small>{event.detail}</small><em>{event.channel === "in_app" ? `owner ${event.owner_name ?? "unassigned"} · ${event.acknowledged_at ? `acknowledged by ${event.acknowledged_by_name ?? "operator"}` : event.escalated_at ? "escalated" : `acknowledge within ${event.escalation_minutes} minutes`}` : `${event.delivery_status === "delivered" && event.response_status === 202 ? "accepted by provider" : event.delivery_status} · ${event.attempt_count ? `${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"} · ` : ""}`}{formatDate(event.created_at)}</em>
+        {event.channel !== "in_app" && event.delivery_status === "pending" && event.delivery_scheduled_for &&
+          !event.delivery_queued_at && <small className="delivery-scheduled">Quiet hours · releases by hourly maintenance after {formatDate(event.delivery_scheduled_for)}</small>}
         {event.acknowledgement_note && <small className="acknowledgement-note">{event.acknowledgement_note}</small>}
         {event.last_error && <small className="delivery-error">{event.last_error}</small>}
         {event.channel === "in_app" && Boolean(event.acknowledgement_required) && !event.acknowledged_at && canAcknowledge && <span className="acknowledgement-editor">

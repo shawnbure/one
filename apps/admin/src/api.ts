@@ -444,12 +444,14 @@ export interface NotificationData {
   policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string;
     updated_at: string; credential_name: string | null; credential_configured: number;
     owner_id: string | null; owner_email: string | null; owner_name: string | null;
-    acknowledgement_required: number; escalation_minutes: number }>;
+    acknowledgement_required: number; escalation_minutes: number; quiet_hours_enabled: number;
+    quiet_start_hour_utc: number; quiet_end_hour_utc: number; critical_bypass: number }>;
   events: Array<{ id: string; event_type: string; severity: string; title: string; detail: string; delivery_status: string;
     attempt_count: number; last_error: string | null; response_status: number | null; created_at: string;
     channel: string | null; acknowledgement_required: number | null; escalation_minutes: number | null;
     owner_name: string | null; acknowledged_at: string | null; acknowledged_by_name: string | null;
-    acknowledgement_note: string | null; escalated_at: string | null }>;
+    acknowledgement_note: string | null; escalated_at: string | null; delivery_scheduled_for: string | null;
+    delivery_queued_at: string | null }>;
   credentials: Array<{ id: string; name: string; provider: string; secret_binding: string; purpose: string; status: string;
     last_validated_at: string | null; configured: number }>;
   microsoftEmail: null | { account_email: string | null; account_name: string | null; status: string; configured: number };
@@ -892,7 +894,8 @@ export const api = {
     "/api/onboarding/bootstrap", { method: "POST", body: JSON.stringify(body) }),
   notifications: () => request<{ data: NotificationData }>("/api/notifications"),
   updateNotificationPolicy: (id: string, body: { enabled?: boolean; destination?: string | null;
-    ownerId?: string | null; acknowledgementRequired?: boolean; escalationMinutes?: number }) =>
+    ownerId?: string | null; acknowledgementRequired?: boolean; escalationMinutes?: number;
+    quietHoursEnabled?: boolean; quietStartHourUtc?: number; quietEndHourUtc?: number; criticalBypass?: boolean }) =>
     request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   testNotificationPolicy: (id: string) =>
     request<{ eventId: string; status: string }>(`/api/notifications/policies/${id}/test`, { method: "POST", body: "{}" }),
