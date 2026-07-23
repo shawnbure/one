@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const actor = {
   bindTenant: vi.fn(),
   pinnedReleaseId: vi.fn(),
+  pinnedPromptReleaseId: vi.fn(),
+  adoptProcessRelease: vi.fn(),
   hasPromptRelease: vi.fn(),
   installPromptBundle: vi.fn(),
   execute: vi.fn()
@@ -11,11 +13,12 @@ const actor = {
 vi.mock("agents", () => ({ getAgentByName: vi.fn(async () => actor) }));
 vi.mock("../src/repository", () => ({
   getBlueprint: vi.fn(),
+  getBlueprintForPromptRelease: vi.fn(),
   getBlueprintForRelease: vi.fn(),
   getPromptBundle: vi.fn()
 }));
 
-import { getBlueprint, getBlueprintForRelease } from "../src/repository";
+import { getBlueprint, getBlueprintForPromptRelease, getBlueprintForRelease } from "../src/repository";
 import { executeRequest } from "../src/execution";
 
 const base = {
@@ -54,6 +57,10 @@ describe("durable actor release stickiness", () => {
       ...base, modelId: "@cf/model/old", promptReleaseId: "prompt-old",
       autonomy: "observe", activeReleaseId: "release-old"
     });
+    vi.mocked(getBlueprintForPromptRelease).mockResolvedValue({
+      ...base, modelId: "@cf/model/old", promptReleaseId: "prompt-old",
+      autonomy: "observe", activeReleaseId: "release-old"
+    });
     actor.pinnedReleaseId.mockResolvedValue("release-old");
   });
 
@@ -69,5 +76,18 @@ describe("durable actor release stickiness", () => {
     expect(writes.some(({ sql, bindings }) => sql.includes("INSERT OR IGNORE INTO executions") &&
       bindings.includes("release-old"))).toBe(true);
     expect(actor.execute).not.toHaveBeenCalled();
+  });
+
+  it("attributes a legacy actor's installed prompt before preserving its process release", async () => {
+    actor.pinnedReleaseId.mockResolvedValue(null);
+    actor.pinnedPromptReleaseId.mockResolvedValue("prompt-old");
+    const { env, writes } = environment();
+    await executeRequest(env, "tenant-1", {
+      blueprintId: "process-1", threadId: "customer-42", input: "Continue this conversation"
+    }, "execution-legacy");
+
+    expect(getBlueprintForPromptRelease).toHaveBeenCalledWith(env, "tenant-1", "process-1", "prompt-old");
+    expect(actor.adoptProcessRelease).toHaveBeenCalledWith("release-old", "prompt-old");
+    expect(writes.some(({ bindings }) => bindings.includes("release-old"))).toBe(true);
   });
 });

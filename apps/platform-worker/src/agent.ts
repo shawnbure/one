@@ -8,7 +8,10 @@ import { validateContractOutput, type ProcessSchema } from "./contracts";
 interface AgentState {
   tenantId: string | null;
   blueprintId: string | null;
-  releaseId: string | null;
+  /** Legacy field used by actors created before process/prompt release identity was separated. */
+  releaseId?: string | null;
+  promptReleaseId: string | null;
+  processReleaseId: string | null;
   turnCount: number;
   lastActiveAt: string | null;
 }
@@ -33,7 +36,10 @@ type MemoryRow = {
 };
 
 export class ProcessAgent extends Agent<Env, AgentState> {
-  initialState: AgentState = { tenantId: null, blueprintId: null, releaseId: null, turnCount: 0, lastActiveAt: null };
+  initialState: AgentState = {
+    tenantId: null, blueprintId: null, promptReleaseId: null, processReleaseId: null,
+    turnCount: 0, lastActiveAt: null
+  };
 
   async onStart(): Promise<void> {
     this.sql`CREATE TABLE IF NOT EXISTS prompt_bundle (
@@ -82,21 +88,45 @@ export class ProcessAgent extends Agent<Env, AgentState> {
   }
 
   pinnedReleaseId(): string | null {
-    return this.state.releaseId;
+    return this.state.processReleaseId ?? null;
   }
 
-  installPromptBundle(bundle: PromptBundle, tenantId: string): void {
+  pinnedPromptReleaseId(): string | null {
+    return this.state.promptReleaseId ?? this.state.releaseId ??
+      this.sql<{ release_id: string }>`SELECT release_id FROM prompt_bundle ORDER BY installed_at DESC LIMIT 1`[0]
+        ?.release_id ?? null;
+  }
+
+  adoptProcessRelease(processReleaseId: string, promptReleaseId: string): void {
+    const installedPromptReleaseId = this.pinnedPromptReleaseId();
+    if (!installedPromptReleaseId || installedPromptReleaseId !== promptReleaseId ||
+      !this.hasPromptRelease(promptReleaseId)) {
+      throw new Error("Legacy actor prompt release cannot be attributed to the requested process release");
+    }
+    if (this.state.processReleaseId && this.state.processReleaseId !== processReleaseId) {
+      throw new Error("Actor process release changed; reload before attribution");
+    }
+    this.setState({
+      ...this.state, releaseId: undefined, promptReleaseId: installedPromptReleaseId, processReleaseId
+    });
+  }
+
+  installPromptBundle(bundle: PromptBundle, tenantId: string, processReleaseId: string): void {
     this.sql`INSERT OR REPLACE INTO prompt_bundle
       (release_id, blueprint_id, version, bundle_json, checksum, installed_at)
       VALUES (${bundle.releaseId}, ${bundle.blueprintId}, ${bundle.version}, ${JSON.stringify(bundle)}, ${bundle.checksum}, ${new Date().toISOString()})`;
-    this.setState({ ...this.state, tenantId, blueprintId: bundle.blueprintId, releaseId: bundle.releaseId });
+    this.setState({
+      ...this.state, tenantId, blueprintId: bundle.blueprintId, releaseId: undefined,
+      promptReleaseId: bundle.releaseId, processReleaseId
+    });
   }
 
-  migratePromptBundle(bundle: PromptBundle, tenantId: string, expectedFromReleaseId: string): void {
-    if (this.state.releaseId && this.state.releaseId !== expectedFromReleaseId) {
+  migratePromptBundle(bundle: PromptBundle, tenantId: string, expectedFromReleaseId: string,
+    targetProcessReleaseId: string): void {
+    if (this.state.processReleaseId && this.state.processReleaseId !== expectedFromReleaseId) {
       throw new Error("Actor release changed; reload before migrating");
     }
-    this.installPromptBundle(bundle, tenantId);
+    this.installPromptBundle(bundle, tenantId, targetProcessReleaseId);
   }
 
   async execute(input: string, safeInput: string, modelProfile: string, modelId: string | null, executionId: string,
@@ -105,7 +135,8 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
     turnCount: number; toolApprovalRequired: boolean;
   }> {
-    const row = this.sql<{ bundle_json: string }>`SELECT bundle_json FROM prompt_bundle WHERE release_id = ${this.state.releaseId}`[0];
+    const promptReleaseId = this.pinnedPromptReleaseId();
+    const row = this.sql<{ bundle_json: string }>`SELECT bundle_json FROM prompt_bundle WHERE release_id = ${promptReleaseId}`[0];
     if (!row) throw new Error("Prompt release has not been installed on this agent instance");
 
     const history = boundedConversationContext(

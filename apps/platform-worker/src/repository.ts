@@ -2,19 +2,27 @@ import type { AgentBlueprint, PromptBundle } from "@workrr/contracts";
 import type { BlueprintRow, Env, PromptRow } from "./types";
 
 export async function getBlueprint(env: Env, tenantId: string, id: string): Promise<AgentBlueprint | null> {
-  return getBlueprintRow(env, tenantId, id);
+  return getBlueprintRow(env, tenantId, id, {});
 }
 
 export async function getBlueprintForRelease(env: Env, tenantId: string, id: string, releaseId: string):
 Promise<AgentBlueprint | null> {
-  return getBlueprintRow(env, tenantId, id, releaseId);
+  return getBlueprintRow(env, tenantId, id, { processReleaseId: releaseId });
 }
 
-async function getBlueprintRow(env: Env, tenantId: string, id: string, releaseId?: string):
+export async function getBlueprintForPromptRelease(env: Env, tenantId: string, id: string, promptReleaseId: string):
 Promise<AgentBlueprint | null> {
-  const releaseJoin = releaseId
+  return getBlueprintRow(env, tenantId, id, { promptReleaseId });
+}
+
+async function getBlueprintRow(env: Env, tenantId: string, id: string,
+  selector: { processReleaseId?: string; promptReleaseId?: string }):
+Promise<AgentBlueprint | null> {
+  const releaseJoin = selector.processReleaseId
     ? "JOIN process_releases r ON r.id=? AND r.blueprint_id=b.id AND r.tenant_id=b.tenant_id"
-    : "LEFT JOIN process_releases r ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id";
+    : selector.promptReleaseId
+      ? "JOIN process_releases r ON r.prompt_release_id=? AND r.blueprint_id=b.id AND r.tenant_id=b.tenant_id"
+      : "LEFT JOIN process_releases r ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id";
   const statement = env.DB.prepare(`SELECT b.*, r.id resolved_release_id, r.prompt_release_id resolved_prompt_release_id,
     r.model_profile resolved_model_profile, r.autonomy resolved_autonomy,
     r.model_id, r.input_schema_json, r.output_schema_json,
@@ -45,7 +53,8 @@ Promise<AgentBlueprint | null> {
         AND c.tenant_id=b.tenant_id), r.tool_policy_json, '[]') tool_policy_json
     FROM agent_blueprints b ${releaseJoin}
     WHERE b.tenant_id = ? AND b.id = ?`);
-  const row = await (releaseId ? statement.bind(releaseId, tenantId, id) : statement.bind(tenantId, id))
+  const releaseSelector = selector.processReleaseId ?? selector.promptReleaseId;
+  const row = await (releaseSelector ? statement.bind(releaseSelector, tenantId, id) : statement.bind(tenantId, id))
     .first<BlueprintRow & {
       resolved_release_id?: string | null; resolved_prompt_release_id?: string | null;
       resolved_model_profile?: string | null; resolved_autonomy?: string | null;

@@ -10,14 +10,17 @@ export async function migrateExecutionActorRelease(env: Env, tenantId: string, a
   const reason = raw.reason?.trim() ?? "";
   if (reason.length < 10 || reason.length > 500) throw new Error("Migration reason must be 10 to 500 characters");
   const reference = await env.DB.prepare(`SELECT e.blueprint_id, e.execution_profile, e.instance_key,
-      e.process_release_id, b.active_release_id, target.prompt_release_id, target.version,
+      e.process_release_id, source.prompt_release_id source_prompt_release_id,
+      b.active_release_id, target.prompt_release_id, target.version,
       target.status target_status, target.evaluation_status
     FROM executions e
     JOIN agent_blueprints b ON b.id=e.blueprint_id AND b.tenant_id=e.tenant_id
+    LEFT JOIN process_releases source ON source.id=e.process_release_id AND source.tenant_id=e.tenant_id
     LEFT JOIN process_releases target ON target.id=b.active_release_id AND target.tenant_id=b.tenant_id
     WHERE e.id=? AND e.tenant_id=?`).bind(executionId, tenantId).first<{
       blueprint_id: string; execution_profile: string; instance_key: string | null;
-      process_release_id: string | null; active_release_id: string | null; prompt_release_id: string | null;
+      process_release_id: string | null; source_prompt_release_id: string | null;
+      active_release_id: string | null; prompt_release_id: string | null;
       version: number | null; target_status: string | null; evaluation_status: string | null;
     }>();
   if (!reference) throw new Error("Execution was not found");
@@ -33,7 +36,15 @@ export async function migrateExecutionActorRelease(env: Env, tenantId: string, a
   }
   const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, reference.instance_key);
   await agent.bindTenant(tenantId, reference.blueprint_id);
-  const fromReleaseId = await agent.pinnedReleaseId() ?? reference.process_release_id;
+  let fromReleaseId = await agent.pinnedReleaseId();
+  if (!fromReleaseId && reference.process_release_id) {
+    const legacyPromptReleaseId = await agent.pinnedPromptReleaseId();
+    if (!legacyPromptReleaseId || legacyPromptReleaseId !== reference.source_prompt_release_id) {
+      throw new Error("Legacy actor prompt release cannot be attributed to the source execution");
+    }
+    await agent.adoptProcessRelease(reference.process_release_id, legacyPromptReleaseId);
+    fromReleaseId = reference.process_release_id;
+  }
   if (!fromReleaseId) throw new Error("Actor has no attributable installed release");
   if (raw.confirmFromReleaseId !== fromReleaseId) throw new Error("Actor release changed; reload before migrating");
   if (fromReleaseId === reference.active_release_id) {
@@ -42,7 +53,7 @@ export async function migrateExecutionActorRelease(env: Env, tenantId: string, a
   }
   const prompt = await getPromptBundle(env, reference.prompt_release_id);
   if (!prompt) throw new Error("Target prompt release was not found");
-  await agent.migratePromptBundle(prompt, tenantId, fromReleaseId);
+  await agent.migratePromptBundle(prompt, tenantId, fromReleaseId, reference.active_release_id);
   const id = `actor-migration-${crypto.randomUUID()}`;
   const migratedAt = new Date().toISOString();
   await env.DB.prepare(`INSERT INTO actor_release_migrations

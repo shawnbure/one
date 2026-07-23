@@ -1,7 +1,7 @@
 import { getAgentByName } from "agents";
 import { instanceKeyFor, type ExecutionRequest, type ExecutionResult, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
-import { getBlueprint, getBlueprintForRelease, getPromptBundle } from "./repository";
+import { getBlueprint, getBlueprintForPromptRelease, getBlueprintForRelease, getPromptBundle } from "./repository";
 import type { ProcessAgent } from "./agent";
 import type { Env } from "./types";
 import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
@@ -20,7 +20,18 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   if (instanceKey) {
     durableAgent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey);
     await durableAgent.bindTenant(tenantId, blueprint.id);
-    const pinnedReleaseId = await durableAgent.pinnedReleaseId();
+    let pinnedReleaseId = await durableAgent.pinnedReleaseId();
+    if (!pinnedReleaseId) {
+      const legacyPromptReleaseId = await durableAgent.pinnedPromptReleaseId();
+      if (legacyPromptReleaseId) {
+        const attributed = await getBlueprintForPromptRelease(env, tenantId, blueprint.id, legacyPromptReleaseId);
+        if (!attributed?.activeReleaseId) {
+          throw new Error("Legacy Agent actor references an unattributable prompt release");
+        }
+        await durableAgent.adoptProcessRelease(attributed.activeReleaseId, legacyPromptReleaseId);
+        pinnedReleaseId = attributed.activeReleaseId;
+      }
+    }
     if (pinnedReleaseId && pinnedReleaseId !== blueprint.activeReleaseId) {
       const pinnedBlueprint = await getBlueprintForRelease(env, tenantId, blueprint.id, pinnedReleaseId);
       if (!pinnedBlueprint) throw new Error("Agent actor references an unavailable process release");
@@ -124,7 +135,8 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
 
     const agent = durableAgent!;
     if (!await agent.hasPromptRelease(promptReleaseId)) {
-      agent.installPromptBundle(await requiredPrompt(env, promptReleaseId), tenantId);
+      if (!blueprint.activeReleaseId) throw new Error("Durable process has no immutable process release");
+      await agent.installPromptBundle(await requiredPrompt(env, promptReleaseId), tenantId, blueprint.activeReleaseId);
     }
     let result;
     try {

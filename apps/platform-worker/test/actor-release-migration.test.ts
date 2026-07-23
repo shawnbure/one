@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const agent = {
   bindTenant: vi.fn(),
   pinnedReleaseId: vi.fn(),
+  pinnedPromptReleaseId: vi.fn(),
+  adoptProcessRelease: vi.fn(),
   migratePromptBundle: vi.fn()
 };
 vi.mock("agents", () => ({ getAgentByName: vi.fn(async () => agent) }));
@@ -22,6 +24,7 @@ function environment() {
           if (sql.includes("FROM executions e")) return {
             blueprint_id: "process-1", execution_profile: "conversation",
             instance_key: "process-1:thread:customer-42", process_release_id: "release-v1",
+            source_prompt_release_id: "prompt-v1",
             active_release_id: "release-v2", prompt_release_id: "prompt-v2", version: 2,
             target_status: "published", evaluation_status: "passing"
           };
@@ -53,7 +56,7 @@ describe("explicit actor release migration", () => {
     });
     expect(result).toMatchObject({ changed: true, fromReleaseId: "release-v1", toReleaseId: "release-v2" });
     expect(agent.migratePromptBundle).toHaveBeenCalledWith(expect.objectContaining({ releaseId: "prompt-v2" }),
-      "tenant-1", "release-v1");
+      "tenant-1", "release-v1", "release-v2");
     expect(writes.some(({ sql, bindings }) => sql.includes("INSERT INTO actor_release_migrations") &&
       bindings.includes("release-v1") && bindings.includes("release-v2"))).toBe(true);
   });
