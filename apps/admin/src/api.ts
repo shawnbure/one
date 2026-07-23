@@ -364,6 +364,7 @@ export interface ProcessRelease {
   input_schema_json: string | null;
   output_schema_json: string | null;
   tool_policy_json: string | null;
+  topology_json: string | null;
 }
 export interface AutonomySafetyData {
   state: {
@@ -433,6 +434,9 @@ export interface StudioData {
   };
   activeTools: string[];
   topology: {
+    version: number;
+    layout: "linear";
+    businessSteps: Array<{ id: string; type: "step" | "decision" | "checkpoint"; label: string }>;
     nodes: Array<{ id: string; type: string; label: string }>;
     edges: Array<{ from: string; to: string }>;
   };
@@ -1355,6 +1359,9 @@ export const api = {
       releaseNotes: string;
       inputSchema?: Record<string, unknown> | null;
       outputSchema?: Record<string, unknown> | null;
+      topology?: {
+        businessSteps: Array<{ id: string; type: "step" | "decision" | "checkpoint"; label: string }>;
+      };
     },
   ) =>
     request<{ releaseId: string; version: number; status: string }>(

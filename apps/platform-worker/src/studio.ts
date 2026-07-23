@@ -16,6 +16,13 @@ interface ReleaseInput {
   releaseNotes?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
+  topology?: unknown;
+}
+
+export interface BusinessTopologyStep {
+  id: string;
+  type: "step" | "decision" | "checkpoint";
+  label: string;
 }
 
 export async function getStudio(env: Env, tenantId: string, blueprintId: string) {
@@ -45,7 +52,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, model_id, autonomy, status, release_notes,
       created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at,
-      input_schema_json, output_schema_json, tool_policy_json FROM process_releases
+      input_schema_json, output_schema_json, tool_policy_json, topology_json FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND blueprint_id = ?
       AND started_at >= datetime('now','-7 days') GROUP BY status`).bind(tenantId, blueprintId).all(),
@@ -114,7 +121,10 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     approvedModelIds: approvedModels.results.map((model) => model.model_id),
     autonomySafety,
     activeTools,
-    topology: topologyFor(String(row.execution_profile), String(row.autonomy), activeTools)
+    topology: topologyFromRelease(
+      (activeRelease as Record<string, unknown> | undefined)?.topology_json,
+      String(row.execution_profile), String(row.autonomy), activeTools
+    )
   };
 }
 
@@ -138,13 +148,16 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
     releaseToolPolicies(env, tenantId, blueprintId)
   ]);
   if (!blueprint) throw new Error("Process not found");
+  const topology = normalizeWorkflowTopology(
+    blueprint.execution_profile, input.autonomy, toolPolicies.map((tool) => tool.name), input.topology
+  );
   const versionRow = await env.DB.prepare("SELECT COALESCE(MAX(version), 0) + 1 version FROM process_releases WHERE tenant_id = ? AND blueprint_id = ?")
     .bind(tenantId, blueprintId).first<{ version: number }>();
   const version = versionRow?.version ?? 1;
   const releaseId = `release-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const promptReleaseId = `prompt-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const compiled = { promptReleaseId, modelProfile: input.modelProfile, modelId, autonomy: input.autonomy,
-    executionProfile: blueprint.execution_profile, inputSchema, outputSchema, toolPolicies };
+    executionProfile: blueprint.execution_profile, inputSchema, outputSchema, toolPolicies, topology };
   const checksum = await sha256(JSON.stringify({ ...input, inputSchema, outputSchema, compiled }));
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO prompt_releases
@@ -153,12 +166,12 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
       .bind(promptReleaseId, blueprintId, version, input.systemPrompt.trim(), JSON.stringify(input.instructions), JSON.stringify(input.guardrails), checksum, input.releaseNotes ?? "", actorId),
     env.DB.prepare(`INSERT INTO process_releases
       (id, tenant_id, blueprint_id, version, prompt_release_id, model_profile, model_id, autonomy, compiled_json,
-       checksum, status, release_notes, created_by, input_schema_json, output_schema_json, tool_policy_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`)
+       checksum, status, release_notes, created_by, input_schema_json, output_schema_json, tool_policy_json, topology_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`)
       .bind(releaseId, tenantId, blueprintId, version, promptReleaseId, input.modelProfile, modelId, input.autonomy,
         JSON.stringify(compiled), checksum, input.releaseNotes ?? "", actorId,
         inputSchema ? JSON.stringify(inputSchema) : null, outputSchema ? JSON.stringify(outputSchema) : null,
-        JSON.stringify(toolPolicies))
+        JSON.stringify(toolPolicies), JSON.stringify(topology))
   ]);
   return { releaseId, promptReleaseId, version, checksum, status: "draft" as const };
 }
@@ -282,14 +295,62 @@ export async function rollbackRelease(env: Env, tenantId: string, blueprintId: s
   };
 }
 
-function topologyFor(profile: string, autonomy: string, tools: string[]) {
+export function normalizeWorkflowTopology(
+  profile: string, autonomy: string, tools: string[], input: unknown
+) {
+  const raw = input && typeof input === "object" && Array.isArray((input as { businessSteps?: unknown }).businessSteps)
+    ? (input as { businessSteps: unknown[] }).businessSteps : [];
+  if (raw.length > 8) throw new Error("Workflow design supports at most 8 business steps");
+  const seen = new Set<string>();
+  const businessSteps = raw.map((item, index) => {
+    if (!item || typeof item !== "object") throw new Error(`Workflow step ${index + 1} is invalid`);
+    const value = item as Record<string, unknown>;
+    const label = String(value.label ?? "").trim().replace(/\s+/g, " ");
+    const type = String(value.type ?? "step");
+    if (label.length < 3 || label.length > 60) {
+      throw new Error(`Workflow step ${index + 1} label must be 3 to 60 characters`);
+    }
+    if (!["step", "decision", "checkpoint"].includes(type)) {
+      throw new Error(`Workflow step ${index + 1} has an unsupported type`);
+    }
+    const normalized = label.toLowerCase();
+    if (seen.has(normalized)) throw new Error("Workflow step labels must be unique");
+    seen.add(normalized);
+    return {
+      id: `business-${index + 1}`,
+      type: type as BusinessTopologyStep["type"],
+      label
+    };
+  });
+  return topologyFor(profile, autonomy, tools, businessSteps);
+}
+
+function topologyFor(
+  profile: string, autonomy: string, tools: string[], businessSteps: BusinessTopologyStep[] = []
+) {
   const nodes = [{ id: "trigger", type: "trigger", label: profile === "workflow" ? "Workflow trigger" : "Process request" }];
   if (profile === "workflow") nodes.push({ id: "queue", type: "queue", label: "Durable workflow" });
   nodes.push({ id: "agent", type: "agent", label: profile === "instant" ? "Instant agent" : "Durable agent" });
+  nodes.push(...businessSteps);
   for (const [index, tool] of tools.entries()) nodes.push({ id: `tool-${index}`, type: "tool", label: tool.replaceAll("_", " ") });
   if (["approve", "guarded"].includes(autonomy)) nodes.push({ id: "approval", type: "approval", label: "Human checkpoint" });
   nodes.push({ id: "outcome", type: "outcome", label: "Business outcome" });
-  return { nodes, edges: nodes.slice(1).map((node, index) => ({ from: nodes[index]!.id, to: node.id })) };
+  return {
+    version: 1, layout: "linear" as const, businessSteps, nodes,
+    edges: nodes.slice(1).map((node, index) => ({ from: nodes[index]!.id, to: node.id }))
+  };
+}
+
+function topologyFromRelease(value: unknown, profile: string, autonomy: string, tools: string[]) {
+  if (typeof value === "string" && value) {
+    try {
+      const parsed = JSON.parse(value) as { businessSteps?: unknown };
+      return normalizeWorkflowTopology(profile, autonomy, tools, parsed);
+    } catch {
+      // Legacy or malformed evidence is never trusted; render the platform-derived safe topology.
+    }
+  }
+  return topologyFor(profile, autonomy, tools);
 }
 
 async function sha256(value: string): Promise<string> {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   Bot,
   Boxes,
   Check,
@@ -22,6 +24,7 @@ import {
   AlertTriangle,
   LockKeyhole,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   modelProfiles,
@@ -174,6 +177,7 @@ function Studio({
   const [notes, setNotes] = useState("");
   const [inputSchema, setInputSchema] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
+  const [businessSteps, setBusinessSteps] = useState<StudioData["topology"]["businessSteps"]>([]);
   const [busy, setBusy] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<ProcessRelease | null>(null);
   const [rollbackReason, setRollbackReason] = useState("");
@@ -217,6 +221,7 @@ function Studio({
       });
       setInputSchema(prettySchema(active?.input_schema_json));
       setOutputSchema(prettySchema(active?.output_schema_json));
+      setBusinessSteps(result.topology.businessSteps ?? []);
     } catch (error) {
       onNotice(
         error instanceof Error
@@ -278,6 +283,7 @@ function Studio({
         releaseNotes: notes,
         inputSchema: parsedInputSchema,
         outputSchema: parsedOutputSchema,
+        topology: { businessSteps },
       });
       onNotice(`Draft release v${result.version} created.`);
       setNotes("");
@@ -338,12 +344,40 @@ function Studio({
     } finally { setBusy(false); }
   }
 
+  function addBusinessStep() {
+    if (businessSteps.length >= 8) return;
+    setBusinessSteps([...businessSteps, {
+      id: `business-${Date.now()}`, type: "step", label: `Business step ${businessSteps.length + 1}`
+    }]);
+  }
+  function updateBusinessStep(index: number, patch: Partial<StudioData["topology"]["businessSteps"][number]>) {
+    setBusinessSteps(businessSteps.map((step, position) => position === index ? { ...step, ...patch } : step));
+  }
+  function moveBusinessStep(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= businessSteps.length) return;
+    const next = [...businessSteps];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    setBusinessSteps(next);
+  }
+
   if (!data) return <div className="loading-card">Loading Process Studio…</div>;
   const blueprint = data.blueprint;
   const canActivate = Boolean(session && ["admin", "owner"].includes(session.user.role));
   const activeActorRollout = rollouts.find((rollout) => ["queued", "running"].includes(rollout.status));
   const executionProfile = blueprint.execution_profile ?? "instant";
   const tools = data.activeTools ?? JSON.parse(blueprint.tools_json ?? "[]") as string[];
+  const canDesign = Boolean(session && ["admin", "builder", "owner"].includes(session.user.role));
+  const activeBusinessIds = new Set(data.topology.businessSteps.map((step) => step.id));
+  const platformNodes = data.topology.nodes.filter((node) => !activeBusinessIds.has(node.id));
+  const agentIndex = platformNodes.findIndex((node) => node.type === "agent");
+  const previewTopologyNodes = [
+    ...platformNodes.slice(0, agentIndex + 1),
+    ...businessSteps.map((step, index) => ({ ...step, id: `preview-business-${index + 1}` })),
+    ...platformNodes.slice(agentIndex + 1),
+  ];
+  const topologyChanged = JSON.stringify(businessSteps.map(({ type, label }) => ({ type, label }))) !==
+    JSON.stringify(data.topology.businessSteps.map(({ type, label }) => ({ type, label })));
   return (
     <section className="studio-page">
       <button className="back-link" onClick={onBack}>
@@ -399,18 +433,18 @@ function Studio({
           <article className="topology panel">
             <div className="section-head">
               <div>
-                <h2>Generated process topology</h2>
+                <h2>Governed workflow canvas</h2>
                 <p>
-                  Cloudflare primitives selected from this process definition.
+                  Platform primitives stay locked; business steps are versioned with the next draft release.
                 </p>
               </div>
               <span>
                 <Sparkles size={14} />
-                Live definition
+                {topologyChanged ? "Draft preview" : "Active release"}
               </span>
             </div>
             <div className="topology-flow">
-              {data.topology.nodes.map((node, index) => (
+              {previewTopologyNodes.map((node, index) => (
                 <div className="topology-step" key={node.id}>
                   {index > 0 && <i className="connector" />}
                   <span className={`topology-node ${node.type}`}>
@@ -420,6 +454,36 @@ function Studio({
                   <small>{node.type}</small>
                 </div>
               ))}
+            </div>
+            <div className="workflow-editor">
+              <header><div><strong>Business flow</strong>
+                <small>Linear by design for the MVP: no hidden loops or unbounded graph execution.</small></div>
+                {canDesign && <button disabled={businessSteps.length >= 8} onClick={addBusinessStep}>
+                  <Plus size={14}/>Add step</button>}</header>
+              {!businessSteps.length && <p className="workflow-empty">No custom business steps. The active release uses only its governed Cloudflare primitives, tools, and approval boundary.</p>}
+              {businessSteps.map((step, index) => <div className="workflow-step-editor" key={step.id}>
+                <span>{index + 1}</span>
+                <label>Type<select disabled={!canDesign} value={step.type}
+                  onChange={(event) => updateBusinessStep(index, {
+                    type: event.target.value as typeof step.type
+                  })}>
+                  <option value="step">Process step</option>
+                  <option value="decision">Decision</option>
+                  <option value="checkpoint">Control checkpoint</option>
+                </select></label>
+                <label>Label<input disabled={!canDesign} minLength={3} maxLength={60} value={step.label}
+                  onChange={(event) => updateBusinessStep(index, { label: event.target.value })}/></label>
+                {canDesign && <span className="workflow-step-actions">
+                  <button aria-label="Move step up" disabled={index === 0}
+                    onClick={() => moveBusinessStep(index, -1)}><ArrowUp size={14}/></button>
+                  <button aria-label="Move step down" disabled={index === businessSteps.length - 1}
+                    onClick={() => moveBusinessStep(index, 1)}><ArrowDown size={14}/></button>
+                  <button aria-label="Remove step" onClick={() =>
+                    setBusinessSteps(businessSteps.filter((_, position) => position !== index))}><X size={14}/></button>
+                </span>}
+              </div>)}
+              {canDesign && <footer><ShieldCheck size={14}/>
+                These edits do not change the live process. Create and publish a new release to activate them.</footer>}
             </div>
           </article>
           <aside className="configuration panel">

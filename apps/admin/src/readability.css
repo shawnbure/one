@@ -1287,6 +1287,48 @@ nav button em,
   display: block; overflow-x: auto; padding: 9px 11px; border-radius: 7px;
   background: #17231e; color: #eff8f3; font-size: 12px; line-height: 1.5;
 }
+
+/* The workflow canvas keeps infrastructure truth fixed and makes customer steps easy to edit. */
+.workflow-editor {
+  display: grid; gap: 12px; margin-top: 18px; padding-top: 18px;
+  border-top: 1px solid #dfe7e3;
+}
+.workflow-editor > header {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.workflow-editor > header > div { display: grid; gap: 4px; }
+.workflow-editor > header strong { color: #253c32; font-size: 15px; }
+.workflow-editor > header small { color: #65766e; font-size: 13px; line-height: 1.45; }
+.workflow-editor button { display: inline-flex; align-items: center; gap: 6px; }
+.workflow-empty {
+  margin: 0; padding: 14px; border: 1px dashed #cfdad5; border-radius: 9px;
+  color: #63736b; font-size: 13px; line-height: 1.55;
+}
+.workflow-step-editor {
+  display: grid; grid-template-columns: 30px minmax(145px, .45fr) minmax(220px, 1fr) auto;
+  align-items: end; gap: 10px; padding: 11px; border: 1px solid #dce5e1;
+  border-radius: 10px; background: #fbfdfc;
+}
+.workflow-step-editor > span:first-child {
+  display: grid; place-items: center; align-self: center; width: 27px; height: 27px;
+  border-radius: 50%; background: #e6f1ec; color: #286b50; font-weight: 750; font-size: 12px;
+}
+.workflow-step-editor label { display: grid; gap: 5px; color: #4c5e55; font-size: 12px; font-weight: 700; }
+.workflow-step-editor input, .workflow-step-editor select { min-height: 40px; font-size: 14px; }
+.workflow-step-actions { display: flex; gap: 5px; align-self: end; }
+.workflow-step-actions button { width: 38px; min-height: 40px; justify-content: center; padding: 0; }
+.workflow-editor > footer {
+  display: flex; align-items: center; gap: 7px; color: #52675d;
+  font-size: 12px; line-height: 1.45;
+}
+.topology-node.step { border-color: #c7d9e7; background: #edf5fb; color: #366d92; }
+.topology-node.decision { border-color: #ddd0e9; background: #f5effa; color: #77568f; }
+.topology-node.checkpoint { border-color: #ead7b8; background: #fff6e8; color: #90632c; }
+@media (max-width: 760px) {
+  .workflow-editor > header { align-items: flex-start; flex-direction: column; }
+  .workflow-step-editor { grid-template-columns: 30px 1fr; }
+  .workflow-step-editor label, .workflow-step-actions { grid-column: 2; }
+}
 @media (max-width: 1180px) {
   .webhook-create { grid-template-columns: 1fr 1fr; }
   .webhook-create > div { grid-column: 1 / -1; }

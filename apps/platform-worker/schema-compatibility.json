@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 84,
-  "requiredMigrationName": "0084_email_routing_verification.sql"
+  "requiredMigrationId": 85,
+  "requiredMigrationName": "0085_release_workflow_topology.sql"
 }

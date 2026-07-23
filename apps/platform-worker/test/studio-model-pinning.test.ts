@@ -40,6 +40,9 @@ describe("release model pinning", () => {
     expect(release?.bindings).toContain("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
     expect(release?.bindings.some((value) => typeof value === "string" &&
       value.includes('"modelId":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"'))).toBe(true);
+    expect(release?.sql).toContain("topology_json");
+    expect(release?.bindings.some((value) => typeof value === "string" &&
+      value.includes('"layout":"linear"'))).toBe(true);
   });
 
   it("rejects an exact model outside the platform allowlist", async () => {

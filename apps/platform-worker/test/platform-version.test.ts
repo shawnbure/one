@@ -22,8 +22,8 @@ function environment(migration: { id: number; name: string; applied_at: string }
 describe("platform deployment compatibility", () => {
   it("proves the exact Worker and schema version when migrations are current", async () => {
     const result = await getPlatformVersion(environment({
-      id: 84,
-      name: "0084_email_routing_verification.sql",
+      id: 85,
+      name: "0085_release_workflow_topology.sql",
       applied_at: "2026-07-23 16:45:00",
     }) as never);
     expect(result).toMatchObject({
@@ -31,7 +31,7 @@ describe("platform deployment compatibility", () => {
       environment: "development",
       domain: "one-dev.workrr.ai",
       worker: { versionId: "worker-version-1", tag: "dev" },
-      schema: { status: "current", compatible: true, appliedMigrationId: 84, requiredMigrationId: 84 },
+      schema: { status: "current", compatible: true, appliedMigrationId: 85, requiredMigrationId: 85 },
     });
   });
 
@@ -40,7 +40,7 @@ describe("platform deployment compatibility", () => {
       id: 68, name: "0068_provider_acceptance.sql", applied_at: "2026-07-22 12:00:00",
     }) as never)).schema.status).toBe("migration_required");
     expect((await getPlatformVersion(environment({
-      id: 85, name: "0085_future.sql", applied_at: "2026-07-24 12:00:00",
+      id: 86, name: "0086_future.sql", applied_at: "2026-07-24 12:00:00",
     }) as never)).schema.status).toBe("application_upgrade_required");
   });
 

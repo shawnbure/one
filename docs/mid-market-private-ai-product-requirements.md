@@ -622,7 +622,7 @@ The aggressive MVP should be broad in operational completeness, not broad in arb
 
 ### P2 — Add after first real deployment evidence
 
-- Editable workflow canvas.
+- Editable workflow canvas. Implemented as a bounded, linear, release-versioned business-flow editor that preserves server-derived Cloudflare and approval boundaries.
 - MCP connector catalog.
 - AI Gateway/provider routing.
 - Teams and Slack.

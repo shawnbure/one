@@ -53,4 +53,12 @@ describe("product readability contract", () => {
     expect(css).toContain("@media (max-width: 700px)");
     expect(css).toContain(".webhook-create, .webhook-row { grid-template-columns: 1fr; }");
   });
+
+  it("keeps the governed workflow editor usable at desktop and mobile widths", () => {
+    expect(css).toContain(".workflow-step-editor");
+    expect(css).toContain("grid-template-columns: 30px minmax(145px");
+    expect(css).toContain(".workflow-step-editor input, .workflow-step-editor select { min-height: 40px");
+    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain(".workflow-step-editor { grid-template-columns: 30px 1fr; }");
+  });
 });

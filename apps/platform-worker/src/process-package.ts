@@ -13,14 +13,16 @@ export interface PortableProcessPackage {
     tools: string[]; toolDefinitions?: PortableToolPolicy[]; businessOwner: string; department: string; riskLevel: string;
   };
   behavior: { systemPrompt: string; instructions: string[]; guardrails: string[]; releaseNotes?: string;
-    inputSchema?: Record<string, unknown> | null; outputSchema?: Record<string, unknown> | null };
+    inputSchema?: Record<string, unknown> | null; outputSchema?: Record<string, unknown> | null;
+    topology?: { businessSteps: Array<{ type: "step" | "decision" | "checkpoint"; label: string }> } };
   provenance?: { sourceProcessId?: string; sourceReleaseId?: string; checksum?: string };
   secrets?: "excluded";
 }
 
 export async function exportProcessPackage(env: Env, tenantId: string, blueprintId: string): Promise<PortableProcessPackage | null> {
   const row = await env.DB.prepare(`SELECT b.*, p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum,
-    r.id source_release_id, r.model_id, r.release_notes, r.input_schema_json, r.output_schema_json, r.tool_policy_json FROM agent_blueprints b
+    r.id source_release_id, r.model_id, r.release_notes, r.input_schema_json, r.output_schema_json,
+    r.tool_policy_json, r.topology_json FROM agent_blueprints b
     JOIN prompt_releases p ON p.id = b.prompt_release_id
     LEFT JOIN process_releases r ON r.id = b.active_release_id
     WHERE b.tenant_id = ? AND b.id = ?`).bind(tenantId, blueprintId).first<Record<string, string | null>>();
@@ -35,7 +37,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
       department: row.department || "Operations", riskLevel: row.risk_level || "medium" },
     behavior: { systemPrompt: row.system_prompt!, instructions: parseStringArray(row.instructions_json),
       guardrails: parseStringArray(row.guardrails_json), releaseNotes: row.release_notes || "Imported process package",
-      inputSchema: parseOptionalObject(row.input_schema_json), outputSchema: parseOptionalObject(row.output_schema_json) },
+      inputSchema: parseOptionalObject(row.input_schema_json), outputSchema: parseOptionalObject(row.output_schema_json),
+      topology: parsePortableTopology(row.topology_json) },
     provenance: { sourceProcessId: blueprintId, sourceReleaseId: row.source_release_id || undefined, checksum: row.checksum || undefined },
     secrets: "excluded"
   };
@@ -72,6 +75,7 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
       instructions: pkg.behavior.instructions, guardrails: pkg.behavior.guardrails, modelProfile: pkg.process.modelProfile,
       modelId: pkg.process.modelId,
       autonomy: pkg.process.autonomy, inputSchema: pkg.behavior.inputSchema, outputSchema: pkg.behavior.outputSchema,
+      topology: pkg.behavior.topology,
       releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
     return { id, status: "draft", release, source: pkg.provenance ?? null };
   } catch (error) {
@@ -119,6 +123,19 @@ function parseToolPolicies(value: string | null | undefined): PortableToolPolicy
     if (!Array.isArray(parsed)) return [];
     return parsed.map(({ id: _id, connectionId: _connectionId, connectionReady: _connectionReady, ...tool }) => tool);
   } catch { return []; }
+}
+function parsePortableTopology(value: string | null | undefined) {
+  if (!value) return { businessSteps: [] };
+  try {
+    const parsed = JSON.parse(value) as { businessSteps?: unknown };
+    if (!Array.isArray(parsed.businessSteps)) return { businessSteps: [] };
+    return {
+      businessSteps: parsed.businessSteps.map((step) => {
+        const item = step as Record<string, unknown>;
+        return { type: item.type, label: item.label };
+      }) as Array<{ type: "step" | "decision" | "checkpoint"; label: string }>
+    };
+  } catch { return { businessSteps: [] }; }
 }
 function validateToolDefinitions(value: unknown): PortableToolPolicy[] {
   if (value === undefined) return [];
