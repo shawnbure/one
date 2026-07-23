@@ -75,6 +75,7 @@ import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
   setLaunchpadThreadArchived } from "./launchpad";
 import { emitMaintenanceDegradedAlerts, runScheduledMaintenance } from "./maintenance";
+import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -1184,6 +1185,67 @@ app.get("/api/executions/:id", requireRoles("admin", "builder", "owner", "operat
     citations: evidence.citations, toolInvocations: evidence.toolInvocations, toolActions: evidence.toolActions,
     explanation: explainExecution(evidence), shadowReview });
 });
+
+app.get("/api/executions/:id/actor-work",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const result = await listActorLocalWork(c.env, c.get("tenantId"), executionId);
+      c.header("cache-control", "no-store");
+      return c.json({ data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor-local work could not be loaded";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
+
+app.post("/api/executions/:id/actor-work/queue",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const result = await queueActorLocalWork(c.env, c.get("tenantId"), executionId, await c.req.json());
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "agent.local_task_queued",
+        "execution", executionId, { taskId: result.taskId });
+      return c.json({ data: result }, 202);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor-local task could not be queued";
+      return c.json({ error: message }, isDlpBlocked(error) ? 422 : message.includes("not found") ? 404 : 400);
+    }
+  });
+
+app.post("/api/executions/:id/actor-work/schedules",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const result = await scheduleActorLocalWork(c.env, c.get("tenantId"), executionId, await c.req.json());
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "agent.local_follow_up_scheduled",
+        "execution", executionId, { taskId: result.taskId, scheduleId: result.scheduleId, dueAt: result.dueAt });
+      return c.json({ data: result }, 201);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor-local follow-up could not be scheduled";
+      return c.json({ error: message }, isDlpBlocked(error) ? 422 : message.includes("not found") ? 404 : 400);
+    }
+  });
+
+app.delete("/api/executions/:id/actor-work/schedules/:scheduleId",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      const scheduleId = c.req.param("scheduleId");
+      if (!executionId || !scheduleId) return c.json({ error: "Execution and schedule IDs are required" }, 400);
+      const result = await cancelActorLocalWork(c.env, c.get("tenantId"), executionId, scheduleId);
+      if (!result.cancelled) return c.json({ error: "Active actor schedule not found" }, 404);
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "agent.local_follow_up_cancelled",
+        "execution", executionId, { scheduleId });
+      return c.json({ data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor-local follow-up could not be cancelled";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
 
 app.get("/api/executions/:id/evidence-export",
   requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {

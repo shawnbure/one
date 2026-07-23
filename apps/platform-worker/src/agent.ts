@@ -4,6 +4,7 @@ import { runModel } from "./model";
 import type { Env } from "./types";
 import { applyDlp, DlpBlockedError } from "./dlp";
 import { validateContractOutput, type ProcessSchema } from "./contracts";
+import { emitNotification } from "./notifications";
 
 interface AgentState {
   tenantId: string | null;
@@ -27,6 +28,27 @@ export interface GovernedMemoryTurn {
   lastChangedBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ActorLocalTask {
+  id: string;
+  kind: "queue" | "schedule";
+  label: string;
+  sourceExecutionId: string;
+  status: "queued" | "scheduled" | "running" | "completed" | "cancelled" | "failed";
+  sdkReferenceId: string | null;
+  dueAt: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+interface ActorLocalTaskPayload {
+  taskId: string;
+  tenantId: string;
+  blueprintId: string;
+  sourceExecutionId: string;
+  label: string;
+  kind: "queue" | "schedule";
 }
 
 type MemoryRow = {
@@ -70,6 +92,19 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     )`;
     this.sql`CREATE INDEX IF NOT EXISTS idx_governed_memory_context
       ON governed_memory(status, created_at)`;
+    this.sql`CREATE TABLE IF NOT EXISTS actor_local_work (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('queue', 'schedule')),
+      label TEXT NOT NULL,
+      source_execution_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('queued','scheduled','running','completed','cancelled','failed')),
+      sdk_reference_id TEXT,
+      due_at TEXT,
+      created_at TEXT NOT NULL,
+      completed_at TEXT
+    )`;
+    this.sql`CREATE INDEX IF NOT EXISTS idx_actor_local_work_status
+      ON actor_local_work(status, created_at)`;
     this.sql`INSERT OR IGNORE INTO governed_memory
       (id, role, content, source_execution_id, status, revision, created_at, updated_at)
       SELECT id, role, content, NULL, 'active', 1, created_at, created_at FROM conversation_turn`;
@@ -174,6 +209,97 @@ export class ProcessAgent extends Agent<Env, AgentState> {
       WHERE status='active' ORDER BY created_at DESC LIMIT ${Math.min(limit, 100)}`.reverse();
   }
 
+  async queueLocalTask(tenantId: string, blueprintId: string, sourceExecutionId: string, label: string) {
+    this.assertIdentity(tenantId, blueprintId);
+    const taskId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    this.sql`INSERT INTO actor_local_work
+      (id, kind, label, source_execution_id, status, created_at)
+      VALUES (${taskId}, 'queue', ${label}, ${sourceExecutionId}, 'queued', ${createdAt})`;
+    const sdkReferenceId = await this.queue("completeLocalTask", {
+      taskId, tenantId, blueprintId, sourceExecutionId, label, kind: "queue"
+    } satisfies ActorLocalTaskPayload, { retry: { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 5_000 } });
+    this.sql`UPDATE actor_local_work SET sdk_reference_id=${sdkReferenceId} WHERE id=${taskId}`;
+    return { taskId, sdkReferenceId, status: "queued" as const };
+  }
+
+  async scheduleLocalFollowUp(
+    tenantId: string,
+    blueprintId: string,
+    sourceExecutionId: string,
+    label: string,
+    dueAt: string,
+  ) {
+    this.assertIdentity(tenantId, blueprintId);
+    const taskId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const schedule = await this.schedule(new Date(dueAt), "completeLocalTask", {
+      taskId, tenantId, blueprintId, sourceExecutionId, label, kind: "schedule"
+    } satisfies ActorLocalTaskPayload, {
+      idempotent: true,
+      retry: { maxAttempts: 3, baseDelayMs: 1_000, maxDelayMs: 30_000 }
+    });
+    this.sql`INSERT INTO actor_local_work
+      (id, kind, label, source_execution_id, status, sdk_reference_id, due_at, created_at)
+      VALUES (${taskId}, 'schedule', ${label}, ${sourceExecutionId}, 'scheduled',
+        ${schedule.id}, ${dueAt}, ${createdAt})`;
+    return { taskId, scheduleId: schedule.id, status: "scheduled" as const, dueAt };
+  }
+
+  async completeLocalTask(payload: ActorLocalTaskPayload) {
+    this.assertIdentity(payload.tenantId, payload.blueprintId);
+    const current = this.sql<{ status: string }>`SELECT status FROM actor_local_work WHERE id=${payload.taskId}`[0];
+    if (!current || ["completed", "cancelled"].includes(current.status)) return;
+    this.sql`UPDATE actor_local_work SET status='running' WHERE id=${payload.taskId}`;
+    try {
+      if (payload.kind === "schedule") {
+        await emitNotification(this.env, payload.tenantId, {
+          eventType: "agent.follow_up_due",
+          title: "Durable actor follow-up is due",
+          detail: payload.label,
+          targetType: "execution",
+          targetId: payload.sourceExecutionId
+        });
+      }
+      this.sql`UPDATE actor_local_work SET status='completed', completed_at=${new Date().toISOString()}
+        WHERE id=${payload.taskId}`;
+    } catch (error) {
+      this.sql`UPDATE actor_local_work SET status='failed', completed_at=${new Date().toISOString()}
+        WHERE id=${payload.taskId}`;
+      throw error;
+    }
+  }
+
+  async listLocalWork(tenantId: string, blueprintId: string) {
+    this.assertIdentity(tenantId, blueprintId);
+    const schedules = await this.listSchedules();
+    const tasks = this.sql<{
+      id: string; kind: "queue" | "schedule"; label: string; source_execution_id: string;
+      status: ActorLocalTask["status"]; sdk_reference_id: string | null; due_at: string | null;
+      created_at: string; completed_at: string | null;
+    }>`SELECT * FROM actor_local_work ORDER BY created_at DESC LIMIT 50`.map((row) => ({
+      id: row.id, kind: row.kind, label: row.label, sourceExecutionId: row.source_execution_id,
+      status: row.status, sdkReferenceId: row.sdk_reference_id, dueAt: row.due_at,
+      createdAt: row.created_at, completedAt: row.completed_at
+    }));
+    return { tasks, schedules: schedules.map((item) => ({
+      id: item.id, type: item.type, callback: item.callback, time: item.time
+    })) };
+  }
+
+  async cancelLocalSchedule(tenantId: string, blueprintId: string, scheduleId: string) {
+    this.assertIdentity(tenantId, blueprintId);
+    const task = this.sql<{ id: string; status: string }>`SELECT id, status FROM actor_local_work
+      WHERE sdk_reference_id=${scheduleId} AND kind='schedule'`[0];
+    if (!task || task.status !== "scheduled") return { cancelled: false };
+    const cancelled = await this.cancelSchedule(scheduleId);
+    if (cancelled) {
+      this.sql`UPDATE actor_local_work SET status='cancelled', completed_at=${new Date().toISOString()}
+        WHERE id=${task.id}`;
+    }
+    return { cancelled };
+  }
+
   listGovernedMemory(tenantId: string, blueprintId: string, limit = 50): GovernedMemoryTurn[] {
     this.assertIdentity(tenantId, blueprintId);
     return this.sql<MemoryRow>`SELECT * FROM governed_memory ORDER BY created_at DESC LIMIT ${Math.min(limit, 100)}`
@@ -202,7 +328,7 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     return memoryRow(this.sql<MemoryRow>`SELECT * FROM governed_memory WHERE id=${turnId}`[0]!);
   }
 
-  eraseData(tenantId: string, blueprintId: string): { turns: number; promptBundles: number } {
+  async eraseData(tenantId: string, blueprintId: string): Promise<{ turns: number; promptBundles: number }> {
     if (this.state.tenantId !== tenantId || this.state.blueprintId !== blueprintId) {
       throw new Error("Agent retirement identity mismatch");
     }
@@ -212,6 +338,10 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     this.sql`DELETE FROM conversation_turn`;
     this.sql`DELETE FROM governed_memory`;
     this.sql`DELETE FROM prompt_bundle`;
+    this.dequeueAll();
+    const schedules = await this.listSchedules();
+    await Promise.all(schedules.map((schedule) => this.cancelSchedule(schedule.id)));
+    this.sql`DELETE FROM actor_local_work`;
     this.setState(this.initialState);
     return { turns: Math.max(turns, governedTurns), promptBundles };
   }
