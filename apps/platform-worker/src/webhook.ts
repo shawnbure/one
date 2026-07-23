@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "./types";
 import { assertAsyncExecutionAdmission, sanitizeAsyncExecutionInput } from "./execution";
 import { isDlpBlocked } from "./dlp";
+import { enqueueProcessJob } from "./queue-operations";
 
 interface EndpointRow { id: string; tenant_id: string; blueprint_id: string; secret_binding: string; status: string; accepted_events_json: string; }
 
@@ -51,7 +52,7 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   }
   await c.env.DB.prepare("UPDATE webhook_endpoints SET last_received_at = ? WHERE id = ?")
     .bind(new Date().toISOString(), endpoint.id).run();
-  await c.env.PROCESS_QUEUE.send(job, { contentType: "json" });
+  await enqueueProcessJob(c.env, job, "webhook");
   return c.json({ accepted: true, executionId }, 202);
 }
 

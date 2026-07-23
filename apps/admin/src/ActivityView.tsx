@@ -7,6 +7,7 @@ import {
   Clock3,
   Filter,
   GitBranch,
+  ListRestart,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -14,7 +15,8 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type Approval, type AuditEvent, type Execution } from "./api";
+import { api, type Approval, type AuditEvent, type Execution, type QueueOperationsData } from "./api";
+import "./queue-operations.css";
 
 interface Props {
   processes: AgentBlueprint[];
@@ -23,6 +25,7 @@ interface Props {
 
 export function ActivityView({ processes, onNotice }: Props) {
   const [runs, setRuns] = useState<Execution[]>([]);
+  const [queue, setQueue] = useState<QueueOperationsData>({ summary: [], jobs: [] });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Execution | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -33,7 +36,9 @@ export function ActivityView({ processes, onNotice }: Props) {
 
   async function load() {
     try {
-      setRuns((await api.executions()).data);
+      const [executions, queueOperations] = await Promise.all([api.executions(), api.queueOperations()]);
+      setRuns(executions.data);
+      setQueue(queueOperations.data);
     } catch (error) {
       onNotice(
         error instanceof Error ? error.message : "Could not load activity",
@@ -85,6 +90,17 @@ export function ActivityView({ processes, onNotice }: Props) {
     }),
     [runs],
   );
+  const queueCount = (status: string) => Number(queue.summary.find((item) => item.status === status)?.count ?? 0);
+
+  async function replayQueueJob(id: string) {
+    setBusy(true);
+    try {
+      const result = (await api.replayQueueJob(id)).data;
+      onNotice(`Queue replay ${result.executionId.slice(0, 8)} accepted.`);
+      await load();
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Queue replay failed"); }
+    finally { setBusy(false); }
+  }
 
   async function retry() {
     if (!detail) return;
@@ -296,6 +312,26 @@ export function ActivityView({ processes, onNotice }: Props) {
           </div>
         </article>
       </div>
+      <article className="queue-operations panel">
+        <div className="section-head"><div><span className="eyebrow"><ListRestart size={14}/> ASYNC DELIVERY</span>
+          <h2>Queue operations</h2><p>Application-level evidence for Cloudflare Queue acceptance, retries, and dead-letter handoff.</p></div>
+          <div className="queue-badges"><span>{queueCount("queued") + queueCount("processing")} active</span>
+            <span className={queueCount("retrying") ? "attention" : ""}>{queueCount("retrying")} retrying</span>
+            <span className={queueCount("dead_lettered") + queueCount("enqueue_failed") ? "danger" : ""}>
+              {queueCount("dead_lettered") + queueCount("enqueue_failed")} failed</span></div>
+        </div>
+        <div className="queue-head"><span>Process</span><span>Source</span><span>Status</span><span>Attempts</span><span>Updated</span><span/></div>
+        {queue.jobs.slice(0, 12).map((job) => <div className="queue-row" key={job.id}>
+          <span><strong>{job.process_name ?? job.blueprint_id}</strong><small>{job.execution_id.slice(0, 12)}</small></span>
+          <span className="queue-source">{job.source}</span>
+          <span className={`queue-state ${job.status}`}>{job.status.replaceAll("_", " ")}</span>
+          <span>{job.attempt_count}</span><span>{formatDate(job.updated_at)}</span>
+          <span>{["dead_lettered", "enqueue_failed"].includes(job.status) && Boolean(job.replayable) &&
+            <button disabled={busy} onClick={() => void replayQueueJob(job.id)}><RefreshCw size={13}/>Replay safely</button>}</span>
+          {job.last_error && <small className="queue-error">{job.last_error}</small>}
+        </div>)}
+        {!queue.jobs.length && <div className="queue-empty">No asynchronous process work has been dispatched yet.</div>}
+      </article>
       <div className="activity-toolbar">
         <div>
           <Search size={16} />

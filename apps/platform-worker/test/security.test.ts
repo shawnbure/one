@@ -156,6 +156,16 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_operating_controls"))).toBe(false);
   });
 
+  it("allows viewers to inspect Queue evidence but not replay failed work", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/queue-jobs/job-1/replay", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: "{}"
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("FROM process_queue_jobs q JOIN executions"))).toBe(false);
+  });
+
   it("prevents viewers from weakening DLP policy", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/dlp/rules/ssn", {

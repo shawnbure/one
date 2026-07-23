@@ -17,6 +17,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Process Studio | Visual topology, explicit execution profile, immutable draft releases, publish/rollback, and recurring process schedules with dispatch history |
 | Work Inbox | Evidence and rationale review, assignment, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, inputs/outputs, failures, and safe replay |
+| Queue operations | Tenant-scoped enqueue/processing/retry/dead-letter evidence, bounded retention, and operator-authorized safe replay |
 | Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, and JSON evidence export |
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
@@ -75,7 +76,7 @@ The Worker currently exposes these route groups:
 - Discovery and value: `/api/process-templates`, `/api/processes`, `/api/value`
 - Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode, `/api/process-schedules`, create/pause/restore/run-now
 - Portability: `/api/processes/:id/package`, `/api/process-packages/import`
-- Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry
+- Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry, `/api/queue-operations`, failed Queue-job replay
 - Human review: `/api/approvals`, assignment, approve/decline
 - Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`
 - Integration intake: `/webhooks/:endpointId`, `/api/webhooks`
@@ -116,6 +117,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 24. `0024_governed_rubric_packages.sql`: signed standards review and destination approval evidence.
 25. `0025_rubric_publisher_trust.sql`: tenant publisher keys and manual, automatic, or blocked trust policy.
 26. `0026_process_schedules.sql`: tenant recurring-process controls and per-occurrence dispatch evidence.
+27. `0027_queue_operations.sql`: application-level Queue lifecycle, retry/dead-letter evidence, and replay lineage.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

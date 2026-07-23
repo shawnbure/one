@@ -17,6 +17,7 @@ import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOpe
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 import { isDlpBlocked, updateDlpRule } from "./dlp";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
+import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -517,8 +518,42 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
     return c.json({ error: error instanceof Error ? error.message : "DLP admission failed" }, isDlpBlocked(error) ? 422 : 400);
   }
   const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
-  await c.env.PROCESS_QUEUE.send(job, { contentType: "json" });
+  await enqueueProcessJob(c.env, job, "api");
   return c.json({ executionId, status: "queued" }, 202);
+});
+
+app.get("/api/queue-operations", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await getQueueOperations(c.env, c.get("tenantId")) }));
+
+app.post("/api/queue-jobs/:id/replay", requireRoles("admin", "owner", "operator"), async (c) => {
+  const queueJobId = c.req.param("id");
+  if (!queueJobId) return c.json({ error: "Queue job ID is required" }, 400);
+  const source = await c.env.DB.prepare(`SELECT q.id, q.execution_id, q.status, e.blueprint_id,
+    e.execution_profile, e.instance_key, e.input_preview
+    FROM process_queue_jobs q JOIN executions e ON e.id = q.execution_id AND e.tenant_id = q.tenant_id
+    WHERE q.id = ? AND q.tenant_id = ?`)
+    .bind(queueJobId, c.get("tenantId")).first<{
+      id: string; execution_id: string; status: string; blueprint_id: string;
+      execution_profile: string; instance_key: string | null; input_preview: string;
+    }>();
+  if (!source) return c.json({ error: "Queue job not found or has no replayable execution" }, 404);
+  if (!["dead_lettered", "enqueue_failed"].includes(source.status)) {
+    return c.json({ error: "Only failed or dead-lettered Queue jobs can be replayed" }, 409);
+  }
+  try {
+    await assertAsyncExecutionAdmission(c.env, c.get("tenantId"), source.blueprint_id);
+    const executionId = crypto.randomUUID();
+    const request = replayRequest(source);
+    const protectedRequest = await sanitizeAsyncExecutionInput(c.env, c.get("tenantId"), request, executionId);
+    const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
+    const replayJobId = await enqueueProcessJob(c.env, job, "replay", source.id);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "queue_job.replayed",
+      "queue_job", replayJobId, { replayedFrom: source.id, sourceExecutionId: source.execution_id, executionId });
+    return c.json({ data: { queueJobId: replayJobId, executionId, status: "queued" } }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Queue job replay failed" },
+      isDlpBlocked(error) ? 422 : 409);
+  }
 });
 
 app.get("/api/approvals", async (c) => {
@@ -946,7 +981,9 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       }
       const job: QueueJob = message.body;
       try {
+        await markQueueProcessing(env, job, message.attempts);
         const result = await executeRequest(env, job.tenantId ?? "demo", job, job.executionId);
+        await markQueueFinished(env, job, result.status === "deferred" ? "deferred" : "completed");
         await env.DB.prepare(`UPDATE schedule_dispatches SET status = ?, completed_at = CURRENT_TIMESTAMP
           WHERE tenant_id = ? AND execution_id = ? AND status = 'queued'`)
           .bind(result.status === "deferred" ? "deferred" : result.status === "completed" ? "completed" : "queued",
@@ -955,6 +992,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       } catch (error) {
         console.error(JSON.stringify({ event: "queue_job_failed", executionId: job.executionId, error: String(error) }));
         const terminal = message.attempts >= 5;
+        await markQueueFailure(env, job, message.attempts, error, terminal);
         await env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
           .bind(terminal ? "failed" : "queued", error instanceof Error ? error.message : String(error), terminal ? new Date().toISOString() : null,
             job.executionId, job.tenantId ?? "demo").run();
@@ -979,6 +1017,12 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
           (used_at IS NOT NULL AND used_at < ?)`).bind(
             now.toISOString(), new Date(now.getTime() - 24 * 60 * 60_000).toISOString()),
         env.DB.prepare("DELETE FROM smoke_fixtures WHERE expires_at < ?").bind(now.toISOString()),
+        env.DB.prepare(`DELETE FROM process_queue_jobs
+          WHERE status IN ('completed','deferred') AND completed_at < ?`).bind(
+            new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString()),
+        env.DB.prepare(`DELETE FROM process_queue_jobs
+          WHERE status IN ('dead_lettered','enqueue_failed') AND completed_at < ?`).bind(
+            new Date(now.getTime() - 90 * 24 * 60 * 60_000).toISOString()),
         env.DB.prepare(`INSERT INTO audit_events
           (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
           VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)

@@ -73,6 +73,26 @@ export interface Execution {
   prompt_release_id?: string;
   retry_of?: string | null;
 }
+export interface QueueOperation {
+  id: string;
+  execution_id: string;
+  blueprint_id: string;
+  process_name: string | null;
+  source: "api" | "webhook" | "schedule" | "replay";
+  status: "queued" | "processing" | "retrying" | "completed" | "deferred" | "dead_lettered" | "enqueue_failed";
+  attempt_count: number;
+  replayed_from: string | null;
+  last_error: string | null;
+  enqueued_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+  replayable: number;
+}
+export interface QueueOperationsData {
+  summary: Array<{ status: QueueOperation["status"]; count: number }>;
+  jobs: QueueOperation[];
+}
 
 export interface ProcessRelease {
   id: string;
@@ -397,6 +417,11 @@ export const api = {
       { method: "POST", body: JSON.stringify({ assignedTo }) },
     ),
   executions: () => request<{ data: Execution[] }>("/api/executions"),
+  queueOperations: () => request<{ data: QueueOperationsData }>("/api/queue-operations"),
+  replayQueueJob: (id: string) =>
+    request<{ data: { queueJobId: string; executionId: string; status: string } }>(
+      `/api/queue-jobs/${encodeURIComponent(id)}/replay`, { method: "POST" },
+    ),
   execution: (id: string) =>
     request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[] }>(
       `/api/executions/${encodeURIComponent(id)}`,

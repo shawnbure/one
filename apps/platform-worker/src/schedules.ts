@@ -1,5 +1,6 @@
 import { instanceKeyFor, type ExecutionProfile, type ExecutionRequest, type QueueJob } from "@workrr/contracts";
 import { assertAsyncExecutionAdmission, sanitizeAsyncExecutionInput } from "./execution";
+import { enqueueProcessJob } from "./queue-operations";
 import type { Env } from "./types";
 
 type Cadence = "hourly" | "daily" | "weekly";
@@ -122,7 +123,7 @@ async function dispatchSchedule(env: Env, schedule: ScheduleRow, scheduledFor: s
       schedule.identity_key ?? "", executionId);
     const request = await sanitizeAsyncExecutionInput(env, schedule.tenant_id, raw, executionId);
     const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: schedule.tenant_id };
-    await env.PROCESS_QUEUE.send(job, { contentType: "json" });
+    await enqueueProcessJob(env, job, "schedule");
     await recordDispatch(env, schedule, dispatchId, executionId, scheduledFor, "queued", null);
     return { scheduleId: schedule.id, executionId, status: "queued" };
   } catch (error) {
