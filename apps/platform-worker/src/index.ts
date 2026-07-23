@@ -506,7 +506,7 @@ app.get("/api/executions/:id", async (c) => {
     FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(executionId, c.get("tenantId")).first();
   if (!execution) return c.json({ error: "Execution not found" }, 404);
-  const [approvals, audit, citations] = await Promise.all([
+  const [approvals, audit, citations, toolInvocations] = await Promise.all([
     c.env.DB.prepare("SELECT * FROM approvals WHERE tenant_id = ? AND execution_id = ? ORDER BY requested_at")
       .bind(c.get("tenantId"), executionId).all(),
     c.env.DB.prepare(`SELECT actor_id, event_type, target_type, target_id, detail_json, created_at FROM audit_events
@@ -515,9 +515,14 @@ app.get("/api/executions/:id", async (c) => {
       .bind(c.get("tenantId"), executionId, executionId).all(),
     c.env.DB.prepare(`SELECT source_id, source_name, chunk_id, ordinal, score, provenance, excerpt, created_at
       FROM execution_knowledge_citations WHERE tenant_id=? AND execution_id=? ORDER BY ordinal`)
+      .bind(c.get("tenantId"), executionId).all(),
+    c.env.DB.prepare(`SELECT id, tool_name, tool_version, status, execution_mode, access_mode, risk_level,
+      adapter_kind, input_json, output_json, error, started_at, completed_at
+      FROM tool_invocations WHERE tenant_id=? AND execution_id=? ORDER BY started_at`)
       .bind(c.get("tenantId"), executionId).all()
   ]);
-  return c.json({ data: execution, approvals: approvals.results, audit: audit.results, citations: citations.results });
+  return c.json({ data: execution, approvals: approvals.results, audit: audit.results,
+    citations: citations.results, toolInvocations: toolInvocations.results });
 });
 
 app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", "operator"), async (c) => {

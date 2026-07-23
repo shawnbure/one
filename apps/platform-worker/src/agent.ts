@@ -1,5 +1,5 @@
 import { Agent } from "agents";
-import type { PromptBundle } from "@workrr/contracts";
+import type { AutonomyLevel, PromptBundle, ToolPolicy } from "@workrr/contracts";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { applyDlp, DlpBlockedError } from "./dlp";
@@ -53,22 +53,25 @@ export class ProcessAgent extends Agent<Env, AgentState> {
   }
 
   async execute(input: string, safeInput: string, modelProfile: string, executionId: string,
-    outputSchema: ProcessSchema | null = null, persistAssistant = true): Promise<{
-    output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; turnCount: number;
+    outputSchema: ProcessSchema | null = null, persistAssistant = true,
+    autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = []): Promise<{
+    output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
+    turnCount: number; toolApprovalRequired: boolean;
   }> {
     const row = this.sql<{ bundle_json: string }>`SELECT bundle_json FROM prompt_bundle WHERE release_id = ${this.state.releaseId}`[0];
     if (!row) throw new Error("Prompt release has not been installed on this agent instance");
 
     const now = new Date().toISOString();
     this.sql`INSERT INTO conversation_turn (id, role, content, created_at) VALUES (${crypto.randomUUID()}, 'user', ${safeInput}, ${now})`;
-    const result = await runModel(this.env, modelProfile, JSON.parse(row.bundle_json) as PromptBundle, input, this.sessionAffinity);
+    const result = await runModel(this.env, modelProfile, JSON.parse(row.bundle_json) as PromptBundle, input,
+      this.sessionAffinity, { tenantId: this.state.tenantId!, executionId, autonomy, policies: toolPolicies });
     if (!this.state.tenantId) throw new Error("Agent tenant identity is not installed");
     const outputDlp = await applyDlp(this.env, this.state.tenantId, result.output, {
       direction: "output", stage: "durable_agent", executionId, blueprintId: this.state.blueprintId ?? undefined
     });
     if (outputDlp.blocked) throw new DlpBlockedError(outputDlp.blockedDetectors);
     const contracted = validateContractOutput(outputDlp.modelText, outputSchema);
-    if (persistAssistant) {
+    if (persistAssistant && !result.toolApprovalRequired) {
       this.sql`INSERT INTO conversation_turn (id, role, content, created_at) VALUES (${crypto.randomUUID()}, 'assistant', ${contracted.value}, ${new Date().toISOString()})`;
     }
     const turnCount = this.state.turnCount + 1;

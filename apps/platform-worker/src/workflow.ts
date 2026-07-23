@@ -38,7 +38,10 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       return outputContractInstruction(grounded.input, contracts.outputSchema);
     });
     const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
-      runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput));
+      runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput, undefined, {
+        tenantId, executionId: event.instanceId, autonomy: autonomyPlan(context.blueprint).effective,
+        policies: context.blueprint.toolPolicies ?? []
+      }));
     const result = await step.do("enforce output DLP policy", async () => {
       const protectedOutput = await applyDlp(this.env, tenantId, rawResult.output, {
         direction: "output", stage: "workflow", executionId: event.instanceId, blueprintId: request.blueprintId
@@ -66,7 +69,11 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
     });
     const approvalId = await step.do("apply autonomy policy", async () => {
       const autonomy = autonomyPlan(context.blueprint);
-      return routeApproval(this.env, tenantId, event.instanceId, context.blueprint, autonomy, result.outputPreview);
+      const plan = rawResult.toolApprovalRequired && !autonomy.requiresApproval
+        ? { ...autonomy, disposition: "waiting_approval" as const, requiresApproval: true,
+          explanation: "A requested capability is proposal-only, so no external action was performed and human approval is required." }
+        : autonomy;
+      return routeApproval(this.env, tenantId, event.instanceId, context.blueprint, plan, result.outputPreview);
     });
     return { output: approvalId ? "Result is waiting for human approval." : result.output };
     } catch (error) {

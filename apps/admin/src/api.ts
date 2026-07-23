@@ -248,6 +248,21 @@ export interface ExecutionKnowledgeCitation {
   excerpt: string;
   created_at: string;
 }
+export interface ToolInvocation {
+  id: string;
+  tool_name: string;
+  tool_version: number;
+  status: "simulated" | "proposed" | "completed" | "failed" | "denied";
+  execution_mode: "simulation" | "proposal_only" | "bound";
+  access_mode: "read" | "write";
+  risk_level: "low" | "medium" | "high";
+  adapter_kind: string;
+  input_json: string;
+  output_json: string | null;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
 
 export interface ApiLog {
   id: string;
@@ -478,7 +493,8 @@ export const api = {
       `/api/queue-jobs/${encodeURIComponent(id)}/replay`, { method: "POST" },
     ),
   execution: (id: string) =>
-    request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[]; citations: ExecutionKnowledgeCitation[] }>(
+    request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[]; citations: ExecutionKnowledgeCitation[];
+      toolInvocations: ToolInvocation[] }>(
       `/api/executions/${encodeURIComponent(id)}`,
     ),
   retryExecution: (id: string) =>

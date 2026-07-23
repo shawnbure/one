@@ -84,7 +84,9 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   const modelInput = outputContractInstruction(grounded.input, contracts.outputSchema);
   if (blueprint.executionProfile === "instant") {
     const prompt = await requiredPrompt(env, promptReleaseId);
-    const result = await runModel(env, blueprint.modelProfile, prompt, modelInput);
+    const result = await runModel(env, blueprint.modelProfile, prompt, modelInput, undefined, {
+      tenantId, executionId, autonomy: autonomy.effective, policies: blueprint.toolPolicies ?? []
+    });
     const outputDlp = await applyDlp(env, tenantId, result.output, {
       direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
     });
@@ -98,7 +100,8 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     const safeResult = { ...result, output: contractedOutput.value };
     await markOutputContract(env, executionId, contractedOutput.status);
     await complete(env, executionId, safeResult, contractedOutput.value);
-    const approvalId = await routeApproval(env, tenantId, executionId, blueprint, autonomy, contractedOutput.value);
+    const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
+      approvalPlan(autonomy, result.toolApprovalRequired), contractedOutput.value);
     if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
     return { executionId, instanceKey, profile: blueprint.executionProfile,
       status: approvalId ? "waiting_approval" : "completed",
@@ -113,7 +116,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   let result;
   try {
     result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId,
-      contracts.outputSchema, !autonomy.requiresApproval);
+      contracts.outputSchema, !autonomy.requiresApproval, autonomy.effective, blueprint.toolPolicies ?? []);
   } catch (error) {
     if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
       error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
@@ -122,7 +125,8 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   }
   await markOutputContract(env, executionId, contracts.outputSchema ? "passed" : "not_configured");
   await complete(env, executionId, result, result.outputPreview);
-  const approvalId = await routeApproval(env, tenantId, executionId, blueprint, autonomy, result.outputPreview);
+  const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
+    approvalPlan(autonomy, result.toolApprovalRequired), result.outputPreview);
   if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
   return { executionId, instanceKey, profile: blueprint.executionProfile,
     status: approvalId ? "waiting_approval" : "completed",
@@ -193,4 +197,14 @@ async function failContractOutput(env: Env, id: string, error: unknown) {
   await env.DB.prepare(`UPDATE executions SET status='failed', output_preview=NULL, output_contract_status='failed',
     contract_error=?, error=?, completed_at=? WHERE id=?`)
     .bind(message.slice(0, 1000), message.slice(0, 1000), new Date().toISOString(), id).run();
+}
+
+function approvalPlan(plan: ReturnType<typeof autonomyPlan>, toolApprovalRequired: boolean) {
+  if (!toolApprovalRequired || plan.requiresApproval) return plan;
+  return {
+    ...plan,
+    disposition: "waiting_approval" as const,
+    requiresApproval: true,
+    explanation: "A requested capability is proposal-only, so no external action was performed and human approval is required."
+  };
 }

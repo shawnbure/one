@@ -17,7 +17,8 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation, type QueueOperationsData } from "./api";
+import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
+  type QueueOperationsData, type ToolInvocation } from "./api";
 import "./queue-operations.css";
 
 interface Props {
@@ -33,6 +34,7 @@ export function ActivityView({ processes, onNotice }: Props) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [citations, setCitations] = useState<ExecutionKnowledgeCitation[]>([]);
+  const [toolInvocations, setToolInvocations] = useState<ToolInvocation[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,7 @@ export function ActivityView({ processes, onNotice }: Props) {
         setApprovals(result.approvals);
         setAudit(result.audit);
         setCitations(result.citations);
+        setToolInvocations(result.toolInvocations);
       })
       .catch((error: Error) => onNotice(error.message));
   }, [selectedId]);
@@ -205,6 +208,21 @@ export function ActivityView({ processes, onNotice }: Props) {
                   </span>)}
                 </div>
               )}
+              {toolInvocations.length > 0 && (
+                <div className="run-tool-evidence invocation-evidence">
+                  <div><Box size={17}/><span><strong>Tool invocation evidence</strong>
+                    <small>{toolInvocations.length} bounded call{toolInvocations.length === 1 ? "" : "s"} recorded for this run</small></span></div>
+                  {toolInvocations.map((invocation) => <span key={invocation.id}>
+                    <strong>{invocation.tool_name.replaceAll("_", " ")}</strong>
+                    <small>{invocation.status} · {invocation.execution_mode.replaceAll("_", " ")} · {invocation.access_mode} · {invocation.risk_level} risk</small>
+                    <em>{invocation.status === "simulated"
+                      ? "No external system was contacted."
+                      : invocation.status === "proposed"
+                        ? "No action was performed; human review is required."
+                        : invocation.error ?? "Bound adapter evidence recorded."}</em>
+                  </span>)}
+                </div>
+              )}
               <div className="payload-card">
                 <label>INPUT</label>
                 <p>{detail.input_preview}</p>
@@ -283,6 +301,11 @@ export function ActivityView({ processes, onNotice }: Props) {
                 {detail.output_contract_status === "passed" && (
                   <TraceItem title="Output contract passed" detail="Structured result verified before delivery" state="done" />
                 )}
+                {toolInvocations.map((invocation) => (
+                  <TraceItem key={invocation.id} title={`Tool ${invocation.status}`}
+                    detail={`${invocation.tool_name.replaceAll("_", " ")} · ${invocation.execution_mode.replaceAll("_", " ")}`}
+                    state={invocation.status === "failed" ? "failed" : invocation.status === "proposed" ? "waiting" : "done"} />
+                ))}
                 {approvals.map((approval) => (
                   <TraceItem
                     key={approval.id}
