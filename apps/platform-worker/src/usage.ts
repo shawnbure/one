@@ -205,6 +205,7 @@ export function pricedCompletionSql() {
   return `UPDATE executions SET status = 'completed', output_preview = ?, model = ?, input_tokens = ?, output_tokens = ?, total_tokens = ?,
     estimated_cost_usd = ((? * COALESCE((SELECT input_usd_per_million FROM model_catalog WHERE model_id = ?),0)) +
       (? * COALESCE((SELECT output_usd_per_million FROM model_catalog WHERE model_id = ?),0))) / 1000000.0,
+    inference_provider = ?, gateway_id = ?, gateway_step = ?, gateway_cache_status = ?, gateway_log_id = ?,
     completed_at = ? WHERE id = ?`;
 }
 

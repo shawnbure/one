@@ -267,6 +267,13 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 80. `0080_tenant_model_policy.sql`: owner-controlled tenant Workers AI model approvals, seeded safely for existing tenants.
 81. `0081_governance_reviews.sql`: accountable quarterly privacy, model, access, and recovery review obligations.
 82. `0082_governance_review_alerts.sql`: deduplicated due/overdue review receipts and accountable in-app routing.
+83. `0083_inbound_email_channels.sql`: tenant-safe email ingestion jobs, sender policy, and replay evidence.
+84. `0084_email_routing_verification.sql`: Cloudflare Email Routing rule identity and accountable verification.
+85. `0085_release_workflow_topology.sql`: immutable bounded workflow topology evidence on releases.
+86. `0086_mcp_connectors.sql`: tenant MCP connector actors, governed discovery, and process bindings.
+87. `0087_mcp_connector_lifecycle.sql`: upstream tool availability and connector lifecycle evidence.
+88. `0088_mcp_connector_health.sql`: bounded connector health checks and accountable alert state.
+89. `0089_ai_gateway_handoff.sql`: tenant AI Gateway policy, disabled external-model approval, and per-execution routing evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -419,6 +426,8 @@ The Connections workspace now includes a governed MCP connector catalog for cust
 MCP release readiness is revalidated by the central blueprint loader against the exact same-tenant connector, exact handler identity, current connector state, and current tool enablement/availability. It does not route MCP connection IDs through the native OAuth `connections` table. Hourly maintenance checks a bounded 50 stale connector actors, records last-check/success evidence, disables tools when the durable SDK session is unavailable, and emits one critical accountable alert per 24-hour failure window. This keeps durable conversations, instant Workers, Queue jobs, and Workflows on the same live fail-closed boundary without adding a separate per-tool readiness request.
 
 MCP and Microsoft OAuth returns now reopen the Connections workspace rather than dropping an FDE on Overview. MCP returns wait for the asynchronous connection catalogs to settle before anchoring the MCP governance controls, retain a visible dismissible success/error notice while scrolled, and remove transient callback parameters from browser history. Startup navigation accepts only the known Connections and Launchpad states, so query input cannot select an arbitrary application view.
+
+Cloudflare AI Gateway is now a governed secondary inference boundary rather than a planned placeholder. Workers AI stays the default and requires no additional hot-path policy read. Every tenant begins with Gateway disabled and the curated external model unapproved. An owner must record a bounded privacy/billing review reference, choose the same-account Gateway ID, decide whether Gateway logs may collect content, enable the boundary, and then separately approve the external model. Immutable releases pin the exact external model ID; runtime loads Gateway policy only for an external release, uses Cloudflare-managed Unified Billing rather than provider secrets, bypasses response caching for dynamic process content, and attaches bounded tenant/execution metadata. Execution evidence records provider, Gateway ID, route step, cache status, and log-reference presence. Active external releases prevent Gateway disablement, portable process packages omit the deployment-local external model selection, and unknown/unapproved models fail closed. See [`ai-gateway-handoff.md`](./ai-gateway-handoff.md).
 
 ## Remaining aggressive-MVP work
 

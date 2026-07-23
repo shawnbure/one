@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { executionProfiles, modelProfiles, workersAIModelCatalog, type ExecutionRequest, type KnowledgeIndexJob, type ProcessDisposalJob, type QueueJob, type ToolActionJob,
+import { executionProfiles, inferenceModelCatalog, modelProfiles, workersAIModelCatalog, type ExecutionRequest, type KnowledgeIndexJob, type ProcessDisposalJob, type QueueJob, type ToolActionJob,
   type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
@@ -12,6 +12,7 @@ import { createWebhookEndpoint, listWebhookReceipts, setWebhookEndpointStatus,
   updateWebhookEndpoint } from "./webhook-operations";
 import { getGovernance } from "./governance";
 import { updateTenantModelPolicy } from "./model-governance";
+import { updateAiGatewaySetting } from "./ai-gateway";
 import { completeGovernanceReview } from "./governance-reviews";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
@@ -1165,7 +1166,8 @@ app.get("/api/executions", requireRoles("admin", "builder", "owner", "operator",
   if (blueprintId) { filters.push("blueprint_id = ?"); bindings.push(blueprintId); }
   const { results } = await c.env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status,
     input_preview, output_preview, model, input_tokens, output_tokens, total_tokens, started_at, completed_at, error,
-    autonomy_level, autonomy_disposition, approval_id
+    autonomy_level, autonomy_disposition, approval_id, inference_provider, gateway_id, gateway_step,
+    gateway_cache_status, gateway_log_id
     FROM executions WHERE ${filters.join(" AND ")} ORDER BY started_at DESC LIMIT 100`).bind(...bindings).all();
   return c.json({ data: results });
 });
@@ -1733,6 +1735,29 @@ app.patch("/api/governance/models/:modelId", requireRoles("admin", "owner"), asy
   } catch (error) {
     const message = error instanceof Error ? error.message : "Model policy could not be updated";
     return c.json({ error: message }, message.includes("active process") ? 409 : message.includes("not found") ? 404 : 400);
+  }
+});
+
+app.patch("/api/governance/ai-gateway", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const body = await c.req.json<{
+      gatewayId?: string; enabled?: boolean; collectLogs?: boolean; evidenceReference?: string;
+    }>();
+    const result = await updateAiGatewaySetting(
+      c.env, c.get("tenantId"), c.get("actorId"), body
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+      result.enabled ? "ai_gateway.enabled" : "ai_gateway.disabled",
+      "ai_gateway", result.gatewayId, {
+        gatewayId: result.gatewayId,
+        enabled: result.enabled,
+        collectLogs: result.collectLogs,
+        evidenceReference: result.evidenceReference
+      });
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AI Gateway policy could not be updated";
+    return c.json({ error: message }, message.includes("active process") ? 409 : 400);
   }
 });
 
@@ -2482,9 +2507,10 @@ app.get("/api/system/capabilities", (c) => c.json({
   executionProfiles,
   modelProfiles,
   workersAIModels: workersAIModelCatalog,
+  inferenceModels: inferenceModelCatalog,
   primitives: ["Workers", "Agents SDK", "Durable Objects", "D1", "Workers AI", "Queues", "Workflows", "Cron"],
   promptCache: "Agent-local SQLite plus Workers AI session affinity",
-  gateway: "planned"
+  gateway: "governed-unified-billing"
 }));
 
 app.get("/api/system/version", requireRoles("admin", "owner", "operator", "builder", "viewer"), async (c) =>

@@ -173,7 +173,9 @@ export async function evaluatePreparedCase(env: Env, tenantId: string, runId: st
     const contractedInput = validateContractInput(protectedInput.modelText, contracts.inputSchema);
     const modelInput = outputContractInstruction(contractedInput.value, contracts.outputSchema);
     const rawResult = await runModel(env, prepared.modelProfile, prepared.prompt, modelInput,
-      `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`, undefined, [], prepared.modelId);
+      `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`, {
+        tenantId, executionId: `${runId}:${item.id}`, autonomy: "suggest", policies: []
+      }, [], prepared.modelId);
     const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
       direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`,
       blueprintId: String(prepared.scenario.blueprint_id)

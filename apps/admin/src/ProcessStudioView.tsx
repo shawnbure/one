@@ -27,11 +27,11 @@ import {
   X,
 } from "lucide-react";
 import {
+  inferenceModelCatalog,
   modelProfiles,
-  supportedWorkersAIModels,
-  workersAIModelCatalog,
+  supportedInferenceModels,
   type AgentBlueprint,
-  type SupportedWorkersAIModel,
+  type SupportedInferenceModel,
 } from "@workrr/contracts";
 import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
 import "./schedule-studio.css";
@@ -172,7 +172,7 @@ function Studio({
   const [instructions, setInstructions] = useState("");
   const [guardrails, setGuardrails] = useState("");
   const [modelProfile, setModelProfile] = useState("balanced");
-  const [modelId, setModelId] = useState<SupportedWorkersAIModel>(modelProfiles.balanced.model);
+  const [modelId, setModelId] = useState<SupportedInferenceModel>(modelProfiles.balanced.model);
   const [autonomy, setAutonomy] = useState("approve");
   const [notes, setNotes] = useState("");
   const [inputSchema, setInputSchema] = useState("");
@@ -208,8 +208,8 @@ function Studio({
       const loadedProfile = (active?.model_profile ?? result.blueprint.model_profile ?? "balanced") as keyof typeof modelProfiles;
       setModelProfile(loadedProfile);
       setModelId(
-        active?.model_id && supportedWorkersAIModels.includes(active.model_id as SupportedWorkersAIModel)
-          ? active.model_id as SupportedWorkersAIModel
+        active?.model_id && supportedInferenceModels.includes(active.model_id as SupportedInferenceModel)
+          ? active.model_id as SupportedInferenceModel
           : modelProfiles[loadedProfile].model,
       );
       setAutonomy(result.blueprint.autonomy ?? "approve");
@@ -599,24 +599,26 @@ function Studio({
             <div className="model-selection">
               <div className="section-head">
                 <div>
-                  <h3>Exact Cloudflare model</h3>
-                  <p>The exact Workers AI model is pinned into this immutable release. Future catalog changes cannot silently change production behavior.</p>
+                  <h3>Exact Cloudflare-routed model</h3>
+                  <p>The exact model and inference boundary are pinned into this immutable release. Future catalog changes cannot silently change production behavior.</p>
                 </div>
-                <span className="active-label">Cloudflare hosted</span>
+                <span className="active-label">
+                  {inferenceModelCatalog[modelId].boundary === "workers_ai" ? "Cloudflare hosted" : "AI Gateway handoff"}
+                </span>
               </div>
               <label>
                 Release model
                 <select
                   value={modelId}
                   onChange={(event) => {
-                    const next = event.target.value as SupportedWorkersAIModel;
+                    const next = event.target.value as SupportedInferenceModel;
                     setModelId(next);
-                    setModelProfile(workersAIModelCatalog[next].profile);
+                    setModelProfile(inferenceModelCatalog[next].profile);
                   }}
                 >
-                  {supportedWorkersAIModels.map((id) => (
+                  {supportedInferenceModels.map((id) => (
                     <option key={id} value={id} disabled={!data.approvedModelIds.includes(id)}>
-                      {workersAIModelCatalog[id].label} · {workersAIModelCatalog[id].use}
+                      {inferenceModelCatalog[id].label} · {inferenceModelCatalog[id].use}
                       {!data.approvedModelIds.includes(id) ? " · not approved" : ""}
                     </option>
                   ))}
@@ -628,8 +630,8 @@ function Studio({
               <div className="model-evidence">
                 <Bot size={18} />
                 <span>
-                  <strong>{workersAIModelCatalog[modelId].label}</strong>
-                  <small>{workersAIModelCatalog[modelId].guidance}</small>
+                  <strong>{inferenceModelCatalog[modelId].label}</strong>
+                  <small>{inferenceModelCatalog[modelId].provider} · {inferenceModelCatalog[modelId].guidance}</small>
                   <code>{modelId}</code>
                 </span>
               </div>

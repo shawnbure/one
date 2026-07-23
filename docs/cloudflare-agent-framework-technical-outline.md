@@ -1008,6 +1008,8 @@ The hourly scheduled dispatcher scans a bounded 14-day review horizon and routes
 
 ### Phase 4 — AI Gateway handoff
 
+Implemented MVP boundary: the tenant Gateway is disabled by default, requires owner privacy/billing evidence, and gates a separately approved curated external model. Native Workers AI remains the no-read default. External immutable releases use Cloudflare-managed Unified Billing, bypass response caching, preserve Agent/Workflow/tool behavior, and persist bounded Gateway routing evidence. BYOK, multi-leg fallback authoring, and Cloudflare-side spend/DLP configuration remain deliberate later extensions.
+
 Deliverables:
 
 - `AiGatewayProvider`;

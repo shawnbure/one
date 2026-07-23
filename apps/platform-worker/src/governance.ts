@@ -1,8 +1,10 @@
 import type { Env } from "./types";
 import { getDeploymentVerification } from "./deployment-verification";
+import { getAiGatewaySetting } from "./ai-gateway";
 
 export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
+  const aiGatewayPromise = getAiGatewaySetting(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, emailRoutes,
     credentials, tenantControl, dlpRules, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.execution_profile, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
@@ -79,6 +81,7 @@ export async function getGovernance(env: Env, tenantId: string) {
   const knowledgeRows = knowledge.results as Array<Record<string, unknown>>;
   const toolRows = tools.results as Array<Record<string, unknown>>;
   const deploymentVerification = await deploymentVerificationPromise;
+  const aiGateway = await aiGatewayPromise;
   const requiredConnectionRows = connectionRows.filter((row) => row.kind !== "oauth" || row.status !== "disconnected");
   const lifecycleConnectionRows = requiredConnectionRows.filter((row) => row.kind !== "model_provider");
   const lifecycleReadyRows = lifecycleConnectionRows.filter((row) =>
@@ -103,6 +106,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     deploymentVerification,
     models,
     modelPolicy: modelPolicy.results,
+    aiGateway,
     governanceReviews: governanceReviews.results,
     readiness: [
       { id: "identity", label: "Cloudflare Access trust boundary", ready: Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), detail: env.ACCESS_TEAM_DOMAIN ? "JWT verification configured" : "Access application configuration required", action: "Customer setup", actionLabel: "Open setup" },
@@ -144,7 +148,8 @@ export function buildModelInventory(processRows: Array<Record<string, unknown>>,
   const modelKeys = [...new Set(processRows.map((row) =>
     `${String(row.model_profile)}\u0000${String(row.model_id ?? "")}`))];
   return modelKeys.map((key) => {
-    const [profile, rawModelId] = key.split("\u0000");
+    const [profile, rawModelIdValue] = key.split("\u0000");
+    const rawModelId = rawModelIdValue ?? "";
     const matching = processRows.filter((row) =>
       String(row.model_profile) === profile && String(row.model_id ?? "") === rawModelId);
     const evidence = matching.flatMap((row) => [
@@ -156,9 +161,11 @@ export function buildModelInventory(processRows: Array<Record<string, unknown>>,
     return {
       profile: profile!,
       modelId: rawModelId || "Legacy profile mapping",
-      provider: "Cloudflare Workers AI",
+      provider: rawModelId.startsWith("@cf/")
+        ? "Cloudflare Workers AI"
+        : "Cloudflare AI Gateway · external provider",
       processes: matching.length,
-      boundary: "Cloudflare account",
+      boundary: rawModelId.startsWith("@cf/") ? "Cloudflare account" : "Cloudflare AI Gateway",
       ready: Boolean(rawModelId && evidence && Date.parse(evidence.at) >= now - evidenceWindowMs),
       lastVerifiedAt: evidence?.at ?? null,
       evidence: evidence?.kind ?? null

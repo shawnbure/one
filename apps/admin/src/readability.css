@@ -40,8 +40,24 @@ p, small, dt { color: var(--muted); }
   box-shadow: 0 8px 24px rgba(20, 42, 32, .12);
 }
 
+.ai-gateway-policy { grid-column: 1 / -1; }
+.ai-gateway-form {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.4fr);
+  gap: 14px;
+  padding: 18px;
+}
+.ai-gateway-form > label:not(.gateway-check) { display: grid; gap: 6px; }
+.ai-gateway-form input[type="text"],
+.ai-gateway-form input:not([type]) { min-height: 42px; }
+.gateway-check { display: flex; align-items: flex-start; gap: 10px; }
+.gateway-check input { margin-top: 4px; }
+.gateway-check span { display: grid; gap: 2px; }
+.ai-gateway-form > button { justify-self: start; min-height: 42px; }
+
 @media (max-width: 700px) {
   .notice { top: 10px; }
+  .ai-gateway-form { grid-template-columns: 1fr; }
 }
 
 /* The initial visual prototype used 6–9px metadata. Product UI must remain readable at 100% zoom. */

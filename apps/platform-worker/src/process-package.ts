@@ -31,7 +31,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
   return {
     schemaVersion: 1, exportedAt: new Date().toISOString(),
     process: { name: row.name!, description: row.description!, executionProfile: row.execution_profile!,
-      modelProfile: row.model_profile!, modelId: row.model_id || undefined,
+      modelProfile: row.model_profile!,
+      modelId: row.model_id?.startsWith("@cf/") ? row.model_id : undefined,
       autonomy: row.autonomy!, tools: toolDefinitions.length ? toolDefinitions.map((tool) => tool.name) : parseStringArray(row.tools_json),
       toolDefinitions, businessOwner: row.business_owner || "Operations",
       department: row.department || "Operations", riskLevel: row.risk_level || "medium" },

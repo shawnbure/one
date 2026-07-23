@@ -2,9 +2,10 @@ import type { Env } from "./types";
 import { evaluateReleaseGate } from "./evaluation";
 import { normalizeProcessSchema } from "./contracts";
 import { releaseToolPolicies } from "./tools";
-import { modelProfiles, supportedWorkersAIModels, workersAIModelCatalog } from "@workrr/contracts";
+import { inferenceModelCatalog, modelProfiles, supportedInferenceModels } from "@workrr/contracts";
 import { getAutonomySafety } from "./autonomy-safety";
 import { assertTenantModelAllowed } from "./model-governance";
+import { requireAiGatewaySetting } from "./ai-gateway";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -132,13 +133,14 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   if (!input.systemPrompt.trim()) throw new Error("System prompt is required");
   if (!(input.modelProfile in modelProfiles)) throw new Error("Select a supported Cloudflare model profile");
   const modelId = input.modelId ?? modelProfiles[input.modelProfile as keyof typeof modelProfiles].model;
-  if (!supportedWorkersAIModels.includes(modelId as typeof supportedWorkersAIModels[number])) {
-    throw new Error("Select a supported Cloudflare Workers AI model");
+  if (!supportedInferenceModels.includes(modelId as typeof supportedInferenceModels[number])) {
+    throw new Error("Select a supported Cloudflare inference model");
   }
-  const selectedModel = workersAIModelCatalog[modelId as keyof typeof workersAIModelCatalog];
+  const selectedModel = inferenceModelCatalog[modelId as keyof typeof inferenceModelCatalog];
   if (selectedModel.profile !== input.modelProfile) {
     throw new Error(`The selected model requires the ${selectedModel.profile} model profile`);
   }
+  if (selectedModel.boundary === "ai_gateway") await requireAiGatewaySetting(env, tenantId);
   await assertTenantModelAllowed(env, tenantId, modelId);
   const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
   const outputSchema = normalizeProcessSchema(input.outputSchema, "output");

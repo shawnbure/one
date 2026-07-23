@@ -22,8 +22,8 @@ function environment(migration: { id: number; name: string; applied_at: string }
 describe("platform deployment compatibility", () => {
   it("proves the exact Worker and schema version when migrations are current", async () => {
     const result = await getPlatformVersion(environment({
-      id: 88,
-      name: "0088_mcp_connector_health.sql",
+      id: 89,
+      name: "0089_ai_gateway_handoff.sql",
       applied_at: "2026-07-23 16:45:00",
     }) as never);
     expect(result).toMatchObject({
@@ -31,7 +31,7 @@ describe("platform deployment compatibility", () => {
       environment: "development",
       domain: "one-dev.workrr.ai",
       worker: { versionId: "worker-version-1", tag: "dev" },
-      schema: { status: "current", compatible: true, appliedMigrationId: 88, requiredMigrationId: 88 },
+      schema: { status: "current", compatible: true, appliedMigrationId: 89, requiredMigrationId: 89 },
     });
   });
 

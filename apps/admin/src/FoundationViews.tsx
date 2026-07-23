@@ -1486,6 +1486,13 @@ function Governance({
   const [incidentBusy, setIncidentBusy] = useState(false);
   const [dlpBusy, setDlpBusy] = useState<string | null>(null);
   const [modelPolicyBusy, setModelPolicyBusy] = useState<string | null>(null);
+  const [gatewayBusy, setGatewayBusy] = useState(false);
+  const [gatewayForm, setGatewayForm] = useState({
+    gatewayId: data.aiGateway.gatewayId,
+    enabled: data.aiGateway.enabled,
+    collectLogs: data.aiGateway.collectLogs,
+    evidenceReference: data.aiGateway.evidenceReference ?? ""
+  });
   const [reviewBusy, setReviewBusy] = useState<string | null>(null);
   const [reviewForm, setReviewForm] = useState({ reviewKey: "", evidenceReference: "", notes: "" });
   const [retention, setRetention] = useState<RetentionOperationsData | null>(null);
@@ -1510,6 +1517,17 @@ function Governance({
         : "Cloudflare model removed from future releases and evaluations.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "Model policy could not change"); }
     finally { setModelPolicyBusy(null); }
+  }
+  async function saveGateway() {
+    setGatewayBusy(true);
+    try {
+      await api.updateAiGateway(gatewayForm);
+      await onReload();
+      onNotice(gatewayForm.enabled
+        ? "Cloudflare AI Gateway handoff enabled with review evidence."
+        : "Cloudflare AI Gateway handoff disabled.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "AI Gateway policy could not change"); }
+    finally { setGatewayBusy(false); }
   }
   async function completeReview() {
     if (!reviewForm.reviewKey) return;
@@ -1824,9 +1842,36 @@ function Governance({
                 onClick={() => void completeReview()}>Complete review</button></div>
           </div>}
         </article>
+        <article className="ai-gateway-policy panel">
+          <div className="section-head"><div><span className="eyebrow"><Link2 size={14}/> SECONDARY MODEL BOUNDARY</span>
+            <h2>Cloudflare AI Gateway handoff</h2>
+            <p>External models stay unavailable until an owner records privacy and billing review evidence. Dynamic process content always bypasses response caching.</p>
+          </div><span className={data.aiGateway.enabled ? "ready-badge" : "attention-badge"}>
+            {data.aiGateway.enabled ? "ENABLED" : "DISABLED"}
+          </span></div>
+          <div className="ai-gateway-form">
+            <label>Gateway ID<input value={gatewayForm.gatewayId} disabled={!canManageModels || gatewayBusy}
+              pattern="[a-z0-9][a-z0-9-]{0,63}" maxLength={64}
+              onChange={(event) => setGatewayForm({ ...gatewayForm, gatewayId: event.target.value })}/></label>
+            <label>Review evidence<input value={gatewayForm.evidenceReference} disabled={!canManageModels || gatewayBusy}
+              maxLength={300} placeholder="Privacy review, billing approval, and gateway configuration ticket"
+              onChange={(event) => setGatewayForm({ ...gatewayForm, evidenceReference: event.target.value })}/></label>
+            <label className="gateway-check"><input type="checkbox" checked={gatewayForm.collectLogs}
+              disabled={!canManageModels || gatewayBusy}
+              onChange={(event) => setGatewayForm({ ...gatewayForm, collectLogs: event.target.checked })}/>
+              <span>Collect gateway logs <small>May include prompt and response content; govern retention in Cloudflare.</small></span></label>
+            <label className="gateway-check"><input type="checkbox" checked={gatewayForm.enabled}
+              disabled={!canManageModels || gatewayBusy}
+              onChange={(event) => setGatewayForm({ ...gatewayForm, enabled: event.target.checked })}/>
+              <span>Enable external model handoff <small>Requires Unified Billing credits and an approved model below.</small></span></label>
+            <button className="primary" disabled={!canManageModels || gatewayBusy ||
+              (gatewayForm.enabled && gatewayForm.evidenceReference.trim().length < 10)}
+              onClick={() => void saveGateway()}>{gatewayBusy ? "Saving…" : "Save gateway policy"}</button>
+          </div>
+        </article>
         <article className="model-policy panel">
           <div className="section-head"><div><span className="eyebrow"><ShieldCheck size={14}/> ORGANIZATION MODEL POLICY</span>
-            <h2>Approved Cloudflare models</h2>
+            <h2>Approved Cloudflare-routed models</h2>
             <p>Catalog availability does not grant customer approval. Active releases must move before a model can be removed.</p>
           </div></div>
           {data.modelPolicy.map((model) => <div key={model.model_id}>

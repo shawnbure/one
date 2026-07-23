@@ -91,6 +91,14 @@ export function explainExecution(evidence: ExecutionEvidence) {
     detail: `Release ${execution.prompt_release_id} supplied the prompt, model profile, autonomy, contracts, and tool policy.`,
     state: "positive"
   });
+  if (execution.inference_provider === "ai_gateway") reasons.push({
+    label: "Cloudflare AI Gateway handoff",
+    detail: `The release used gateway ${String(execution.gateway_id ?? "default")} with response caching bypassed${
+      execution.gateway_step === null || execution.gateway_step === undefined
+        ? "" : `; route step ${String(execution.gateway_step)} completed the request`
+    }.`,
+    state: "neutral"
+  });
   if (execution.input_contract_status && execution.input_contract_status !== "not_configured") reasons.push({
     label: `Input contract ${execution.input_contract_status.replaceAll("_", " ")}`,
     detail: execution.input_contract_status === "failed" ? "The request did not satisfy the published input boundary."
@@ -164,6 +172,13 @@ export function exportRedactedExecutionEvidence(evidence: ExecutionEvidence) {
       id: execution.id, processId: execution.blueprint_id, processName: execution.blueprint_name,
       status: execution.status, executionProfile: execution.execution_profile,
       durableAffinityPresent: Boolean(execution.instance_key), model: execution.model,
+      inferenceProvider: execution.inference_provider ?? "workers_ai",
+      gateway: execution.inference_provider === "ai_gateway" ? {
+        id: execution.gateway_id ?? "default",
+        routeStep: execution.gateway_step ?? null,
+        cacheStatus: execution.gateway_cache_status ?? null,
+        logReferencePresent: Boolean(execution.gateway_log_id)
+      } : null,
       promptReleaseId: execution.prompt_release_id, processReleaseId: execution.process_release_id,
       autonomyLevel: execution.autonomy_level ?? execution.autonomy,
       autonomyDisposition: execution.autonomy_disposition,

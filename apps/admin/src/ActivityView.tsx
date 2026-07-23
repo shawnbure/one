@@ -227,6 +227,12 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                   <strong>{detail.total_tokens?.toLocaleString() ?? "0"}</strong>
                 </span>
                 <span>
+                  <small>INFERENCE BOUNDARY</small>
+                  <strong>{detail.inference_provider === "ai_gateway"
+                    ? `AI Gateway · ${detail.gateway_id ?? "default"}`
+                    : "Workers AI"}</strong>
+                </span>
+                <span>
                   <small>DURATION</small>
                   <strong>{duration(detail)}</strong>
                 </span>

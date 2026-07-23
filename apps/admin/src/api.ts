@@ -194,6 +194,11 @@ export interface Execution {
   input_preview: string;
   output_preview: string | null;
   model: string | null;
+  inference_provider?: "workers_ai" | "ai_gateway" | null;
+  gateway_id?: string | null;
+  gateway_step?: number | null;
+  gateway_cache_status?: string | null;
+  gateway_log_id?: string | null;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -551,6 +556,10 @@ export interface GovernanceData {
   }>;
   modelPolicy: Array<{ model_id: string; label: string; provider: string; status: string;
     enabled: number; active_processes: number }>;
+  aiGateway: {
+    gatewayId: string; enabled: boolean; collectLogs: boolean; evidenceReference: string | null;
+    updatedBy: string; updatedAt: string;
+  };
   governanceReviews: Array<{
     review_key: string; name: string; description: string; cadence_days: number;
     next_due_at: string; last_completed_at: string | null; last_completed_by: string | null;
@@ -1398,6 +1407,11 @@ export const api = {
     request<{ data: { modelId: string; enabled: boolean } }>(
       `/api/governance/models/${encodeURIComponent(modelId)}`,
       { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  updateAiGateway: (body: {
+    gatewayId: string; enabled: boolean; collectLogs: boolean; evidenceReference: string;
+  }) => request<{ data: GovernanceData["aiGateway"] }>("/api/governance/ai-gateway", {
+    method: "PATCH", body: JSON.stringify(body)
+  }),
   completeGovernanceReview: (reviewKey: string, body: { evidenceReference: string; notes: string }) =>
     request<{ data: { reviewKey: string; evidenceReference: string; nextDueInDays: number } }>(
       `/api/governance/reviews/${encodeURIComponent(reviewKey)}/complete`,

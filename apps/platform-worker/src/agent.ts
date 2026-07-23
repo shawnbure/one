@@ -207,7 +207,9 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     outputSchema: ProcessSchema | null = null, persistAssistant = true,
     autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = []): Promise<{
     output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
-    turnCount: number; toolApprovalRequired: boolean;
+    turnCount: number; toolApprovalRequired: boolean; inferenceProvider: "workers_ai" | "ai_gateway";
+    gatewayId: string | null; gatewayStep: number | null; gatewayCacheStatus: string | null;
+    gatewayLogId: string | null;
   }> {
     const promptReleaseId = this.pinnedPromptReleaseId();
     const row = this.sql<{ bundle_json: string }>`SELECT bundle_json FROM prompt_bundle WHERE release_id = ${promptReleaseId}`[0];

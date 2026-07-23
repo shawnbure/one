@@ -54,7 +54,7 @@ describe("release model pinning", () => {
       modelProfile: "balanced",
       modelId: "@cf/example/unapproved",
       autonomy: "approve"
-    })).rejects.toThrow("supported Cloudflare Workers AI model");
+    })).rejects.toThrow("supported Cloudflare inference model");
     expect(writes).toHaveLength(0);
   });
 

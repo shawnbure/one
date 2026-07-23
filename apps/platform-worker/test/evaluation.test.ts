@@ -91,7 +91,9 @@ describe("release-specific evaluation evidence", () => {
     expect(result.totalTokens).toBe(120);
     expect(result.estimatedCostUsd).toBeGreaterThan(0);
     expect(runModel).toHaveBeenCalledWith(expect.anything(), "balanced", expect.objectContaining({ releaseId: "prompt-1" }),
-      goldenCase.input_text, "evaluation:release-live:balanced:case-1", undefined, [],
+      goldenCase.input_text, "evaluation:release-live:balanced:case-1", expect.objectContaining({
+        tenantId: "tenant-1", autonomy: "suggest", policies: []
+      }), [],
       "@cf/meta/llama-3.3-70b-instruct-fp8-fast");
     expect(writes.some(({ sql, values }) => sql.includes("INSERT INTO evaluation_case_results") &&
       values.includes("release-live") && values.includes(120))).toBe(true);

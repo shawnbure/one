@@ -205,11 +205,17 @@ async function markStatus(env: Env, id: string, status: string): Promise<void> {
   await env.DB.prepare("UPDATE executions SET status = ? WHERE id = ?").bind(status, id).run();
 }
 
-async function complete(env: Env, id: string, result: { output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number },
+async function complete(env: Env, id: string, result: {
+  output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
+  inferenceProvider: "workers_ai" | "ai_gateway"; gatewayId: string | null; gatewayStep: number | null;
+  gatewayCacheStatus: string | null; gatewayLogId: string | null;
+},
   outputPreview = result.output): Promise<void> {
   await env.DB.prepare(pricedCompletionSql())
     .bind(outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
-      result.inputTokens, result.model, result.outputTokens, result.model, new Date().toISOString(), id).run();
+      result.inputTokens, result.model, result.outputTokens, result.model,
+      result.inferenceProvider, result.gatewayId, result.gatewayStep, result.gatewayCacheStatus, result.gatewayLogId,
+      new Date().toISOString(), id).run();
 }
 
 async function failBlockedOutput(env: Env, id: string, detectors: string[]) {

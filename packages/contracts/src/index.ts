@@ -157,35 +157,63 @@ export const supportedWorkersAIModels = [
 
 export type SupportedWorkersAIModel = typeof supportedWorkersAIModels[number];
 
-/** Governed product metadata only; runtime releases always persist the exact model ID. */
-export const workersAIModelCatalog: Record<SupportedWorkersAIModel, {
+export const supportedGatewayModels = ["openai/gpt-4.1-mini"] as const;
+export type SupportedGatewayModel = typeof supportedGatewayModels[number];
+export const supportedInferenceModels = [...supportedWorkersAIModels, ...supportedGatewayModels] as const;
+export type SupportedInferenceModel = typeof supportedInferenceModels[number];
+
+/** Governed product metadata only; runtime releases always persist the exact model ID and boundary. */
+export const inferenceModelCatalog: Record<SupportedInferenceModel, {
   label: string;
   profile: keyof typeof modelProfiles;
   use: string;
   guidance: string;
+  provider: string;
+  boundary: "workers_ai" | "ai_gateway";
 }> = {
   "@cf/meta/llama-3.1-8b-instruct-fp8": {
     label: "Llama 3.1 8B FP8",
     profile: "fast",
     use: "Classification and extraction",
-    guidance: "Choose for short, repeatable tasks where response speed matters most."
+    guidance: "Choose for short, repeatable tasks where response speed matters most.",
+    provider: "Cloudflare Workers AI",
+    boundary: "workers_ai"
   },
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
     label: "Llama 3.3 70B FP8 Fast",
     profile: "balanced",
     use: "General process work",
-    guidance: "Choose for the broadest range of operational assistants and process steps."
+    guidance: "Choose for the broadest range of operational assistants and process steps.",
+    provider: "Cloudflare Workers AI",
+    boundary: "workers_ai"
   },
   "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
     label: "DeepSeek R1 Distill Qwen 32B",
     profile: "reasoning",
     use: "Complex analysis",
-    guidance: "Choose when analysis quality matters more than the fastest response."
+    guidance: "Choose when analysis quality matters more than the fastest response.",
+    provider: "Cloudflare Workers AI",
+    boundary: "workers_ai"
   },
   "@cf/qwen/qwen3-30b-a3b-fp8": {
     label: "Qwen3 30B A3B FP8",
     profile: "reasoning",
     use: "Efficient reasoning and agent tools",
-    guidance: "Choose for multilingual reasoning and tool-capable process work when lower inference cost matters."
+    guidance: "Choose for multilingual reasoning and tool-capable process work when lower inference cost matters.",
+    provider: "Cloudflare Workers AI",
+    boundary: "workers_ai"
+  },
+  "openai/gpt-4.1-mini": {
+    label: "GPT-4.1 mini",
+    profile: "balanced",
+    use: "Gateway-hosted general process work",
+    guidance: "Choose only after the organization enables its Cloudflare AI Gateway handoff and approves third-party processing.",
+    provider: "Cloudflare AI Gateway · OpenAI",
+    boundary: "ai_gateway"
   }
 };
+
+/** Backwards-compatible Workers-only catalog for existing provisioning consumers. */
+export const workersAIModelCatalog = Object.fromEntries(
+  supportedWorkersAIModels.map((id) => [id, inferenceModelCatalog[id]])
+) as Record<SupportedWorkersAIModel, (typeof inferenceModelCatalog)[SupportedWorkersAIModel]>;

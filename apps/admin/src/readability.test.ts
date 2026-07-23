@@ -81,4 +81,11 @@ describe("product readability contract", () => {
     expect(css).toContain("position: sticky");
     expect(css).toContain("top: 76px");
   });
+
+  it("keeps the AI Gateway governance handoff readable on desktop and mobile", () => {
+    expect(css).toContain(".ai-gateway-form");
+    expect(css).toContain("grid-template-columns: minmax(180px");
+    expect(css).toContain(".gateway-check");
+    expect(css).toContain(".ai-gateway-form { grid-template-columns: 1fr; }");
+  });
 });

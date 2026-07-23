@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { requireAiGatewaySetting } from "./ai-gateway";
 
 export async function assertTenantModelAllowed(env: Env, tenantId: string, modelId: string) {
   const row = await env.DB.prepare(`SELECT p.enabled FROM model_catalog m
@@ -13,8 +14,9 @@ export async function assertTenantModelAllowed(env: Env, tenantId: string, model
 export async function updateTenantModelPolicy(env: Env, tenantId: string, actorId: string,
   modelId: string, enabled: boolean) {
   const model = await env.DB.prepare("SELECT model_id FROM model_catalog WHERE model_id=? AND status='active'")
-    .bind(modelId).first();
+    .bind(modelId).first<{ model_id: string }>();
   if (!model) throw new Error("Cloudflare model was not found in the active catalog");
+  if (enabled && !modelId.startsWith("@cf/")) await requireAiGatewaySetting(env, tenantId);
   if (!enabled) {
     const [active, pinnedActors] = await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) count FROM agent_blueprints b

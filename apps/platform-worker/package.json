@@ -16,6 +16,7 @@
     "db:migrate:dev": "wrangler d1 migrations apply DB --remote --env dev"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.20",
     "@cfworker/json-schema": "^4.1.1",
     "@workrr/contracts": "0.1.0",
     "agents": "^0.18.0",

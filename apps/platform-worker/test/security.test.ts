@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 88, name: "0088_mcp_connector_health.sql", applied_at: "2026-07-23 22:45:00"
+            id: 89, name: "0089_ai_gateway_handoff.sql", applied_at: "2026-07-23 23:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -54,6 +54,21 @@ describe("control-plane security boundary", () => {
     expect(response.headers.get("location")).toBe(
       "https://one-dev.workrr.ai/?workspace=connections&section=mcp&mcp=error"
     );
+  });
+
+  it("keeps AI Gateway enablement behind owner or administrator authority", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/governance/ai-gateway", {
+      method: "PATCH",
+      headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({
+        gatewayId: "customer-ai", enabled: true, collectLogs: true,
+        evidenceReference: "unapproved-review"
+      })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("tenant_ai_gateway_settings"))).toBe(false);
   });
 
   it("maps an Access service-token common name to one active tenant principal", async () => {
