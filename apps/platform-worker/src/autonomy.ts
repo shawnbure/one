@@ -21,28 +21,32 @@ export interface AutonomyPlan {
   explanation: string;
 }
 
-export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "operatingMode" | "tools" | "toolPolicies">): AutonomyPlan {
-  const configured = blueprint.autonomy;
+export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "configuredAutonomy" | "safetyAutonomyCap" |
+  "safetyCapReason" | "operatingMode" | "tools" | "toolPolicies">): AutonomyPlan {
+  const configured = blueprint.configuredAutonomy ?? blueprint.autonomy;
   const mode = blueprint.operatingMode ?? "active";
   if (mode === "shadow") return {
     configured, effective: "suggest", disposition: "shadowed", runModel: true, requiresApproval: false,
     shadowMode: true,
     explanation: "The model proposal is recorded for comparison only; it cannot authorize an external action or enter accepted assistant memory."
   };
-  const effective: AutonomyLevel = configured === "observe"
+  const effective: AutonomyLevel = blueprint.autonomy === "observe"
     ? "observe"
     : mode === "approval_only"
       ? "approve"
       : mode === "read_only"
         ? "suggest"
-        : configured;
+        : blueprint.autonomy;
+  const safetyExplanation = blueprint.safetyAutonomyCap && effective !== configured
+    ? ` Automatic safety fallback capped the published ${configured} autonomy at ${effective}: ${blueprint.safetyCapReason ?? "review required"}.`
+    : "";
   if (effective === "observe") return {
     configured, effective, disposition: "observed", runModel: false, requiresApproval: false, shadowMode: false,
-    explanation: "Input is recorded without generating an AI recommendation."
+    explanation: `Input is recorded without generating an AI recommendation.${safetyExplanation}`
   };
   if (effective === "approve") return {
     configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true, shadowMode: false,
-    explanation: "The proposed result requires a human decision before it becomes an accepted outcome."
+    explanation: `The proposed result requires a human decision before it becomes an accepted outcome.${safetyExplanation}`
   };
   const policies = blueprint.toolPolicies ?? [];
   const hasUnavailableConnection = policies.some((tool) => tool.connectionId && !tool.connectionReady);
@@ -52,23 +56,23 @@ export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "opera
   if (effective === "guarded" && guardedReview) return {
     configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true, shadowMode: false,
     explanation: hasUnavailableConnection
-      ? "A required tool connection is not ready, so guarded execution routes the proposal to review."
-      : "A declared tool is write-capable or above low risk, so guarded execution routes the proposal to review."
+      ? `A required tool connection is not ready, so guarded execution routes the proposal to review.${safetyExplanation}`
+      : `A declared tool is write-capable or above low risk, so guarded execution routes the proposal to review.${safetyExplanation}`
   };
   if (effective === "guarded") return {
     configured, effective, disposition: "guarded_safe", runModel: true, requiresApproval: false, shadowMode: false,
-    explanation: "No consequential tools are declared; the guarded read-only result may complete."
+    explanation: `No consequential tools are declared; the guarded read-only result may complete.${safetyExplanation}`
   };
   if (effective === "autonomous") return {
     configured, effective, disposition: hasUnavailableConnection ? "waiting_approval" : "autonomous",
     runModel: true, requiresApproval: hasUnavailableConnection, shadowMode: false,
     explanation: hasUnavailableConnection
-      ? "A required tool connection is not ready, so autonomous completion falls back to human review."
-      : "The published release permits completion without a human checkpoint."
+      ? `A required tool connection is not ready, so autonomous completion falls back to human review.${safetyExplanation}`
+      : `The published release permits completion without a human checkpoint.${safetyExplanation}`
   };
   return {
     configured, effective, disposition: "recommended", runModel: true, requiresApproval: false, shadowMode: false,
-    explanation: "The result is a recommendation and does not authorize an external action."
+    explanation: `The result is a recommendation and does not authorize an external action.${safetyExplanation}`
   };
 }
 

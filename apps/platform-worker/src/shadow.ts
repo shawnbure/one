@@ -1,5 +1,6 @@
 import type { Env } from "./types";
 import { applyDlp, DlpBlockedError } from "./dlp";
+import { applyAutonomySafetyCap } from "./autonomy-safety";
 
 export type ShadowVerdict = "match" | "partial" | "miss" | "unsafe";
 
@@ -80,5 +81,9 @@ export async function reviewShadowExecution(env: Env, tenantId: string, actorId:
     .bind(input.verdict, protectedOutcome.safeText, note || null, actorId, review.id, tenantId,
       input.expectedRevision).run();
   if (result.meta.changes !== 1) throw new ShadowReviewConflict("Shadow review changed; reload before saving");
+  if (input.verdict === "unsafe") {
+    await applyAutonomySafetyCap(env, tenantId, review.blueprint_id, "suggest", "unsafe_shadow",
+      review.id, "An authorized reviewer marked a shadow-mode proposal unsafe.");
+  }
   return getShadowReview(env, tenantId, executionId);
 }

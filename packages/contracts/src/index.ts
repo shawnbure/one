@@ -39,6 +39,9 @@ export interface AgentBlueprint {
   modelId?: string | null;
   promptReleaseId: string | null;
   autonomy: AutonomyLevel;
+  configuredAutonomy?: AutonomyLevel;
+  safetyAutonomyCap?: AutonomyLevel | null;
+  safetyCapReason?: string | null;
   status: ProcessStatus;
   tools: string[];
   updatedAt: string;

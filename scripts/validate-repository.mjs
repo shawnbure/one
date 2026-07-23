@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { findHighConfidenceSecrets, validateMigrationNames } from "./repository-validation-lib.mjs";
@@ -7,7 +7,9 @@ import { findHighConfidenceSecrets, validateMigrationNames } from "./repository-
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root })
   .toString().split("\0").filter(Boolean);
-const migrations = tracked.filter((file) => file.startsWith("apps/platform-worker/migrations/") && file.endsWith(".sql"));
+const migrations = readdirSync(path.join(root, "apps/platform-worker/migrations"))
+  .filter((file) => file.endsWith(".sql"))
+  .map((file) => `apps/platform-worker/migrations/${file}`);
 const schemaCompatibility = JSON.parse(readFileSync(path.join(root, "apps/platform-worker/schema-compatibility.json"), "utf8"));
 const readable = tracked.filter((file) => !/\.(?:png|jpg|jpeg|gif|webp|ico|pdf|woff2?)$/i.test(file));
 const entries = readable.map((file) => ({ file, content: readFileSync(path.join(root, file), "utf8") }));

@@ -19,6 +19,7 @@ import {
   Workflow,
   Upload,
   Archive,
+  AlertTriangle,
   LockKeyhole,
   Trash2,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import {
 } from "@workrr/contracts";
 import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
 import "./schedule-studio.css";
+import "./autonomy-safety.css";
 
 interface Props {
   processId: string | null;
@@ -177,6 +179,10 @@ function Studio({
   const [rollbackVersion, setRollbackVersion] = useState("");
   const [rolloutPercentage, setRolloutPercentage] = useState(25);
   const [rolloutReason, setRolloutReason] = useState("");
+  const [safetyForm, setSafetyForm] = useState({
+    enabled: true, minTerminalRuns: 5, successThreshold: 70, windowHours: 24
+  });
+  const [safetyClearReason, setSafetyClearReason] = useState("");
 
   async function load() {
     try {
@@ -202,6 +208,12 @@ function Studio({
           : modelProfiles[loadedProfile].model,
       );
       setAutonomy(result.blueprint.autonomy ?? "approve");
+      setSafetyForm({
+        enabled: result.autonomySafety.state.enabled,
+        minTerminalRuns: result.autonomySafety.state.minTerminalRuns,
+        successThreshold: result.autonomySafety.state.successThreshold,
+        windowHours: result.autonomySafety.state.windowHours,
+      });
       setInputSchema(prettySchema(active?.input_schema_json));
       setOutputSchema(prettySchema(active?.output_schema_json));
     } catch (error) {
@@ -219,6 +231,36 @@ function Studio({
     () => data?.releases.find((release) => release.status === "published"),
     [data],
   );
+  const canManageSafety = ["admin", "owner"].includes(session?.user.role ?? "");
+
+  async function saveSafetyPolicy() {
+    if (!data) return;
+    setBusy(true);
+    try {
+      const result = await api.updateAutonomySafety(processId, {
+        ...safetyForm, expectedRevision: data.autonomySafety.state.revision
+      });
+      setData({ ...data, autonomySafety: result.data });
+      onNotice("Automatic autonomy fallback policy saved and audited.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Fallback policy could not be saved");
+    } finally { setBusy(false); }
+  }
+
+  async function clearSafetyFallback() {
+    if (!data) return;
+    setBusy(true);
+    try {
+      const result = await api.clearAutonomySafety(processId, {
+        reason: safetyClearReason, expectedRevision: data.autonomySafety.state.revision
+      });
+      setData({ ...data, autonomySafety: result.data });
+      setSafetyClearReason("");
+      onNotice("Safety fallback cleared with owner evidence. Published autonomy is eligible again.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Safety fallback could not be cleared");
+    } finally { setBusy(false); }
+  }
 
   async function saveDraft() {
     setBusy(true);
@@ -528,6 +570,49 @@ function Studio({
                 <small>{autonomyDescription(autonomy)}</small>
               </span>
             </div>
+            <section className={`autonomy-safety ${data.autonomySafety.state.cap ? "active" : ""}`}>
+              <header><div><h3><ShieldCheck size={18}/> Automatic autonomy fallback</h3>
+                <p>Unsafe human evidence caps the process at Suggest immediately. Sustained reliability below this policy caps it at Approve.</p></div>
+                <span className={`safety-state ${data.autonomySafety.state.cap ? "active" : ""}`}>
+                  {data.autonomySafety.state.cap ? <AlertTriangle size={14}/> : <Check size={14}/>}
+                  {data.autonomySafety.state.cap ? `Capped at ${data.autonomySafety.state.cap}` : "Monitoring"}
+                </span></header>
+              {data.autonomySafety.state.cap && <div className="safety-alert"><AlertTriangle size={18}/><span>
+                <strong>Published autonomy is temporarily restricted</strong>
+                <small>{data.autonomySafety.state.reason} Trigger: {data.autonomySafety.state.trigger?.replaceAll("_", " ")}
+                  {data.autonomySafety.state.triggeredAt ? ` · ${formatDate(data.autonomySafety.state.triggeredAt)}` : ""}</small>
+              </span></div>}
+              <div className="safety-policy-grid">
+                <label><input type="checkbox" checked={safetyForm.enabled} disabled={!canManageSafety ||
+                  Boolean(data.autonomySafety.state.cap)} onChange={(event) =>
+                  setSafetyForm({ ...safetyForm, enabled: event.target.checked })}/>Enable automatic fallback</label>
+                <label>Minimum terminal runs<input type="number" min={3} max={100}
+                  disabled={!canManageSafety} value={safetyForm.minTerminalRuns} onChange={(event) =>
+                  setSafetyForm({ ...safetyForm, minTerminalRuns: Number(event.target.value) })}/></label>
+                <label>Minimum success %<input type="number" min={1} max={100}
+                  disabled={!canManageSafety} value={safetyForm.successThreshold} onChange={(event) =>
+                  setSafetyForm({ ...safetyForm, successThreshold: Number(event.target.value) })}/></label>
+                <label>Window hours<input type="number" min={1} max={168}
+                  disabled={!canManageSafety} value={safetyForm.windowHours} onChange={(event) =>
+                  setSafetyForm({ ...safetyForm, windowHours: Number(event.target.value) })}/></label>
+              </div>
+              <div className="safety-evidence">
+                <span><strong>{data.autonomySafety.evidence.completedRuns}/{data.autonomySafety.evidence.terminalRuns}</strong> completed</span>
+                <span><strong>{data.autonomySafety.evidence.successRate == null ? "No sample" :
+                  `${data.autonomySafety.evidence.successRate.toFixed(1)}%`}</strong> recent success</span>
+                <span>Unsafe shadow and evaluation reviews trigger immediately</span>
+              </div>
+              <p className="safety-boundary">The cap is loaded with the existing process blueprint and applies equally to instant Workers, durable Agents, Queue jobs, and Workflows. It adds no per-turn D1 read.</p>
+              {canManageSafety && <div className="safety-actions">
+                <button className="primary" disabled={busy} onClick={() => void saveSafetyPolicy()}>
+                  <Save size={14}/>Save fallback policy</button>
+                {data.autonomySafety.state.cap && <div className="safety-clear"><input maxLength={500}
+                  value={safetyClearReason} placeholder="Evidence that risk is resolved (10+ characters)"
+                  onChange={(event) => setSafetyClearReason(event.target.value)}/>
+                  <button disabled={busy || safetyClearReason.trim().length < 10}
+                    onClick={() => void clearSafetyFallback()}>Clear with evidence</button></div>}
+              </div>}
+            </section>
             <div className="contract-editor">
               <div className="section-head">
                 <div>

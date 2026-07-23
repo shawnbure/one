@@ -26,6 +26,22 @@ describe("progressive autonomy policy", () => {
     });
   });
 
+  it("enforces a latched safety cap before tool and operating-mode decisions", () => {
+    const plan = autonomyPlan({
+      ...process,
+      autonomy: "suggest",
+      configuredAutonomy: "autonomous",
+      safetyAutonomyCap: "suggest",
+      safetyCapReason: "A reviewer marked the evaluation unsafe."
+    });
+    expect(plan).toMatchObject({
+      configured: "autonomous", effective: "suggest", disposition: "recommended",
+      requiresApproval: false
+    });
+    expect(plan.explanation).toContain("Automatic safety fallback");
+    expect(plan.explanation).toContain("unsafe");
+  });
+
   it("runs a proposal without action authority or accepted memory in shadow mode", () => {
     expect(autonomyPlan({ ...process, autonomy: "autonomous", operatingMode: "shadow" })).toMatchObject({
       effective: "suggest", disposition: "shadowed", runModel: true,

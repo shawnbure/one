@@ -12,6 +12,14 @@ function environment() {
             execution_profile: "conversation", model_profile: "balanced", autonomy: "approve",
             active_release_id: "release-v3", tools_json: "[]"
           };
+          if (sql.includes("fallback_min_terminal_runs")) return {
+            id: "process-1", tenant_id: "tenant-1", name: "Customer Operations", autonomy: "approve",
+            fallback_enabled: 1, fallback_min_terminal_runs: 5, fallback_success_threshold: 70,
+            fallback_window_hours: 24, safety_autonomy_cap: null, safety_cap_reason: null,
+            safety_cap_trigger: null, safety_cap_evidence_id: null, safety_cap_triggered_at: null,
+            safety_cap_cleared_at: null, safety_cap_revision: 0
+          };
+          if (sql.includes("COUNT(*) terminal_runs")) return { terminal_runs: 0, completed_runs: 0 };
           if (sql.includes("SELECT p.* FROM prompt_releases")) return {
             id: "prompt-v3", system_prompt: "Current", instructions_json: "[]", guardrails_json: "[]"
           };

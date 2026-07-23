@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 68,
-  "requiredMigrationName": "0068_provider_acceptance.sql"
+  "requiredMigrationId": 69,
+  "requiredMigrationName": "0069_autonomy_safety_fallback.sql"
 }

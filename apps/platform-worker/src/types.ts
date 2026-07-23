@@ -21,6 +21,8 @@ export interface BlueprintRow {
   model_id?: string | null;
   prompt_release_id: string | null;
   autonomy: string;
+  safety_autonomy_cap?: string | null;
+  safety_cap_reason?: string | null;
   status: string;
   tools_json: string;
   updated_at: string;

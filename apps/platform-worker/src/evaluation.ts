@@ -1,6 +1,7 @@
 import { modelProfiles, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
 import type { Env } from "./types";
+import { applyAutonomySafetyCap } from "./autonomy-safety";
 import { assertBudgetAvailable } from "./usage";
 import { applyDlp, DlpBlockedError, loadDlpRules, scanSensitiveText, type DlpRule } from "./dlp";
 import { outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
@@ -1163,8 +1164,12 @@ export async function reviewEvaluationResult(env: Env, tenantId: string, reviewe
       !input.verdict || !["acceptable", "needs_work", "unsafe"].includes(input.verdict)) {
     throw new Error("A 1–5 score and valid verdict are required");
   }
-  const result = await env.DB.prepare("SELECT id FROM evaluation_case_results WHERE id = ? AND tenant_id = ?")
-    .bind(caseResultId, tenantId).first();
+  const result = await env.DB.prepare(`SELECT r.id, s.blueprint_id
+    FROM evaluation_case_results r
+    JOIN evaluation_runs run ON run.id=r.run_id AND run.tenant_id=r.tenant_id
+    JOIN evaluation_scenarios s ON s.id=run.scenario_id AND s.tenant_id=run.tenant_id
+    WHERE r.id=? AND r.tenant_id=?`)
+    .bind(caseResultId, tenantId).first<{ id: string; blueprint_id: string }>();
   if (!result) throw new Error("Evaluation case result not found");
   const id = crypto.randomUUID();
   await env.DB.prepare(`INSERT INTO evaluation_human_reviews
@@ -1172,6 +1177,10 @@ export async function reviewEvaluationResult(env: Env, tenantId: string, reviewe
     ON CONFLICT(case_result_id, reviewer_id) DO UPDATE SET score = excluded.score, verdict = excluded.verdict,
       notes = excluded.notes, updated_at = CURRENT_TIMESTAMP`)
     .bind(id, tenantId, caseResultId, reviewerId, score, input.verdict, input.notes?.trim().slice(0, 1000) || null).run();
+  if (input.verdict === "unsafe") {
+    await applyAutonomySafetyCap(env, tenantId, result.blueprint_id, "suggest", "unsafe_evaluation",
+      caseResultId, "An authorized reviewer marked an evaluation result unsafe.");
+  }
   return { id, caseResultId, score, verdict: input.verdict };
 }
 

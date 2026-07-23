@@ -329,6 +329,27 @@ export interface ProcessRelease {
   output_schema_json: string | null;
   tool_policy_json: string | null;
 }
+export interface AutonomySafetyData {
+  state: {
+    enabled: boolean;
+    minTerminalRuns: number;
+    successThreshold: number;
+    windowHours: number;
+    cap: "observe" | "suggest" | "approve" | "guarded" | "autonomous" | null;
+    reason: string | null;
+    trigger: "unsafe_shadow" | "unsafe_evaluation" | "reliability" | null;
+    evidenceId: string | null;
+    triggeredAt: string | null;
+    clearedAt: string | null;
+    revision: number;
+  };
+  evidence: {
+    terminalRuns: number;
+    completedRuns: number;
+    successRate: number | null;
+    evaluatedSince: string;
+  };
+}
 
 export interface StudioData {
   blueprint: Record<string, string>;
@@ -347,6 +368,7 @@ export interface StudioData {
     from_version: number | null; to_version: number;
   }>;
   runStats: Array<{ status: string; count: number }>;
+  autonomySafety: AutonomySafetyData;
   actorAdoption: {
     supported: boolean;
     knownActors: number;
@@ -1101,6 +1123,16 @@ export const api = {
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
     ),
+  updateAutonomySafety: (id: string, body: {
+    enabled: boolean; minTerminalRuns: number; successThreshold: number;
+    windowHours: number; expectedRevision: number;
+  }) => request<{ data: AutonomySafetyData }>(
+    `/api/processes/${encodeURIComponent(id)}/autonomy-safety`,
+    { method: "PATCH", body: JSON.stringify(body) }),
+  clearAutonomySafety: (id: string, body: { reason: string; expectedRevision: number }) =>
+    request<{ data: AutonomySafetyData }>(
+      `/api/processes/${encodeURIComponent(id)}/autonomy-safety/clear`,
+      { method: "POST", body: JSON.stringify(body) }),
   actorReleaseRollouts: (id: string) =>
     request<{ data: ActorReleaseRollout[] }>(
       `/api/processes/${encodeURIComponent(id)}/actor-release-rollouts`,

@@ -475,6 +475,7 @@ Features:
 - Minimum evaluation evidence before promotion.
 - Required process-owner approval for promotion.
 - Automatic fallback to a safer level on health/risk thresholds.
+- Implemented in Workrr One as a latched process safety cap: unsafe authorized reviews cap at Suggest immediately, bounded recent reliability can cap at Approve, and owner evidence is required to clear the cap.
 - Visible autonomy badge on every run.
 - Promotion history and rationale.
 - Shadow mode that compares proposed actions without executing them.

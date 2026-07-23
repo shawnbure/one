@@ -3,6 +3,7 @@ import { evaluateReleaseGate } from "./evaluation";
 import { normalizeProcessSchema } from "./contracts";
 import { releaseToolPolicies } from "./tools";
 import { modelProfiles, supportedWorkersAIModels, workersAIModelCatalog } from "@workrr/contracts";
+import { getAutonomySafety } from "./autonomy-safety";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -69,6 +70,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all()
   ]);
   if (!blueprint) return null;
+  const autonomySafety = await getAutonomySafety(env, tenantId, blueprintId);
   const row = blueprint as Record<string, unknown>;
   const activeRelease = releases.results.find((release) =>
     String((release as Record<string, unknown>).id) === String(row.active_release_id ?? ""));
@@ -103,6 +105,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
         .reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
       cohorts, actors
     },
+    autonomySafety,
     activeTools,
     topology: topologyFor(String(row.execution_profile), String(row.autonomy), activeTools)
   };

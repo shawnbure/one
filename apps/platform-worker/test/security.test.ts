@@ -17,8 +17,16 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 68, name: "0068_provider_acceptance.sql", applied_at: "2026-07-23 16:45:00"
+            id: 69, name: "0069_autonomy_safety_fallback.sql", applied_at: "2026-07-23 16:45:00"
           } as T;
+          if (sql.includes("FROM agent_blueprints")) return {
+            id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
+            fallback_enabled: 1, fallback_min_terminal_runs: 5, fallback_success_threshold: 70,
+            fallback_window_hours: 24, safety_autonomy_cap: null, safety_cap_reason: null,
+            safety_cap_trigger: null, safety_cap_evidence_id: null, safety_cap_triggered_at: null,
+            safety_cap_cleared_at: null, safety_cap_revision: 0
+          } as T;
+          if (sql.includes("COUNT(*) terminal_runs")) return { terminal_runs: 0, completed_runs: 0 } as T;
           if (sql.includes("SELECT p.channel, p.destination")) return {
             channel: "webhook", destination: "https://customer.example/events", secret_binding: "NOTIFICATION_WEBHOOK_SECRET"
           } as T;
@@ -90,6 +98,25 @@ describe("control-plane security boundary", () => {
     expect(denied.status).toBe(403);
   });
 
+  it("allows safety evidence inspection but restricts fallback policy changes to owners", async () => {
+    const viewer = environment("viewer");
+    const read = await app.fetch(new Request("http://localhost/api/processes/process-1/autonomy-safety", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      data: { state: { enabled: true, cap: null, revision: 0 }, evidence: { terminalRuns: 0 } }
+    });
+    const change = await app.fetch(new Request("http://localhost/api/processes/process-1/autonomy-safety", {
+      method: "PATCH", headers: {
+        origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com"
+      }, body: JSON.stringify({ enabled: false, minTerminalRuns: 5, successThreshold: 70,
+        windowHours: 24, expectedRevision: 0 })
+    }), viewer.env as never, executionCtx as never);
+    expect(change.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("SET fallback_enabled"))).toBe(false);
+  });
+
   it("rejects cross-origin browser mutations before business data changes", async () => {
     const { env, queries } = environment();
     const response = await app.fetch(new Request("http://localhost/api/onboarding", {
@@ -97,6 +124,18 @@ describe("control-plane security boundary", () => {
     }), env as never, executionCtx as never);
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("UPDATE tenants SET name"))).toBe(false);
+  });
+
+  it("accepts explicit loopback origins only in development", async () => {
+    const { env } = environment();
+    const response = await app.fetch(new Request("http://localhost/api/processes/process-1/autonomy-safety", {
+      method: "PATCH", headers: {
+        origin: "http://127.0.0.1:5173", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com"
+      }, body: JSON.stringify({ enabled: true, minTerminalRuns: 5, successThreshold: 70,
+        windowHours: 24, expectedRevision: 0 })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(200);
   });
 
   it("enforces route roles after authenticated membership lookup", async () => {

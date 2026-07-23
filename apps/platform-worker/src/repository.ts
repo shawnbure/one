@@ -1,5 +1,6 @@
 import type { AgentBlueprint, PromptBundle } from "@workrr/contracts";
 import type { BlueprintRow, Env, PromptRow } from "./types";
+import { cappedAutonomy } from "./autonomy-safety";
 
 export async function getBlueprint(env: Env, tenantId: string, id: string): Promise<AgentBlueprint | null> {
   return getBlueprintRow(env, tenantId, id, {});
@@ -60,6 +61,8 @@ Promise<AgentBlueprint | null> {
       resolved_model_profile?: string | null; resolved_autonomy?: string | null;
     }>();
   if (!row) return null;
+  const configuredAutonomy = (row.resolved_autonomy ?? row.autonomy) as AgentBlueprint["autonomy"];
+  const safetyAutonomyCap = (row.safety_autonomy_cap ?? null) as AgentBlueprint["safetyAutonomyCap"];
   return {
     id: row.id,
     name: row.name,
@@ -68,7 +71,10 @@ Promise<AgentBlueprint | null> {
     modelProfile: row.resolved_model_profile ?? row.model_profile,
     modelId: row.model_id ?? null,
     promptReleaseId: row.resolved_prompt_release_id ?? row.prompt_release_id,
-    autonomy: (row.resolved_autonomy ?? row.autonomy) as AgentBlueprint["autonomy"],
+    autonomy: cappedAutonomy(configuredAutonomy, safetyAutonomyCap),
+    configuredAutonomy,
+    safetyAutonomyCap,
+    safetyCapReason: row.safety_cap_reason ?? null,
     status: row.status as AgentBlueprint["status"],
     tools: JSON.parse(row.tools_json) as string[],
     updatedAt: row.updated_at

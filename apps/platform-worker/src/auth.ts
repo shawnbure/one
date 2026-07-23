@@ -102,7 +102,8 @@ export async function requireSameOrigin(c: AppContext, next: Next): Promise<Resp
   const origin = c.req.header("origin");
   if (!origin) return next();
   const requestOrigin = new URL(c.req.url).origin;
-  const localDev = c.env.ENVIRONMENT === "development" && /^http:\/\/localhost:\d+$/.test(origin);
+  const localDev = c.env.ENVIRONMENT === "development" &&
+    /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):\d+$/.test(origin);
   if (origin !== requestOrigin && !localDev) return c.json({ error: "Cross-origin mutation rejected" }, 403);
   await next();
 }

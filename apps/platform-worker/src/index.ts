@@ -29,6 +29,8 @@ import { isDlpBlocked, updateDlpRule } from "./dlp";
 import { getShadowReview, listShadowReviews, reviewShadowExecution, ShadowReviewConflict } from "./shadow";
 import { getProviderAcceptance, runMicrosoftAcceptance } from "./provider-acceptance";
 import { getPlatformVersion } from "./platform-version";
+import { clearAutonomySafetyCap, evaluateAllAutonomySafety, getAutonomySafety,
+  updateAutonomySafetyPolicy } from "./autonomy-safety";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
@@ -941,6 +943,41 @@ app.get("/api/processes/:id/studio",
   if (!processId) return c.json({ error: "Process ID is required" }, 400);
   const studio = await getStudio(c.env, c.get("tenantId"), processId);
   return studio ? c.json({ data: studio }) : c.json({ error: "Process not found" }, 404);
+});
+
+app.get("/api/processes/:id/autonomy-safety",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+    try {
+      const processId = c.req.param("id");
+      if (!processId) return c.json({ error: "Process ID is required" }, 400);
+      return c.json({ data: await getAutonomySafety(c.env, c.get("tenantId"), processId) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Autonomy safety state could not load" }, 404);
+    }
+  });
+
+app.patch("/api/processes/:id/autonomy-safety", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    return c.json({ data: await updateAutonomySafetyPolicy(c.env, c.get("tenantId"), c.get("actorId"),
+      processId, await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Autonomy fallback policy could not be saved";
+    return c.json({ error: message }, message.includes("changed") ? 409 : 400);
+  }
+});
+
+app.post("/api/processes/:id/autonomy-safety/clear", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    return c.json({ data: await clearAutonomySafetyCap(c.env, c.get("tenantId"), c.get("actorId"),
+      processId, await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Autonomy fallback could not be cleared";
+    return c.json({ error: message }, message.includes("changed") ? 409 : 400);
+  }
 });
 
 app.get("/api/processes/:id/actor-release-rollouts",
@@ -2172,7 +2209,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       enqueueDueNotificationDeliveries(env, now),
       enqueueDueProcessDisposals(env, now),
       enforceAllTenantRetention(env, now),
-      expireRubricPublisherKeys(env, now)
+      expireRubricPublisherKeys(env, now),
+      evaluateAllAutonomySafety(env, now)
     ]));
   }
 };
