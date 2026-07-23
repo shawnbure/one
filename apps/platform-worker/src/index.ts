@@ -112,7 +112,8 @@ app.get("/api/session", async (c) => {
     WHERE t.id = ?`).bind(c.get("tenantId")).first<{ name: string; accent_color: string | null }>();
   return c.json({
     user: { id: c.get("actorId"), email: c.get("actorEmail"), name: c.get("actorName"), role: c.get("role") },
-    tenantId: c.get("tenantId"), tenantName: tenant?.name ?? c.get("tenantId"), accentColor: tenant?.accent_color ?? "#1f7a5b"
+    tenantId: c.get("tenantId"), tenantName: tenant?.name ?? c.get("tenantId"), accentColor: tenant?.accent_color ?? "#1f7a5b",
+    environment: c.env.ENVIRONMENT, appDomain: c.env.APP_DOMAIN
   });
 });
 

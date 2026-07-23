@@ -28,7 +28,7 @@ function environment(role = "admin") {
       return statement;
     }
   };
-  return { env: { DB, ENVIRONMENT: "development", LOCAL_DEV: "true" }, queries };
+  return { env: { DB, ENVIRONMENT: "development", APP_DOMAIN: "one-dev.workrr.ai", LOCAL_DEV: "true" }, queries };
 }
 
 const executionCtx = { waitUntil(promise: Promise<unknown>) { void promise; }, passThroughOnException() {} };
@@ -61,7 +61,13 @@ describe("control-plane security boundary", () => {
       "x-workrr-user": "operator@example.com", "x-workrr-tenant": "forged-customer", "x-workrr-role": "admin"
     }}), env as never, executionCtx as never);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ tenantId: "demo", tenantName: "Customer One", user: { role: "admin" } });
+    expect(await response.json()).toMatchObject({
+      tenantId: "demo",
+      tenantName: "Customer One",
+      environment: "development",
+      appDomain: "one-dev.workrr.ai",
+      user: { role: "admin" }
+    });
   });
 
   it("rejects cross-origin browser mutations before business data changes", async () => {

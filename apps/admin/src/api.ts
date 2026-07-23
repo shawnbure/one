@@ -59,6 +59,8 @@ export interface SessionData {
   tenantId: string;
   tenantName: string;
   accentColor: string;
+  environment: string;
+  appDomain: string;
 }
 
 export interface LaunchpadThread {

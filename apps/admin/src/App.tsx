@@ -49,6 +49,7 @@ import {
   type ValueData,
 } from "./api";
 import { CommandCenter } from "./CommandCenter";
+import { AccountMenu } from "./AccountMenu";
 import { authorizedWorkspaceLabels, processVisibleInCommands, type CommandSearchItem } from "./command-search";
 import "./live.css";
 import "./wizard.css";
@@ -524,14 +525,7 @@ export function App() {
               <Inbox size={17} />
               {(overview?.pendingApprovals ?? 0) > 0 && <i />}
             </button>}
-            <div className="user">
-              {session?.user.name
-                .split(/\s+/)
-                .map((part) => part[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase() ?? "SB"}
-            </div>
+            <AccountMenu session={session} />
           </div>
         </header>
         <div className="content">
