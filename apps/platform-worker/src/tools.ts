@@ -115,7 +115,8 @@ export async function setToolEnabled(env: Env, tenantId: string, toolId: string,
 }
 
 export async function releaseToolPolicies(env: Env, tenantId: string, blueprintId: string): Promise<ToolPolicy[]> {
-  const { results } = await env.DB.prepare(`SELECT t.id, t.name, t.version, t.adapter_kind, t.handler_key, t.access_mode,
+  const [native, mcp] = await Promise.all([
+  env.DB.prepare(`SELECT t.id, t.name, t.version, t.adapter_kind, t.handler_key, t.access_mode,
     t.risk_level, t.connection_id, t.data_classification, t.rate_limit_per_minute,
     t.input_schema_json, t.output_schema_json, t.description, t.owner, t.support_instructions,
     CASE WHEN t.connection_id IS NULL AND t.adapter_kind='mock' THEN 1
@@ -132,8 +133,20 @@ export async function releaseToolPolicies(env: Env, tenantId: string, blueprintI
     JOIN tool_definitions t ON t.id=pt.tool_id AND t.tenant_id=pt.tenant_id
     LEFT JOIN connections c ON c.id=t.connection_id AND c.tenant_id=t.tenant_id
     WHERE pt.tenant_id=? AND pt.blueprint_id=? AND pt.enabled=1 AND t.enabled=1
-    ORDER BY t.name`).bind(tenantId, blueprintId).all<Record<string, unknown>>();
-  return results.map((row) => ({
+    ORDER BY t.name`).bind(tenantId, blueprintId).all<Record<string, unknown>>(),
+  env.DB.prepare(`SELECT t.id, t.ai_tool_name name, t.revision version, 'mcp' adapter_kind,
+    'mcp.' || t.connector_id || '.' || t.ai_tool_name handler_key, t.access_mode, t.risk_level,
+    t.connector_id connection_id, t.data_classification, t.rate_limit_per_minute,
+    t.input_schema_json, '{"type":"object","additionalProperties":true}' output_schema_json,
+    t.description, t.owner, 'Governed MCP connector tool' support_instructions,
+    CASE WHEN c.status='ready' AND t.enabled=1 THEN 1 ELSE 0 END connection_ready
+    FROM process_mcp_tool_bindings pt
+    JOIN mcp_connector_tools t ON t.id=pt.mcp_tool_id AND t.tenant_id=pt.tenant_id
+    JOIN mcp_connectors c ON c.id=t.connector_id AND c.tenant_id=t.tenant_id
+    WHERE pt.tenant_id=? AND pt.blueprint_id=? AND pt.enabled=1 AND t.enabled=1
+    ORDER BY t.title`).bind(tenantId, blueprintId).all<Record<string, unknown>>()
+  ]);
+  return [...native.results, ...mcp.results].slice(0, 20).map((row) => ({
     id: String(row.id), name: String(row.name), version: Number(row.version),
     adapterKind: row.adapter_kind as ToolPolicy["adapterKind"],
     handlerKey: row.handler_key ? String(row.handler_key) : null,

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type RetentionOperationsData,
   type ProviderAcceptanceData, type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition,
-  type EmailReceipt, type WebhookReceipt } from "./api";
+  type EmailReceipt, type McpCatalogData, type McpConnectorTool, type WebhookReceipt } from "./api";
 import "./governed-standards.css";
 import "./provider-acceptance.css";
 
@@ -72,6 +72,9 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
   const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [toolAdapters, setToolAdapters] = useState<ToolAdapterDefinition[]>([]);
   const [toolBusy, setToolBusy] = useState(false);
+  const [mcpCatalog, setMcpCatalog] = useState<McpCatalogData>({ connectors: [], tools: [] });
+  const [mcpBusy, setMcpBusy] = useState<string | null>(null);
+  const [mcpForm, setMcpForm] = useState({ name: "", serverUrl: "", transport: "streamable-http" });
   const [webhookBusy, setWebhookBusy] = useState<string | null>(null);
   const [editingWebhook, setEditingWebhook] = useState<string | null>(null);
   const [webhookReceipts, setWebhookReceipts] = useState<Record<string, WebhookReceipt[]>>({});
@@ -100,11 +103,65 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
     }
     catch (error) { onNotice(error instanceof Error ? error.message : "Tool catalog could not be loaded"); }
   }
+  async function loadMcpCatalog() {
+    try { setMcpCatalog((await api.mcpConnectors()).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "MCP connector catalog could not be loaded"); }
+  }
   async function loadProviderAcceptance() {
     try { setProviderAcceptance((await api.microsoftAcceptance()).data); }
     catch (error) { onNotice(error instanceof Error ? error.message : "Provider acceptance evidence could not be loaded"); }
   }
-  useEffect(() => { void loadTools(); void loadProviderAcceptance(); }, []);
+  useEffect(() => { void loadTools(); void loadProviderAcceptance(); void loadMcpCatalog(); }, []);
+  async function createMcp(event: React.FormEvent) {
+    event.preventDefault();
+    setMcpBusy("create");
+    try {
+      await api.createMcpConnector(mcpForm);
+      setMcpForm({ name: "", serverUrl: "", transport: "streamable-http" });
+      await loadMcpCatalog();
+      onNotice("MCP connector registered disabled. An owner must connect and govern discovered capabilities.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "MCP connector could not be created"); }
+    finally { setMcpBusy(null); }
+  }
+  async function connectMcp(id: string) {
+    setMcpBusy(id);
+    try {
+      const result = await api.connectMcpConnector(id);
+      await loadMcpCatalog();
+      if (result.data.authUrl) window.location.assign(result.data.authUrl);
+      else onNotice("MCP connector is ready and its capability evidence was refreshed.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "MCP connector could not connect"); }
+    finally { setMcpBusy(null); }
+  }
+  async function discoverMcp(id: string) {
+    setMcpBusy(id);
+    try {
+      const result = await api.discoverMcpConnector(id);
+      await loadMcpCatalog();
+      onNotice(`${result.data.toolCount} MCP capabilities discovered. New capabilities remain disabled.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "MCP discovery failed"); }
+    finally { setMcpBusy(null); }
+  }
+  async function governMcp(tool: McpConnectorTool, enabled: boolean, processIds?: string[]) {
+    setMcpBusy(tool.id);
+    try {
+      await api.governMcpTool(tool.id, {
+        enabled, accessMode: tool.access_mode, riskLevel: tool.risk_level,
+        dataClassification: tool.data_classification, owner: tool.owner,
+        rateLimitPerMinute: tool.rate_limit_per_minute,
+        processIds: processIds ?? tool.process_ids.split(",").filter(Boolean),
+        expectedRevision: tool.revision
+      });
+      await loadMcpCatalog();
+      onNotice(`${tool.title} governance saved. Publish a new process release to activate the snapshot.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "MCP governance could not be saved"); }
+    finally { setMcpBusy(null); }
+  }
+  function updateMcpDraft(id: string, patch: Partial<McpConnectorTool>) {
+    setMcpCatalog((current) => ({
+      ...current, tools: current.tools.map((tool) => tool.id === id ? { ...tool, ...patch } : tool)
+    }));
+  }
   async function test(id: string) {
     setChecking(id);
     try {
@@ -517,6 +574,77 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
             <button className="primary" disabled={toolBusy}>{toolBusy ? "Saving…" : "Create typed tool"}</button>
           </form>
         </div>
+      </div>
+      <div className="mcp-catalog panel">
+        <div className="section-head"><div><span className="eyebrow"><Bot size={14}/> PRIVATE CAPABILITY GATEWAY</span>
+          <h2>MCP connector catalog</h2>
+          <p>Connect an existing HTTPS MCP service once per tenant. Credentials stay in its durable connector actor; discovered tools start disabled and enter processes only through immutable releases.</p>
+        </div><span className="mcp-policy-note"><ShieldCheck size={15}/> Only governed low-risk reads can run directly</span></div>
+        {canManageWebhooks && <form className="mcp-create" onSubmit={(event) => void createMcp(event)}>
+          <label>Connector name<input required minLength={3} maxLength={80} value={mcpForm.name}
+            onChange={(event) => setMcpForm({ ...mcpForm, name: event.target.value })}
+            placeholder="Private CRM"/></label>
+          <label>HTTPS MCP server URL<input required type="url" value={mcpForm.serverUrl}
+            onChange={(event) => setMcpForm({ ...mcpForm, serverUrl: event.target.value })}
+            placeholder="https://mcp.customer.example/mcp"/></label>
+          <label>Transport<select value={mcpForm.transport}
+            onChange={(event) => setMcpForm({ ...mcpForm, transport: event.target.value })}>
+            <option value="streamable-http">Streamable HTTP</option><option value="sse">SSE</option>
+            <option value="auto">Auto detect</option></select></label>
+          <button className="primary" disabled={mcpBusy === "create"}>
+            {mcpBusy === "create" ? "Registering…" : "Register connector"}</button>
+        </form>}
+        <div className="mcp-connectors">
+          {mcpCatalog.connectors.map((connector) => <article key={connector.id}>
+            <div><strong>{connector.name}</strong><small>{connector.server_url}</small></div>
+            <span className={`connection-state ${connector.status === "ready" ? "healthy" : "attention"}`}><i/>{connector.status}</span>
+            <small>{connector.tool_count} capabilities · {connector.last_discovered_at ? `checked ${formatTimestamp(connector.last_discovered_at)}` : "not discovered"}</small>
+            {connector.last_error && <p>{connector.last_error}</p>}
+            {session && ["admin", "owner"].includes(session.user.role) && <button disabled={mcpBusy === connector.id}
+              onClick={() => void connectMcp(connector.id)}>{connector.status === "ready" ? "Reconnect" : "Connect / authorize"}</button>}
+            {session && ["admin", "owner", "operator"].includes(session.user.role) && connector.status === "ready" &&
+              <button disabled={mcpBusy === connector.id} onClick={() => void discoverMcp(connector.id)}>Refresh discovery</button>}
+          </article>)}
+          {!mcpCatalog.connectors.length && <p className="empty-copy">No MCP services registered. Native Workrr tools continue to operate independently.</p>}
+        </div>
+        {mcpCatalog.tools.length > 0 && <div className="mcp-tools">
+          <div className="section-head"><div><h3>Discovered capabilities</h3>
+            <p>Writes and medium/high-risk tools remain proposal-only even when enabled.</p></div></div>
+          {mcpCatalog.tools.map((tool) => <article key={tool.id} className={!tool.enabled ? "disabled" : ""}>
+            <span className={`tool-access ${tool.access_mode}`}>{tool.access_mode}</span>
+            <span><strong>{tool.title}</strong><small>{tool.description}</small>
+              <em>{tool.risk_level} risk · {tool.data_classification} · {tool.rate_limit_per_minute}/min · Owner {tool.owner}</em>
+              {session && ["admin", "owner"].includes(session.user.role) && <span className="mcp-governance-fields">
+                <label>Access<select value={tool.access_mode} onChange={(event) =>
+                  updateMcpDraft(tool.id, { access_mode: event.target.value as McpConnectorTool["access_mode"] })}>
+                  <option value="read">Read</option><option value="write">Write</option></select></label>
+                <label>Risk<select value={tool.risk_level} onChange={(event) =>
+                  updateMcpDraft(tool.id, { risk_level: event.target.value as McpConnectorTool["risk_level"] })}>
+                  <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+                <label>Data<select value={tool.data_classification} onChange={(event) =>
+                  updateMcpDraft(tool.id, { data_classification: event.target.value as McpConnectorTool["data_classification"] })}>
+                  <option value="public">Public</option><option value="internal">Internal</option>
+                  <option value="confidential">Confidential</option><option value="restricted">Restricted</option></select></label>
+                <label>Owner<input required maxLength={120} value={tool.owner}
+                  onChange={(event) => updateMcpDraft(tool.id, { owner: event.target.value })}/></label>
+                <label>Rate / min<input type="number" min="1" max="1000" value={tool.rate_limit_per_minute}
+                  onChange={(event) => updateMcpDraft(tool.id, { rate_limit_per_minute: Number(event.target.value) })}/></label>
+              </span>}
+              <span className="tool-process-bindings">{data.processes.map((process) => {
+                const ids = tool.process_ids.split(",").filter(Boolean);
+                const bound = ids.includes(String(process.id));
+                return <button type="button" key={String(process.id)} disabled={mcpBusy === tool.id}
+                  className={bound ? "bound" : ""} onClick={() => void governMcp(tool, Boolean(tool.enabled),
+                    bound ? ids.filter((id) => id !== String(process.id)) : [...ids, String(process.id)])}>
+                  {bound ? "✓ " : "+ "}{processOptionLabel(process, data.processes)}</button>;
+              })}</span></span>
+            <span className={`connection-state ${tool.enabled ? "healthy" : "attention"}`}><i/>{tool.enabled ? "governed" : "disabled"}</span>
+            {session && ["admin", "owner"].includes(session.user.role) && <button disabled={mcpBusy === tool.id}
+              onClick={() => void governMcp(tool, true)}>{tool.enabled ? "Save governance" : "Save & enable"}</button>}
+            {session && ["admin", "owner"].includes(session.user.role) && Boolean(tool.enabled) && <button
+              disabled={mcpBusy === tool.id} onClick={() => void governMcp(tool, false)}>Disable</button>}
+          </article>)}
+        </div>}
       </div>
       <div className="webhook-section">
         <div className="section-head">

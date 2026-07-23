@@ -102,6 +102,9 @@ export function buildExecutionTools(env: Env, context?: ToolRuntimeContext): {
 
 export function toolExecutionMode(policy: ToolPolicy, autonomy: AutonomyLevel = "guarded"):
   "simulation" | "proposal_only" | "bound" {
+  if (autonomy !== "approve" && policy.adapterKind === "mcp" &&
+    policy.handlerKey?.startsWith("mcp.") &&
+    policy.accessMode === "read" && policy.riskLevel === "low" && policy.connectionReady) return "bound";
   if (autonomy !== "approve" && policy.adapterKind === "microsoft" && isBoundAdapter(policy.handlerKey) &&
     policy.accessMode === "read" && policy.riskLevel === "low" && policy.connectionReady) return "bound";
   if (policy.adapterKind === "mock" && policy.accessMode === "read" &&

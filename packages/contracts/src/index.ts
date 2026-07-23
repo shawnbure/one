@@ -15,7 +15,7 @@ export interface ToolPolicy {
   id: string;
   name: string;
   version: number;
-  adapterKind: "mock" | "http" | "microsoft" | "database" | "import_export";
+  adapterKind: "mock" | "http" | "microsoft" | "database" | "import_export" | "mcp";
   handlerKey?: string | null;
   accessMode: "read" | "write";
   riskLevel: "low" | "medium" | "high";

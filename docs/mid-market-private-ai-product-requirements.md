@@ -623,7 +623,7 @@ The aggressive MVP should be broad in operational completeness, not broad in arb
 ### P2 — Add after first real deployment evidence
 
 - Editable workflow canvas. Implemented as a bounded, linear, release-versioned business-flow editor that preserves server-derived Cloudflare and approval boundaries.
-- MCP connector catalog.
+- MCP connector catalog. Implemented as tenant-scoped durable connector actors with SDK-managed OAuth, disabled-by-default discovery, owner governance, process/release snapshots, and low-risk-read-only direct execution.
 - AI Gateway/provider routing.
 - Teams and Slack.
 - OIDC/SCIM lifecycle automation.

@@ -24,8 +24,14 @@
     "database_id": "67c9313a-e4a5-41ce-948e-4095edb27b95",
     "migrations_dir": "migrations"
   }],
-  "durable_objects": { "bindings": [{ "name": "PROCESS_AGENT", "class_name": "ProcessAgent" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProcessAgent"] }],
+  "durable_objects": { "bindings": [
+    { "name": "PROCESS_AGENT", "class_name": "ProcessAgent" },
+    { "name": "MCP_CONNECTOR", "class_name": "McpConnectorAgent" }
+  ] },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ProcessAgent"] },
+    { "tag": "v2", "new_sqlite_classes": ["McpConnectorAgent"] }
+  ],
   "queues": {
     "producers": [{ "binding": "PROCESS_QUEUE", "queue": "workrr-process-jobs" }],
     "consumers": [{
@@ -72,7 +78,10 @@
         "database_id": "5dad1856-7790-496c-bc17-91cddd655dd7",
         "migrations_dir": "migrations"
       }],
-      "durable_objects": { "bindings": [{ "name": "PROCESS_AGENT", "class_name": "ProcessAgent" }] },
+      "durable_objects": { "bindings": [
+        { "name": "PROCESS_AGENT", "class_name": "ProcessAgent" },
+        { "name": "MCP_CONNECTOR", "class_name": "McpConnectorAgent" }
+      ] },
       "queues": {
         "producers": [{ "binding": "PROCESS_QUEUE", "queue": "workrr-process-jobs-dev" }],
         "consumers": [{

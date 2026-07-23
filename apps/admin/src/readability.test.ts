@@ -61,4 +61,11 @@ describe("product readability contract", () => {
     expect(css).toContain("@media (max-width: 760px)");
     expect(css).toContain(".workflow-step-editor { grid-template-columns: 30px 1fr; }");
   });
+
+  it("keeps MCP connector governance readable and responsive", () => {
+    expect(css).toContain(".mcp-create");
+    expect(css).toContain("grid-template-columns: minmax(150px");
+    expect(css).toContain(".mcp-connectors { grid-template-columns: 1fr; }");
+    expect(css).toContain(".mcp-tools > article { grid-template-columns: auto 1fr; }");
+  });
 });

@@ -9,7 +9,7 @@ function toolEnvironment(rows: Array<Record<string, unknown>> = []) {
       const statement = {
         bind(...next: unknown[]) { values = next; return statement; },
         async first() { return null; },
-        async all() { return { results: rows }; },
+        async all() { return { results: sql.includes("process_mcp_tool_bindings") ? [] : rows }; },
         async run() { writes.push({ sql, values }); return { meta: { changes: 1 } }; }
       };
       return statement;

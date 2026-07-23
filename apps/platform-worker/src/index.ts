@@ -82,8 +82,11 @@ import { emitGovernanceReviewAlerts } from "./governance-review-alerts";
 import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
 import { createEmailRoute, listEmailReceipts, listEmailRoutes, receiveProcessEmail,
   setEmailRouteStatus, updateEmailRoute, verifyEmailRouting } from "./email-channel";
+import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector,
+  discoverMcpTools, governMcpTool, listMcpConnectors } from "./mcp-connectors";
 
 export { ProcessAgent } from "./agent";
+export { McpConnectorAgent } from "./mcp-connector-agent";
 export { ProcessWorkflow } from "./workflow";
 export { EvaluationWorkflow } from "./evaluation-workflow";
 export { ActorReleaseRolloutWorkflow } from "./actor-release-rollout-workflow";
@@ -106,6 +109,15 @@ app.get("/oauth/microsoft/callback", async (c) => {
     console.error(JSON.stringify({ event: "microsoft_oauth_callback_failed",
       error: error instanceof Error ? error.message : String(error) }));
     return c.redirect(`https://${c.env.APP_DOMAIN}/?oauth=microsoft-error`);
+  }
+});
+app.get("/oauth/mcp/callback", async (c) => {
+  try {
+    return await completeMcpOAuthCallback(c.env, c.req.raw);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "mcp_oauth_callback_failed",
+      error: error instanceof Error ? error.message : String(error) }));
+    return c.redirect(`https://${c.env.APP_DOMAIN}/?mcp=error`);
   }
 });
 app.use("/api/*", requireIdentity);
@@ -2085,6 +2097,67 @@ app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "
 
 app.get("/api/email-routes", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await listEmailRoutes(c.env, c.get("tenantId")) }));
+
+app.get("/api/mcp-connectors",
+  requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+    c.json({ data: await listMcpConnectors(c.env, c.get("tenantId")) }));
+
+app.post("/api/mcp-connectors", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const result = await createMcpConnector(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "mcp_connector.created",
+      "mcp_connector", result.id, { transport: result.transport });
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "MCP connector could not be created";
+    return c.json({ error: message }, message.includes("UNIQUE") ? 409 : 400);
+  }
+});
+
+app.post("/api/mcp-connectors/:id/connect", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const connectorId = c.req.param("id");
+    if (!connectorId) return c.json({ error: "MCP connector ID is required" }, 400);
+    const result = await connectMcpConnector(c.env, c.get("tenantId"), connectorId);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "mcp_connector.connection_started",
+      "mcp_connector", connectorId, { status: result.status });
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "MCP connection failed" }, 400);
+  }
+});
+
+app.post("/api/mcp-connectors/:id/discover",
+  requireRoles("admin", "owner", "operator"), async (c) => {
+    try {
+      const connectorId = c.req.param("id");
+      if (!connectorId) return c.json({ error: "MCP connector ID is required" }, 400);
+      const result = await discoverMcpTools(c.env, c.get("tenantId"), connectorId);
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "mcp_connector.discovered",
+        "mcp_connector", connectorId, { toolCount: result.toolCount });
+      return c.json({ data: result });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "MCP discovery failed" }, 400);
+    }
+  });
+
+app.patch("/api/mcp-tools/:id", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const toolId = c.req.param("id");
+    if (!toolId) return c.json({ error: "MCP tool ID is required" }, 400);
+    const result = await governMcpTool(
+      c.env, c.get("tenantId"), c.get("actorId"), toolId, await c.req.json()
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "mcp_tool.governed",
+      "mcp_tool", toolId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "MCP tool could not be governed";
+    return c.json({ error: message }, message.includes("changed") ? 409 : message.includes("not found") ? 404 : 400);
+  }
+});
 
 app.post("/api/email-routes", requireRoles("admin", "builder", "owner"), async (c) => {
   try {

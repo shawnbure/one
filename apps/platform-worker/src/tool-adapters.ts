@@ -3,6 +3,7 @@ import { applyDlp, DlpBlockedError } from "./dlp";
 import { getMicrosoftAccessToken } from "./oauth";
 import type { Env } from "./types";
 import { markConnectionSuccess } from "./connection-operations";
+import { invokeMcpConnectorTool } from "./mcp-connectors";
 
 export const boundAdapterCatalog = {
   "microsoft.profile.get": {
@@ -68,6 +69,26 @@ export function isBoundAdapter(key: string | null | undefined): key is BoundAdap
 
 export async function invokeBoundAdapter(env: Env, tenantId: string, executionId: string,
   policy: ToolPolicy, input: unknown, fetcher: typeof fetch = fetch) {
+  if (policy.adapterKind === "mcp") {
+    if (!policy.connectionId || !policy.connectionReady || !policy.handlerKey?.startsWith("mcp.")) {
+      throw new Error("MCP tool connection is not ready");
+    }
+    if (policy.accessMode !== "read" || policy.riskLevel !== "low") {
+      throw new Error("Bound MCP execution is limited to governed low-risk reads");
+    }
+    const prefix = `mcp.${policy.connectionId}.`;
+    if (!policy.handlerKey.startsWith(prefix)) throw new Error("MCP tool identity does not match its connector");
+    const aiToolName = policy.handlerKey.slice(prefix.length);
+    const raw = await invokeMcpConnectorTool(env, tenantId, policy.connectionId, aiToolName, input);
+    const protectedOutput = await applyDlp(env, tenantId, JSON.stringify(raw ?? {}), {
+      direction: "output", stage: "tool_result", executionId
+    });
+    if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
+    return {
+      modelOutput: { status: "completed", adapter: "mcp", data: parseProtectedJson(protectedOutput.modelText) },
+      evidenceOutput: { status: "completed", adapter: "mcp", data: parseProtectedJson(protectedOutput.safeText) }
+    };
+  }
   if (!isBoundAdapter(policy.handlerKey) || policy.adapterKind !== "microsoft") {
     throw new Error("No registered adapter implementation matches this tool");
   }

@@ -28,6 +28,13 @@ describe("governed tool runtime", () => {
       handlerKey: "microsoft.profile.get" })).toBe("bound");
     expect(toolExecutionMode({ ...policy, adapterKind: "microsoft", connectionId: "conn-ms",
       handlerKey: "microsoft.profile.get" }, "approve")).toBe("proposal_only");
+    const mcp = { ...policy, adapterKind: "mcp" as const, connectionId: "mcp-1",
+      handlerKey: "mcp.mcp-1.tool_workrr_lookup" };
+    expect(toolExecutionMode(mcp)).toBe("bound");
+    expect(toolExecutionMode({ ...mcp, riskLevel: "medium" })).toBe("proposal_only");
+    expect(toolExecutionMode({ ...mcp, accessMode: "write" })).toBe("proposal_only");
+    expect(toolExecutionMode({ ...mcp, connectionReady: false })).toBe("proposal_only");
+    expect(toolExecutionMode(mcp, "approve")).toBe("proposal_only");
   });
 
   it("does not expose executable tools at advisory autonomy levels", () => {

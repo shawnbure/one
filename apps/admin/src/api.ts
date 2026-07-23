@@ -642,6 +642,24 @@ export interface ToolAdapterDefinition {
   scope: string;
   inputSchema: Record<string, unknown>;
 }
+export interface McpConnector {
+  id: string; name: string; server_url: string; transport: "streamable-http" | "sse" | "auto";
+  status: "disabled" | "connecting" | "authenticating" | "ready" | "attention";
+  tool_count: number; last_discovered_at: string | null; last_error: string | null;
+  revision: number; created_at: string; updated_at: string;
+}
+export interface McpConnectorTool {
+  id: string; connector_id: string; server_tool_name: string; ai_tool_name: string;
+  title: string; description: string; input_schema_json: string;
+  access_mode: "read" | "write"; risk_level: "low" | "medium" | "high";
+  data_classification: "public" | "internal" | "confidential" | "restricted";
+  owner: string; rate_limit_per_minute: number; enabled: number; revision: number;
+  process_ids: string; process_names: string;
+}
+export interface McpCatalogData {
+  connectors: McpConnector[];
+  tools: McpConnectorTool[];
+}
 export interface ExecutionKnowledgeCitation {
   source_id: string;
   source_name: string;
@@ -1651,6 +1669,19 @@ export const api = {
     `/api/connections/${encodeURIComponent(id)}/lifecycle`, { method: "PATCH", body: JSON.stringify(body) }),
   tools: () => request<{ data: ToolDefinition[] }>("/api/tools"),
   toolAdapters: () => request<{ data: ToolAdapterDefinition[] }>("/api/tool-adapters"),
+  mcpConnectors: () => request<{ data: McpCatalogData }>("/api/mcp-connectors"),
+  createMcpConnector: (body: { name: string; serverUrl: string; transport: string }) =>
+    request<{ data: McpConnector }>("/api/mcp-connectors",
+      { method: "POST", body: JSON.stringify(body) }),
+  connectMcpConnector: (id: string) =>
+    request<{ data: { id: string; status: string; authUrl: string | null } }>(
+      `/api/mcp-connectors/${encodeURIComponent(id)}/connect`, { method: "POST" }),
+  discoverMcpConnector: (id: string) =>
+    request<{ data: { id: string; status: string; toolCount: number } }>(
+      `/api/mcp-connectors/${encodeURIComponent(id)}/discover`, { method: "POST" }),
+  governMcpTool: (id: string, body: Record<string, unknown>) =>
+    request<{ data: { id: string; enabled: boolean; processCount: number; revision: number } }>(
+      `/api/mcp-tools/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   createTool: (body: Record<string, unknown>) =>
     request<{ data: { id: string; name: string; processCount: number } }>("/api/tools",
       { method: "POST", body: JSON.stringify(body) }),

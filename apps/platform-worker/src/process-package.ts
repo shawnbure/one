@@ -121,7 +121,11 @@ function parseToolPolicies(value: string | null | undefined): PortableToolPolicy
   try {
     const parsed = JSON.parse(value) as ToolPolicy[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.map(({ id: _id, connectionId: _connectionId, connectionReady: _connectionReady, ...tool }) => tool);
+    return parsed.map(({ id: _id, connectionId: _connectionId, connectionReady: _connectionReady, ...tool }) =>
+      tool.adapterKind === "mcp"
+        ? { ...tool, adapterKind: "http" as const, handlerKey: null,
+          supportInstructions: `${tool.supportInstructions ?? ""}\nReconnect the governed MCP capability in the destination environment.`.trim() }
+        : tool);
   } catch { return []; }
 }
 function parsePortableTopology(value: string | null | undefined) {

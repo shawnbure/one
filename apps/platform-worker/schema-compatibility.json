@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 85,
-  "requiredMigrationName": "0085_release_workflow_topology.sql"
+  "requiredMigrationId": 86,
+  "requiredMigrationName": "0086_mcp_connectors.sql"
 }

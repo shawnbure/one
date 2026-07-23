@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 85, name: "0085_release_workflow_topology.sql", applied_at: "2026-07-23 22:00:00"
+            id: 86, name: "0086_mcp_connectors.sql", applied_at: "2026-07-23 22:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -96,6 +96,32 @@ describe("control-plane security boundary", () => {
       headers: { "x-workrr-user": "operator@example.com", "x-workrr-role": "admin" }
     }), consumer.env as never, executionCtx as never);
     expect(denied.status).toBe(403);
+  });
+
+  it("lets audit roles inspect MCP inventory but reserves connector and tool changes for owners", async () => {
+    const viewer = environment("viewer");
+    const read = await app.fetch(new Request("http://localhost/api/mcp-connectors", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual({ data: { connectors: [], tools: [] } });
+
+    const create = await app.fetch(new Request("http://localhost/api/mcp-connectors", {
+      method: "POST", headers: {
+        origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com"
+      }, body: JSON.stringify({ name: "Private CRM", serverUrl: "https://mcp.example.com/mcp" })
+    }), viewer.env as never, executionCtx as never);
+    expect(create.status).toBe(403);
+
+    const govern = await app.fetch(new Request("http://localhost/api/mcp-tools/tool-1", {
+      method: "PATCH", headers: {
+        origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com"
+      }, body: JSON.stringify({ enabled: true, expectedRevision: 1 })
+    }), viewer.env as never, executionCtx as never);
+    expect(govern.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("UPDATE mcp_connector_tools"))).toBe(false);
   });
 
   it("allows safety evidence inspection but restricts fallback policy changes to owners", async () => {
