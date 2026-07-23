@@ -1,7 +1,7 @@
 import type { Env } from "./types";
 
 export async function getGovernance(env: Env, tenantId: string) {
-  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials] = await Promise.all([
+  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials, tenantControl] = await Promise.all([
     env.DB.prepare(`SELECT id, name, model_profile, prompt_release_id, active_release_id, autonomy, operating_mode,
       risk_level, business_owner, department FROM agent_blueprints WHERE tenant_id = ? ORDER BY name`).bind(tenantId).all(),
     env.DB.prepare("SELECT * FROM connections WHERE tenant_id = ? ORDER BY name").bind(tenantId).all(),
@@ -18,7 +18,9 @@ export async function getGovernance(env: Env, tenantId: string) {
     env.DB.prepare(`SELECT id, name, provider, secret_binding, purpose, last_validated_at,
       CASE WHEN secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END configured
       FROM integration_credential_refs WHERE tenant_id = ? ORDER BY name`)
-      .bind(env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, tenantId).all()
+      .bind(env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, tenantId).all(),
+    env.DB.prepare("SELECT mode, incident_id, reason, updated_by, updated_at FROM tenant_operating_controls WHERE tenant_id = ?")
+      .bind(tenantId).first()
   ]);
   const processRows = processes.results as Array<Record<string, unknown>>;
   const connectionRows = connections.results as Array<Record<string, unknown>>;
@@ -39,6 +41,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     members: members.results,
     audit: audit.results,
     incidents: incidents.results,
+    tenantControl: tenantControl ?? { mode: "active", incident_id: null, reason: null, updated_by: "system", updated_at: null },
     webhooks: webhooks.results,
     credentials: credentialRows,
     models,

@@ -116,7 +116,11 @@ export interface GovernanceData {
   retention: Array<Record<string, string | number>>;
   members: Array<Record<string, string>>;
   audit: Array<Record<string, string>>;
-  incidents: Array<Record<string, string>>;
+  incidents: Array<{ id: string; title: string; severity: string; status: string; process_name: string | null;
+    blueprint_id: string | null; owner_id: string | null; category: string; impact: string; containment_mode: string | null;
+    opened_at: string; updated_at: string; resolved_at: string | null }>;
+  tenantControl: { mode: "active" | "drain" | "emergency_stop"; incident_id: string | null; reason: string | null;
+    updated_by: string; updated_at: string | null };
   webhooks: WebhookEndpoint[];
   models: Array<{
     profile: string;
@@ -367,6 +371,14 @@ export const api = {
   queueModelTrial: (id: string, body: { candidateProfile: string; releaseId?: string }) =>
     request<{ data: { id: string; status: string; baselineProfile: string; candidateProfile: string } }>(
       `/api/evaluations/${encodeURIComponent(id)}/model-trials`, { method: "POST", body: JSON.stringify(body) }),
+  createIncident: (body: { title: string; severity: string; category: string; impact: string; blueprintId?: string }) =>
+    request<{ data: { id: string; status: string } }>("/api/incidents", { method: "POST", body: JSON.stringify(body) }),
+  transitionIncident: (id: string, body: { status: string; note: string; rootCause?: string; resolution?: string }) =>
+    request<{ data: { id: string; from: string; status: string } }>(
+      `/api/incidents/${encodeURIComponent(id)}/transition`, { method: "POST", body: JSON.stringify(body) }),
+  setTenantMode: (body: { mode: "active" | "drain" | "emergency_stop"; reason: string; incidentId?: string }) =>
+    request<{ data: { mode: string; incidentId: string | null } }>("/api/tenant/mode",
+      { method: "PATCH", body: JSON.stringify(body) }),
   promoteEvaluationSample: (id: string, body: { executionId: string; name?: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(

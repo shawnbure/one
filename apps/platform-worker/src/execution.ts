@@ -7,11 +7,12 @@ import type { Env } from "./types";
 import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
-  await assertBudgetAvailable(env, tenantId);
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
   if (!blueprint) throw new Error("Process not found");
-  if (blueprint.status === "paused" || blueprint.status === "draft") throw new Error(`Process is ${blueprint.status}`);
-  if (["paused", "drain", "emergency_stop"].includes(blueprint.operatingMode ?? "active")) {
+  const admission = await executionAdmission(env, tenantId, blueprint.status, blueprint.operatingMode ?? "active");
+  if (admission.error) throw new Error(admission.error);
+  if (blueprint.status === "draft") throw new Error("Process is draft");
+  if (["drain", "emergency_stop"].includes(blueprint.operatingMode ?? "active")) {
     throw new Error(`Process operating mode is ${blueprint.operatingMode}`);
   }
   const promptReleaseId = blueprint.promptReleaseId;
@@ -21,8 +22,14 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   const startedAt = new Date().toISOString();
   await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key, started_at)
-    VALUES (?, ?, ?, ?, ?, 'running', ?, ?, ?)`)
-    .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile, request.input.slice(0, 500), request.idempotencyKey ?? null, startedAt).run();
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
+      admission.deferred ? "deferred" : "running", request.input.slice(0, 500), request.idempotencyKey ?? null, startedAt).run();
+
+  if (admission.deferred) {
+    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };
+  }
+  await assertBudgetAvailable(env, tenantId);
 
   if (blueprint.executionProfile === "workflow") {
     await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`, params: { tenantId, request } });
@@ -44,6 +51,25 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   const result = await agent.execute(request.input, blueprint.modelProfile);
   await complete(env, executionId, result);
   return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output: result.output, model: result.model, startedAt };
+}
+
+export async function assertAsyncExecutionAdmission(env: Env, tenantId: string, blueprintId: string) {
+  const blueprint = await getBlueprint(env, tenantId, blueprintId);
+  if (!blueprint) throw new Error("Process not found");
+  const admission = await executionAdmission(env, tenantId, blueprint.status, blueprint.operatingMode ?? "active");
+  if (admission.error) throw new Error(admission.error);
+  return admission;
+}
+
+async function executionAdmission(env: Env, tenantId: string, processStatus: string, processMode: string) {
+  const tenant = await env.DB.prepare("SELECT mode FROM tenant_operating_controls WHERE tenant_id = ?")
+    .bind(tenantId).first<{ mode: string }>();
+  const tenantMode = tenant?.mode ?? "active";
+  if (tenantMode === "emergency_stop") return { deferred: false, error: "Tenant is in emergency stop" };
+  if (tenantMode === "drain") return { deferred: false, error: "Tenant is draining and rejects new work" };
+  if (processMode === "emergency_stop") return { deferred: false, error: "Process operating mode is emergency_stop" };
+  if (processMode === "drain") return { deferred: false, error: "Process operating mode is drain" };
+  return { deferred: processMode === "paused" || processStatus === "paused", error: null as string | null };
 }
 
 async function requiredPrompt(env: Env, releaseId: string): Promise<PromptBundle> {

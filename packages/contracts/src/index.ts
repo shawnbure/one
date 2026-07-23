@@ -52,7 +52,7 @@ export interface ExecutionResult {
   executionId: string;
   instanceKey: string | null;
   profile: ExecutionProfile;
-  status: "completed" | "queued" | "running" | "waiting_approval" | "failed";
+  status: "completed" | "queued" | "running" | "waiting_approval" | "deferred" | "failed";
   output?: string;
   model?: string;
   startedAt: string;

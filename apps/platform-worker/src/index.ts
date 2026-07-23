@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { executionProfiles, type ExecutionRequest, type QueueJob, type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
-import { executeRequest } from "./execution";
+import { assertAsyncExecutionAdmission, executeRequest } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease } from "./studio";
@@ -13,6 +13,7 @@ import { deliverNotificationWebhook, emitNotification, failNotificationDelivery,
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
+import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -341,6 +342,13 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
 
 app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
   const request = await c.req.json<ExecutionRequest>();
+  if (!request.blueprintId || !request.input) return c.json({ error: "blueprintId and input are required" }, 400);
+  try {
+    const admission = await assertAsyncExecutionAdmission(c.env, c.get("tenantId"), request.blueprintId);
+    if (admission.deferred) return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Execution admission failed" }, 409);
+  }
   const executionId = crypto.randomUUID();
   const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: c.get("tenantId") };
   await c.env.PROCESS_QUEUE.send(job, { contentType: "json" });
@@ -534,13 +542,68 @@ app.patch("/api/webhooks/:id/status", requireRoles("admin", "builder"), async (c
 
 app.patch("/api/processes/:id/mode", requireRoles("admin", "owner"), async (c) => {
   const processId = c.req.param("id");
-  const body = await c.req.json<{ mode?: string; reason?: string }>();
-  const modes = ["active", "read_only", "approval_only", "paused", "drain", "emergency_stop"];
-  if (!processId || !body.mode || !modes.includes(body.mode)) return c.json({ error: "A valid operating mode is required" }, 400);
-  const result = await c.env.DB.prepare("UPDATE agent_blueprints SET operating_mode = ?, updated_at = ? WHERE tenant_id = ? AND id = ?")
-    .bind(body.mode, new Date().toISOString(), c.get("tenantId"), processId).run();
-  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process.mode_changed", "process", processId, { mode: body.mode, reason: body.reason });
-  return c.json({ updated: result.meta.changes === 1, mode: body.mode });
+  const body = await c.req.json<{ mode?: string; reason?: string; incidentId?: string }>();
+  if (!processId) return c.json({ error: "Process ID is required" }, 400);
+  try {
+    const result = await setProcessOperatingMode(c.env, c.get("tenantId"), c.get("actorId"), processId, body);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process.mode_changed", "process", processId,
+      { mode: result.mode, previousMode: result.previousMode, reason: body.reason, incidentId: result.incidentId });
+    if (result.mode === "emergency_stop") await emitNotification(c.env, c.get("tenantId"), {
+      eventType: "incident.emergency_stop", title: "Process emergency stop activated",
+      detail: body.reason || "No reason supplied", targetType: "process", targetId: processId
+    });
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Process mode change failed" }, 400);
+  }
+});
+
+app.get("/api/incidents", requireRoles("admin", "owner", "operator", "reviewer", "viewer"), async (c) =>
+  c.json({ data: await getIncidentOperations(c.env, c.get("tenantId")) }));
+
+app.get("/api/incidents/:id", requireRoles("admin", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  const incidentId = c.req.param("id");
+  if (!incidentId) return c.json({ error: "Incident ID is required" }, 400);
+  const result = await getIncidentDetail(c.env, c.get("tenantId"), incidentId);
+  return result ? c.json({ data: result }) : c.json({ error: "Incident not found" }, 404);
+});
+
+app.post("/api/incidents", requireRoles("admin", "owner", "operator"), async (c) => {
+  try {
+    const result = await createIncident(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "incident.opened", "incident", result.id, {});
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Incident could not be opened" }, 400);
+  }
+});
+
+app.post("/api/incidents/:id/transition", requireRoles("admin", "owner", "operator"), async (c) => {
+  const incidentId = c.req.param("id");
+  if (!incidentId) return c.json({ error: "Incident ID is required" }, 400);
+  try {
+    const result = await transitionIncident(c.env, c.get("tenantId"), c.get("actorId"), incidentId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "incident.transitioned", "incident", incidentId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Incident transition failed" }, 400);
+  }
+});
+
+app.patch("/api/tenant/mode", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const body = await c.req.json<{ mode?: "active" | "drain" | "emergency_stop"; reason?: string; incidentId?: string }>();
+    const result = await setTenantOperatingMode(c.env, c.get("tenantId"), c.get("actorId"), body);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "tenant.mode_changed", "tenant", c.get("tenantId"),
+      { ...result, reason: body.reason });
+    if (result.mode === "emergency_stop") await emitNotification(c.env, c.get("tenantId"), {
+      eventType: "incident.emergency_stop", title: "Tenant emergency stop activated",
+      detail: body.reason || "No reason supplied", targetType: "tenant", targetId: c.get("tenantId")
+    });
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Tenant mode change failed" }, 400);
+  }
 });
 
 app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewer"), async (c) => {

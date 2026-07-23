@@ -193,6 +193,8 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
     env.DB.prepare(`INSERT OR IGNORE INTO tenant_budgets
       (tenant_id, monthly_limit_usd, warning_percent, hard_limit, updated_by) VALUES (?, 25, 80, 0, ?)`)
       .bind(tenantId, actorId),
+    env.DB.prepare(`INSERT OR IGNORE INTO tenant_operating_controls
+      (tenant_id, mode, updated_by) VALUES (?, 'active', ?)`).bind(tenantId, actorId),
     env.DB.prepare(`INSERT OR IGNORE INTO integration_credential_refs
       (id, tenant_id, name, provider, secret_binding, purpose)
       VALUES (?, ?, 'Outbound webhook signing key', 'generic_webhook', 'NOTIFICATION_WEBHOOK_SECRET',
@@ -207,6 +209,9 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity)
       VALUES (?, ?, 'queue.retry_exhausted', 'in_app', NULL, 1, 'critical')`).bind(`notify-queue-${suffix}`, tenantId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity)
+      VALUES (?, ?, 'incident.emergency_stop', 'in_app', NULL, 1, 'critical')`).bind(`notify-incident-${suffix}`, tenantId),
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity, credential_ref_id)
       VALUES (?, ?, 'execution.failed', 'webhook', NULL, 0, 'critical', ?)`)

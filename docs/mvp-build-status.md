@@ -17,7 +17,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Process Studio | Visual topology, explicit execution profile, immutable draft releases, publish, and rollback |
 | Work Inbox | Evidence and rationale review, assignment, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, inputs/outputs, failures, and safe replay |
-| Governance | Model/data-flow inventory, retention posture, readiness, operating modes, and JSON evidence export |
+| Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, and JSON evidence export |
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
 | Foundations | Connections, knowledge, evaluations, and model profile starting points |
@@ -25,6 +25,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 | Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, and optional hard limit |
+| Incident response | Tenant and process emergency stops, drain/defer admission behavior, incident ownership/lifecycle, evidence timeline, recovery gates, audit, and critical notifications |
 | Evaluation lab | Curated golden cases, expected/prohibited output assertions, exact-release model runs, weighted scoring, release comparison, durable Workflow suites, side-by-side Cloudflare model trials, automatic sensitive-pattern masking, human scorecards, explicit production-sample promotion, evidence, and budgeted usage |
 
 ## Execution architecture
@@ -79,6 +80,7 @@ The Worker currently exposes these route groups:
 - Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`
 - Integration intake: `/webhooks/:endpointId`, `/api/webhooks`
 - Operational delivery: `/api/notifications`, policy configuration, and signed delivery tests
+- Incident operations: `/api/incidents`, lifecycle transitions, `/api/tenant/mode`, and process containment/recovery
 - Quality controls: `/api/evaluations/:id`, curated cases, exact-release runs, and publish gates
 - Operations: `/health`, `/api/overview`, `/api/system/capabilities`
 
@@ -106,6 +108,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 16. `0016_evaluation_operations.sql`: durable suite lifecycle, Workflow correlation, and tenant-scoped human review scorecards.
 17. `0017_evaluation_score_backfill.sql`: truthful percentage scores for evaluation evidence created before case-level scoring.
 18. `0018_model_trials_and_redaction.sql`: isolated model-profile trials, profile-attributed evidence, and persisted redaction metadata.
+19. `0019_incident_response.sql`: tenant admission controls, expanded incident records, evidence timelines, and emergency notification policy.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -140,7 +143,7 @@ npm run build
 
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
-The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy or launch customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
+The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy, containment, or customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, paused inputs are recorded as deferred, tenant drain/emergency stop blocks synchronous and queued admission, incident recovery requires containment evidence, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
 
 Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs use a dedicated Cloudflare Workflow, survive browser disconnection, retry the exact-release regression idempotently, and persist their lifecycle separately from case evidence. Model trials execute the immutable release prompt and identical cases once with the release baseline profile and once with a candidate Cloudflare profile; both arms are costed and scored without changing the live process or release-gate state. Every model call participates in the tenant hard budget.
 

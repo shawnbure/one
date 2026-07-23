@@ -411,6 +411,10 @@ function Governance({
   onNotice: (message: string) => void;
 }) {
   const ready = data.readiness.filter((item) => item.ready).length;
+  const [containmentReason, setContainmentReason] = useState("");
+  const [incidentNote, setIncidentNote] = useState("");
+  const [incidentForm, setIncidentForm] = useState({ title: "", severity: "medium", blueprintId: "", impact: "" });
+  const [incidentBusy, setIncidentBusy] = useState(false);
   async function mode(processId: string | undefined, nextMode: string) {
     if (!processId) return;
     try {
@@ -426,6 +430,40 @@ function Governance({
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Mode change failed");
     }
+  }
+  async function tenantMode(next: "active" | "drain" | "emergency_stop") {
+    if (!containmentReason.trim()) { onNotice("Enter a containment or recovery reason first."); return; }
+    setIncidentBusy(true);
+    try {
+      await api.setTenantMode({ mode: next, reason: containmentReason,
+        incidentId: data.tenantControl.incident_id ?? undefined });
+      setContainmentReason("");
+      await onReload();
+      onNotice(`Tenant operating mode changed to ${next.replaceAll("_", " ")}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Tenant mode change failed"); }
+    finally { setIncidentBusy(false); }
+  }
+  async function openIncident() {
+    if (!incidentForm.title.trim()) { onNotice("Incident title is required."); return; }
+    setIncidentBusy(true);
+    try {
+      await api.createIncident({ ...incidentForm, blueprintId: incidentForm.blueprintId || undefined, category: "operations" });
+      setIncidentForm({ title: "", severity: "medium", blueprintId: "", impact: "" });
+      await onReload();
+      onNotice("Incident opened with an evidence timeline.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Incident could not be opened"); }
+    finally { setIncidentBusy(false); }
+  }
+  async function transition(id: string, status: string) {
+    if (!incidentNote.trim()) { onNotice("Enter a transition note first."); return; }
+    setIncidentBusy(true);
+    try {
+      await api.transitionIncident(id, { status, note: incidentNote });
+      setIncidentNote("");
+      await onReload();
+      onNotice(`Incident moved to ${status}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Incident transition failed"); }
+    finally { setIncidentBusy(false); }
   }
   return (
     <section className="foundation-page">
@@ -538,6 +576,29 @@ function Governance({
           </div>
         ))}
       </div>
+      <div className={`incident-command panel tenant-${data.tenantControl.mode}`}>
+        <div className="section-head"><div><span className="eyebrow"><AlertTriangle size={14}/> INCIDENT RESPONSE</span><h2>Containment & recovery</h2><p>Stop new work immediately, preserve evidence, and recover only after containment.</p></div><span className={`tenant-mode ${data.tenantControl.mode}`}><i/>{data.tenantControl.mode.replaceAll("_", " ")}</span></div>
+        <div className="tenant-containment">
+          <span><strong>Tenant-wide admission control</strong><small>{data.tenantControl.reason || "All processes currently use their individual operating modes."}</small></span>
+          <input placeholder="Required containment or recovery reason" value={containmentReason} onChange={(event) => setContainmentReason(event.target.value)}/>
+          <button disabled={incidentBusy} onClick={() => void tenantMode("drain")}>Drain new work</button>
+          <button className="danger" disabled={incidentBusy} onClick={() => void tenantMode("emergency_stop")}>Emergency stop</button>
+          <button className="recover" disabled={incidentBusy || data.tenantControl.mode === "active"} onClick={() => void tenantMode("active")}>Restore tenant</button>
+        </div>
+        <div className="incident-layout">
+          <div className="incident-register"><div className="section-head"><div><h3>Incident register</h3><p>Owner, severity, containment state, and immutable timeline evidence.</p></div></div>
+            <label className="incident-note">Transition evidence<input placeholder="Required note for the next incident transition" value={incidentNote} onChange={(event) => setIncidentNote(event.target.value)}/></label>
+            {data.incidents.length ? data.incidents.map((incident) => <article key={incident.id}><span className={`incident-severity ${incident.severity}`}>{incident.severity}</span><span><strong>{incident.title}</strong><small>{incident.process_name || "Tenant-wide"} · {incident.category} · opened {incident.opened_at}</small><em>{incident.impact || "Impact assessment pending"}</em></span><span className={`connection-state ${incident.status}`}><i/>{incident.status}</span><span className="incident-actions">{nextIncidentActions(incident.status).map((action) => <button key={action} disabled={incidentBusy} onClick={() => void transition(incident.id, action)}>{action}</button>)}</span></article>) : <p className="empty-copy">No incidents recorded. Controls remain ready.</p>}
+          </div>
+          <div className="incident-builder"><div className="section-head"><div><h3>Open incident</h3><p>Start the evidence record before investigation.</p></div></div>
+            <label>Title<input value={incidentForm.title} onChange={(event) => setIncidentForm({ ...incidentForm, title: event.target.value })}/></label>
+            <label>Severity<select value={incidentForm.severity} onChange={(event) => setIncidentForm({ ...incidentForm, severity: event.target.value })}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+            <label>Affected process<select value={incidentForm.blueprintId} onChange={(event) => setIncidentForm({ ...incidentForm, blueprintId: event.target.value })}><option value="">Tenant-wide / unknown</option>{data.processes.map((process) => <option key={process.id} value={process.id}>{process.name}</option>)}</select></label>
+            <label>Known impact<textarea value={incidentForm.impact} onChange={(event) => setIncidentForm({ ...incidentForm, impact: event.target.value })}/></label>
+            <button className="primary" disabled={incidentBusy} onClick={() => void openIncident()}>Open incident</button>
+          </div>
+        </div>
+      </div>
       <div className="governance-bottom">
         <article className="model-inventory panel">
           <div className="section-head">
@@ -584,6 +645,15 @@ function Governance({
       </div>
     </section>
   );
+}
+
+function nextIncidentActions(status: string) {
+  if (status === "open") return ["investigating", "contained"];
+  if (status === "investigating") return ["contained", "resolved"];
+  if (status === "contained") return ["monitoring", "resolved"];
+  if (status === "monitoring") return ["resolved", "investigating"];
+  if (status === "resolved") return ["closed", "investigating"];
+  return [];
 }
 
 function Title({

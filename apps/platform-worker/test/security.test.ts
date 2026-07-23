@@ -89,4 +89,14 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_bootstrap_runs"))).toBe(false);
   });
+
+  it("prevents viewers from changing tenant containment mode", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/tenant/mode", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ mode: "emergency_stop", reason: "Unauthorized attempt" })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("INSERT INTO tenant_operating_controls"))).toBe(false);
+  });
 });
