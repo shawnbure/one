@@ -12,8 +12,12 @@ function workflowEnvironment(rules: unknown[] = []) {
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
+          if (sql.includes("SELECT process_release_id FROM executions")) return { process_release_id: "release-v1" };
           if (sql.includes("FROM agent_blueprints")) return { id: "renewal-review", tenant_id: "tenant-1", name: "Renewal Review", description: "Review",
-            execution_profile: "workflow", model_profile: "reasoning", prompt_release_id: "prompt-v1", autonomy: "approve", status: "active", tools_json: "[]", updated_at: "now", operating_mode: "active" };
+            execution_profile: "workflow", model_profile: "reasoning", prompt_release_id: "prompt-v1",
+            resolved_release_id: "release-v1", resolved_prompt_release_id: "prompt-v1",
+            resolved_model_profile: "reasoning", resolved_autonomy: "approve",
+            autonomy: "approve", status: "active", tools_json: "[]", updated_at: "now", operating_mode: "active" };
           if (sql.includes("FROM prompt_releases")) return { id: "prompt-v1", blueprint_id: "renewal-review", version: 1, system_prompt: "Review safely",
             instructions_json: "[]", guardrails_json: '["No contract changes"]', checksum: "abc", published_at: "now" };
           return null;

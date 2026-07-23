@@ -41,9 +41,9 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 
 ## Architecture boundary
 
-D1 is the source of truth for published process and prompt releases. A durable Agent checks whether its configured release is already installed; D1 is read only when a new release must be copied into that actor's local SQLite database. Later turns use the local copy. The stable Agent identity is also passed to Workers AI as `sessionAffinity`, allowing Cloudflare's model infrastructure to improve prefix-cache locality without KV.
+D1 is the source of truth for published process and prompt releases. A durable Agent checks whether its configured release is already installed; D1 is read only when a new release must be copied into that actor's local SQLite database. Later turns use the local copy and retain that actor's installed release even after a newer release is published. New actors receive the current release; migration of an existing conversation must be explicit. The stable Agent identity is also passed to Workers AI as `sessionAffinity`, allowing Cloudflare's model infrastructure to improve prefix-cache locality without KV.
 
-Instant executions deliberately have no durable identity and load their release from D1. Workflow executions use Cloudflare Workflows for retryable, long-lived orchestration. Queues absorb independent bursts; they are not used as a substitute for ordered actor state.
+Instant executions deliberately have no durable identity and load their release from D1. Workflow executions use Cloudflare Workflows for retryable, long-lived orchestration and reload the exact release captured in the execution record at admission. Queues absorb independent bursts; they are not used as a substitute for ordered actor state.
 
 Friendly model profiles are authoring defaults, not mutable runtime aliases. Draft creation records the exact Workers AI model ID in the release; instant Workers, durable Agents, Workflows, evaluation runs, governance exports, privacy reports, and process packages all consume or expose that pinned value. Changing a profile mapping affects only later drafts, and an unknown model fails closed.
 

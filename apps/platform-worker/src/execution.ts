@@ -1,7 +1,7 @@
 import { getAgentByName } from "agents";
 import { instanceKeyFor, type ExecutionRequest, type ExecutionResult, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
-import { getBlueprint, getPromptBundle } from "./repository";
+import { getBlueprint, getBlueprintForRelease, getPromptBundle } from "./repository";
 import type { ProcessAgent } from "./agent";
 import type { Env } from "./types";
 import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
@@ -13,8 +13,20 @@ import { autonomyPlan, routeApproval } from "./autonomy";
 import { recordShadowReview } from "./shadow";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
-  const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
+  let blueprint = await getBlueprint(env, tenantId, request.blueprintId);
   if (!blueprint) throw new Error("Process not found");
+  const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
+  let durableAgent: DurableObjectStub<ProcessAgent> | null = null;
+  if (instanceKey) {
+    durableAgent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey);
+    await durableAgent.bindTenant(tenantId, blueprint.id);
+    const pinnedReleaseId = await durableAgent.pinnedReleaseId();
+    if (pinnedReleaseId && pinnedReleaseId !== blueprint.activeReleaseId) {
+      const pinnedBlueprint = await getBlueprintForRelease(env, tenantId, blueprint.id, pinnedReleaseId);
+      if (!pinnedBlueprint) throw new Error("Agent actor references an unavailable process release");
+      blueprint = pinnedBlueprint;
+    }
+  }
   const admission = await executionAdmission(env, tenantId, blueprint.status, blueprint.operatingMode ?? "active");
   if (admission.error) throw new Error(admission.error);
   if (blueprint.status === "draft") throw new Error("Process is draft");
@@ -30,7 +42,6 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   if (inputDlp.blocked) throw new DlpBlockedError(inputDlp.blockedDetectors);
   const contracts = parseContracts(blueprint.inputSchemaJson, blueprint.outputSchemaJson);
   const autonomy = autonomyPlan(blueprint);
-  const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
   const startedAt = new Date().toISOString();
   let contractedInput;
   try {
@@ -111,8 +122,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
         ...(approvalId ? {} : safeResult), startedAt };
     }
 
-    const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey!);
-    await agent.bindTenant(tenantId, blueprint.id);
+    const agent = durableAgent!;
     if (!await agent.hasPromptRelease(promptReleaseId)) {
       agent.installPromptBundle(await requiredPrompt(env, promptReleaseId), tenantId);
     }

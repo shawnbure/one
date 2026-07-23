@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { ExecutionRequest } from "@workrr/contracts";
-import { getBlueprint, getPromptBundle } from "./repository";
+import { getBlueprintForRelease, getPromptBundle } from "./repository";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { emitNotification } from "./notifications";
@@ -18,7 +18,11 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
     const { tenantId, request } = event.payload;
     try {
     const context = await step.do("load immutable process release", async () => {
-      const blueprint = await getBlueprint(this.env, tenantId, request.blueprintId);
+      const admitted = await this.env.DB.prepare(`SELECT process_release_id FROM executions
+        WHERE id=? AND tenant_id=? AND blueprint_id=?`).bind(event.instanceId, tenantId, request.blueprintId)
+        .first<{ process_release_id: string | null }>();
+      if (!admitted?.process_release_id) throw new Error("Workflow execution has no admitted process release");
+      const blueprint = await getBlueprintForRelease(this.env, tenantId, request.blueprintId, admitted.process_release_id);
       if (!blueprint) throw new Error("Process not found");
       if (!blueprint.promptReleaseId) throw new Error("Process has no published release");
       const prompt = await getPromptBundle(this.env, blueprint.promptReleaseId);

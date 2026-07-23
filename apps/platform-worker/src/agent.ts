@@ -81,6 +81,10 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     }
   }
 
+  pinnedReleaseId(): string | null {
+    return this.state.releaseId;
+  }
+
   installPromptBundle(bundle: PromptBundle, tenantId: string): void {
     this.sql`INSERT OR REPLACE INTO prompt_bundle
       (release_id, blueprint_id, version, bundle_json, checksum, installed_at)

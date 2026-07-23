@@ -294,6 +294,8 @@ Requests are pinned to a release ID at run creation. They never depend on mutabl
 
 The release bundle also contains the exact Workers AI model ID. Profile names such as `fast`, `balanced`, and `reasoning` are authoring conveniences; changing their mapping affects only newly created drafts. Instant, Agent, Workflow, evaluation, export, and rollback paths use the model stored with the release, and reject model IDs outside the platform allowlist.
 
+For durable profiles, the Agent actor's installed release wins over the blueprint's newer active release on later turns. The Worker resolves that tenant-scoped immutable release before validating contracts or invoking tools. For Workflow profiles, the execution row's admission-time release wins on every retry. Neither path silently upgrades in-flight or conversational work.
+
 If an Agent has not received the publication event, it may finish in-flight runs on the previous release. New run creation supplies the intended release ID. This gives deterministic behavior with a single authoritative prompt store.
 
 ### 5.4 Prompt composition
