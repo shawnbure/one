@@ -262,6 +262,25 @@ export interface ExecutionMemory {
   migrationAvailable: boolean;
   turns: GovernedMemoryTurn[];
 }
+
+export interface ActorLocalTask {
+  id: string;
+  kind: "queue" | "schedule";
+  label: string;
+  sourceExecutionId: string;
+  status: "queued" | "scheduled" | "running" | "completed" | "cancelled" | "failed";
+  sdkReferenceId: string | null;
+  dueAt: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface ActorLocalWork {
+  available: true;
+  executionProfile: string;
+  tasks: ActorLocalTask[];
+  schedules: Array<{ id: string; type: string; callback: string; time: number }>;
+}
 export interface RecoveryTask {
   id: string;
   execution_id: string;
@@ -1170,6 +1189,20 @@ export const api = {
     ),
   executionMemory: (id: string) =>
     request<{ data: ExecutionMemory }>(`/api/executions/${encodeURIComponent(id)}/memory`),
+  actorLocalWork: (id: string) =>
+    request<{ data: ActorLocalWork }>(`/api/executions/${encodeURIComponent(id)}/actor-work`),
+  queueActorLocalWork: (id: string, label: string) =>
+    request<{ data: { taskId: string; status: string } }>(
+      `/api/executions/${encodeURIComponent(id)}/actor-work/queue`,
+      { method: "POST", body: JSON.stringify({ label }) }),
+  scheduleActorLocalWork: (id: string, label: string, dueAt: string) =>
+    request<{ data: { taskId: string; scheduleId: string; status: string; dueAt: string } }>(
+      `/api/executions/${encodeURIComponent(id)}/actor-work/schedules`,
+      { method: "POST", body: JSON.stringify({ label, dueAt }) }),
+  cancelActorLocalSchedule: (id: string, scheduleId: string) =>
+    request<{ data: { cancelled: boolean } }>(
+      `/api/executions/${encodeURIComponent(id)}/actor-work/schedules/${encodeURIComponent(scheduleId)}`,
+      { method: "DELETE" }),
   governExecutionMemory: (executionId: string, turnId: string, body: {
     action: "correct" | "quarantine" | "restore" | "delete";
     expectedRevision: number;

@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 75,
-  "requiredMigrationName": "0075_maintenance_degraded_alerts.sql"
+  "requiredMigrationId": 76,
+  "requiredMigrationName": "0076_agent_follow_up_notifications.sql"
 }

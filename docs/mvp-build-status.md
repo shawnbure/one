@@ -63,6 +63,8 @@ Durable actors use the Cloudflare Agents SDK and Durable Object SQLite. Many ins
 
 Queues absorb independent bursts and provide retry/DLQ behavior. Workflows provide durable orchestration. Cron performs maintenance and atomically claims a bounded set of due tenant schedules, then hands them to Queue without running AI inline. These primitives are complementary and must not be collapsed into one generic runner.
 
+Durable profiles also expose actor-local FIFO tasks and timed follow-ups through the Cloudflare Agents SDK. Workrr resolves the actor from a tenant-scoped execution; clients never submit a Durable Object name. Task descriptions pass through tenant DLP and remain in actor SQLite, while the SDK persists queue and schedule state across Worker eviction. Due follow-ups emit an owned in-app response task. Instant and Workflow profiles reject this surface because they intentionally have no sticky actor identity. Activity presents these controls only for durable executions and keeps platform Cron→Queue schedules visibly separate.
+
 Every published release also declares an autonomy level that is enforced at runtime:
 
 - `observe` records the accepted input without invoking Workers AI.
@@ -245,6 +247,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 73. `0073_value_target_review_alerts.sql`: deduplicated due-soon and overdue target-review notifications with accountable in-app ownership and opt-in external delivery policies.
 74. `0074_maintenance_run_evidence.sql`: bounded platform maintenance receipts with per-control health and failure evidence.
 75. `0075_maintenance_degraded_alerts.sql`: owned critical response policy for degraded hourly platform maintenance.
+76. `0076_agent_follow_up_notifications.sql`: owned in-app response policy for Durable Object actor follow-ups.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

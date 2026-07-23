@@ -24,7 +24,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
+import { api, type ActorLocalWork, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
   type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
   type QueueOperationsData, type RecoveryOperations, type RecoveryTask, type SessionData,
   type ShadowReview,
@@ -250,6 +250,9 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                 onSaved={setShadowReview} onNotice={onNotice}/>}
               {hasActorMemory(detail.execution_profile) && canGovernMemory(session) &&
                 <MemoryGovernance key={detail.id} executionId={detail.id} onNotice={onNotice}/>}
+              {hasActorMemory(detail.execution_profile) &&
+                <ActorLocalWorkPanel key={`work-${detail.id}`} executionId={detail.id}
+                  session={session} onNotice={onNotice}/>}
               {detail.autonomy_disposition && (
                 <div className={`autonomy-evidence ${detail.autonomy_disposition}`}>
                   <ShieldCheck size={17} />
@@ -774,6 +777,70 @@ function MemoryGovernance({ executionId, onNotice }: {
         value={reason} onChange={(event) => setReason(event.target.value)}/></label>
       <button disabled={loading || !reason.trim() || (edit.action === "correct" && !content.trim())}
         onClick={() => void save()}>Apply governed change</button></div>}
+  </section>;
+}
+
+function ActorLocalWorkPanel({ executionId, session, onNotice }: {
+  executionId: string; session: SessionData | null; onNotice: (message: string) => void;
+}) {
+  const [work, setWork] = useState<ActorLocalWork | null>(null);
+  const [label, setLabel] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const canManage = ["admin", "builder", "owner", "operator"].includes(session?.user.role ?? "");
+  async function load() {
+    try { setWork((await api.actorLocalWork(executionId)).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Actor-local work could not load"); }
+  }
+  useEffect(() => { void load(); }, [executionId]);
+  async function queueNow() {
+    if (label.trim().length < 3) return onNotice("Describe the actor task with at least three characters.");
+    setBusy(true);
+    try {
+      await api.queueActorLocalWork(executionId, label.trim());
+      setLabel(""); await load(); onNotice("Task queued inside this durable actor.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Actor task could not be queued"); }
+    finally { setBusy(false); }
+  }
+  async function schedule() {
+    if (label.trim().length < 3 || !dueAt) return onNotice("Add a task description and due time.");
+    setBusy(true);
+    try {
+      await api.scheduleActorLocalWork(executionId, label.trim(), new Date(dueAt).toISOString());
+      setLabel(""); setDueAt(""); await load(); onNotice("Durable actor follow-up scheduled.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Follow-up could not be scheduled"); }
+    finally { setBusy(false); }
+  }
+  async function cancel(scheduleId: string) {
+    setBusy(true);
+    try {
+      await api.cancelActorLocalSchedule(executionId, scheduleId);
+      await load(); onNotice("Actor follow-up cancelled.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Follow-up could not be cancelled"); }
+    finally { setBusy(false); }
+  }
+  return <section className="actor-local-work">
+    <header><span><Clock3 size={20}/></span><div><small>DURABLE ACTOR WORK</small>
+      <h2>Tasks that stay with this actor</h2>
+      <p>FIFO tasks and timed follow-ups live in the Durable Object. Worker restarts do not lose them, and D1 is not read on every turn.</p>
+    </div><button disabled={busy} onClick={() => void load()} aria-label="Refresh actor work"><RefreshCw size={15}/></button></header>
+    {canManage && <div className="actor-work-composer">
+      <label>Task or follow-up description<input maxLength={160} value={label}
+        placeholder="Review the customer response and notify the process owner"
+        onChange={(event) => setLabel(event.target.value)}/></label>
+      <label>Follow-up time<input type="datetime-local" value={dueAt}
+        onChange={(event) => setDueAt(event.target.value)}/></label>
+      <div><button disabled={busy || label.trim().length < 3} onClick={() => void queueNow()}>Queue now</button>
+        <button disabled={busy || label.trim().length < 3 || !dueAt} onClick={() => void schedule()}>Schedule follow-up</button></div>
+      <small>Descriptions pass through tenant DLP before actor storage. Follow-ups may be scheduled from 10 seconds to 30 days.</small>
+    </div>}
+    <div className="actor-work-list">{work?.tasks.length ? work.tasks.map((task) =>
+      <article key={task.id} className={task.status}><div><strong>{task.label}</strong>
+        <small>{task.kind === "schedule" && task.dueAt ? `Due ${formatDate(task.dueAt)}` :
+          `Created ${formatDate(task.createdAt)}`}</small></div><span>{task.status.replaceAll("_", " ")}</span>
+        {canManage && task.kind === "schedule" && task.status === "scheduled" && task.sdkReferenceId &&
+          <button disabled={busy} onClick={() => void cancel(task.sdkReferenceId!)}>Cancel</button>}</article>)
+      : <p>No actor-local tasks or follow-ups have been created.</p>}</div>
   </section>;
 }
 

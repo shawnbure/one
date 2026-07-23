@@ -956,6 +956,8 @@ Deliverables:
 - Queue-backed webhook handoff with idempotency and a configured DLQ.
 - one Agent-local queued task and one Agent schedule to prove the actor-local patterns.
 
+Implemented boundary: the Activity and API surfaces accept an execution ID only. The Worker verifies tenant ownership, resolves the persisted instance key, and permits Agent-local FIFO work and schedules only for `conversation`, `consumer`, `entity`, `shared_shard`, and `temporary_durable` profiles. Descriptions are DLP-filtered before entering Agent SQLite. Cloudflare Agents SDK queue/schedule records survive isolate eviction; cancellation and actor retirement clean up native schedules and queued callbacks. A due follow-up emits an owned operational notification, while `instant` and `workflow` profiles remain intentionally non-sticky.
+
 Exit criteria: an administrator can build, publish, run, approve, inspect, replay, and roll back a complete agent flow.
 
 ### Phase 2 — FDE usability
