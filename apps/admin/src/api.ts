@@ -154,6 +154,15 @@ export interface ProcessTemplate {
   tools_json: string;
   category: string;
 }
+export interface Member {
+  id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  status: string;
+  created_at: string;
+  last_seen_at: string | null;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -275,4 +284,15 @@ export const api = {
       "/api/processes",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  members: () => request<{ data: Member[] }>("/api/members"),
+  createMember: (body: { email: string; name: string; role: string }) =>
+    request<{ id: string; status: string }>("/api/members", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateMember: (id: string, body: { role?: string; status?: string }) =>
+    request<{ updated: boolean }>(`/api/members/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };

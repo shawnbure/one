@@ -36,12 +36,14 @@ import {
 } from "./api";
 import "./live.css";
 import "./wizard.css";
+import "./team.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";
 import { FoundationView } from "./FoundationViews";
 import { ApiLogsView } from "./ApiLogsView";
 import { CreateProcessWizard } from "./CreateProcessWizard";
+import { TeamRolesView } from "./TeamRolesView";
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -261,11 +263,11 @@ export function App() {
               <small>Cloudflare dedicated</small>
             </div>
           </div>
-          <button>
+          <button onClick={() => setActive("Governance")}>
             <Settings2 size={17} />
             Settings
           </button>
-          <button>
+          <button onClick={() => setActive("Team & roles")}>
             <Users size={17} />
             Team & roles
           </button>
@@ -315,7 +317,9 @@ export function App() {
               <X size={14} />
             </button>
           )}
-          {active === "Work inbox" ? (
+          {active === "Team & roles" ? (
+            <TeamRolesView session={session} onNotice={setNotice} />
+          ) : active === "Work inbox" ? (
             <WorkInbox
               items={approvals}
               session={session}

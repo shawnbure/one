@@ -35,6 +35,37 @@ app.get("/api/session", (c) => c.json({
   tenantId: c.get("tenantId")
 }));
 
+app.get("/api/members", requireRoles("admin", "owner", "viewer"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role, status, created_at, last_seen_at
+    FROM tenant_members WHERE tenant_id = ? ORDER BY display_name`).bind(c.get("tenantId")).all();
+  return c.json({ data: results });
+});
+
+app.post("/api/members", requireRoles("admin"), async (c) => {
+  const body = await c.req.json<{ email?: string; name?: string; role?: string }>();
+  const validRoles = ["admin", "builder", "owner", "operator", "reviewer", "viewer", "consumer"];
+  if (!body.email || !body.name || !body.role || !validRoles.includes(body.role)) return c.json({ error: "Name, email, and a valid role are required" }, 400);
+  const id = crypto.randomUUID();
+  try {
+    await c.env.DB.prepare(`INSERT INTO tenant_members (id, tenant_id, email, display_name, role) VALUES (?, ?, ?, ?, ?)`)
+      .bind(id, c.get("tenantId"), body.email.trim().toLowerCase(), body.name.trim(), body.role).run();
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "member.created", "member", id, { email: body.email, role: body.role });
+    return c.json({ id, status: "active" }, 201);
+  } catch (error) { return c.json({ error: String(error).includes("UNIQUE") ? "That email is already a member" : "Member creation failed" }, 409); }
+});
+
+app.patch("/api/members/:id", requireRoles("admin"), async (c) => {
+  const memberId = c.req.param("id");
+  const body = await c.req.json<{ role?: string; status?: string }>();
+  const validRoles = ["admin", "builder", "owner", "operator", "reviewer", "viewer", "consumer"];
+  if (!memberId || (body.role && !validRoles.includes(body.role)) || (body.status && !["active", "suspended"].includes(body.status))) return c.json({ error: "Invalid membership update" }, 400);
+  if (memberId === c.get("actorId") && body.status === "suspended") return c.json({ error: "You cannot suspend your own membership" }, 409);
+  const result = await c.env.DB.prepare(`UPDATE tenant_members SET role = COALESCE(?, role), status = COALESCE(?, status)
+    WHERE id = ? AND tenant_id = ?`).bind(body.role ?? null, body.status ?? null, memberId, c.get("tenantId")).run();
+  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "member.updated", "member", memberId, body);
+  return c.json({ updated: result.meta.changes === 1 });
+});
+
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
 
 app.get("/api/process-templates", requireRoles("admin", "builder", "owner"), async (c) => {
