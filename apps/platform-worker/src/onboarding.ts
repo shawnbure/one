@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { provisionGovernanceReviews } from "./governance-reviews";
 import { createProcessFromTemplate, type CreateProcessInput } from "./discovery";
 
 export interface OnboardingManifest {
@@ -154,6 +155,7 @@ export async function bootstrapCustomer(env: Env, tenantId: string, actorId: str
       (tenant_id, model_id, enabled, updated_by)
       SELECT ?, model_id, 1, ? FROM model_catalog WHERE status='active'`)
       .bind(tenantId, actorId).run();
+    await provisionGovernanceReviews(env, tenantId);
     await provisionDefaultControls(env, tenantId, actorId, checksum);
     let memberId = actorId;
     if (canonical.member) {

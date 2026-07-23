@@ -113,6 +113,8 @@ Governance derives model readiness from existing control-plane evidence rather t
 
 Owners and admins can now approve the exact Cloudflare-hosted models available to their organization. The policy is enforced when a draft is created, published, restored, evaluated, or compared; newly cataloged models remain unavailable until approved. Existing tenants are seeded with their current catalog to preserve behavior, while customer bootstrap establishes the same explicit baseline. Removal fails closed when an active release or any known sticky durable actor still uses the model, so ordinary runtime requests need no additional D1 policy read.
 
+Governance now includes four accountable quarterly customer reviews: privacy and architecture, AI model inventory, Access and roles, and incident/recovery readiness. Each obligation has an explicit due state and affects deployment readiness. An owner or administrator completes it with a bounded evidence reference and substantive notes; Workrr records the accountable actor, schedules the next review from its cadence, and writes an immutable audit event. New and existing tenants receive the same baseline, and no review query is added to agent execution.
+
 Every incomplete deployment-readiness finding carries a stable remediation destination and a customer-readable action label. Governance routes operators directly to customer setup, service principals, processes, evaluations, connections, delivery, knowledge, tools, or API logs rather than leaving them to interpret a passive warning. Mutations remain protected by the destination surface's existing role checks.
 
 Do not add KV for prompts unless measurement proves a distinct global distribution need. It would add another consistency boundary without replacing durable conversation memory.
@@ -254,6 +256,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 78. `0078_process_budgets.sql`: tenant-scoped per-process monthly AI allocation, warning, and hard-limit policy.
 79. `0079_budget_threshold_alerts.sql`: monthly tenant/process threshold receipts and default accountable notification routing.
 80. `0080_tenant_model_policy.sql`: owner-controlled tenant Workers AI model approvals, seeded safely for existing tenants.
+81. `0081_governance_reviews.sql`: accountable quarterly privacy, model, access, and recovery review obligations.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

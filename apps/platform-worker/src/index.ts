@@ -12,6 +12,7 @@ import { createWebhookEndpoint, listWebhookReceipts, setWebhookEndpointStatus,
   updateWebhookEndpoint } from "./webhook-operations";
 import { getGovernance } from "./governance";
 import { updateTenantModelPolicy } from "./model-governance";
+import { completeGovernanceReview } from "./governance-reviews";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { recordValueMeasurement, voidValueMeasurement } from "./value-evidence";
@@ -1716,6 +1717,21 @@ app.patch("/api/governance/models/:modelId", requireRoles("admin", "owner"), asy
   } catch (error) {
     const message = error instanceof Error ? error.message : "Model policy could not be updated";
     return c.json({ error: message }, message.includes("active process") ? 409 : message.includes("not found") ? 404 : 400);
+  }
+});
+
+app.post("/api/governance/reviews/:reviewKey/complete", requireRoles("admin", "owner"), async (c) => {
+  const reviewKey = c.req.param("reviewKey");
+  try {
+    if (!reviewKey) return c.json({ error: "Governance review is required" }, 400);
+    const body = await c.req.json<{ evidenceReference?: string; notes?: string }>();
+    const result = await completeGovernanceReview(c.env, c.get("tenantId"), c.get("actorId"), reviewKey, body);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+      "governance_review.completed", "governance_review", reviewKey, result);
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Governance review could not be completed";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 400);
   }
 });
 

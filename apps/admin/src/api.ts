@@ -546,6 +546,12 @@ export interface GovernanceData {
   }>;
   modelPolicy: Array<{ model_id: string; label: string; provider: string; status: string;
     enabled: number; active_processes: number }>;
+  governanceReviews: Array<{
+    review_key: string; name: string; description: string; cadence_days: number;
+    next_due_at: string; last_completed_at: string | null; last_completed_by: string | null;
+    evidence_reference: string | null; completion_notes: string | null;
+    status: "current" | "due" | "overdue";
+  }>;
   readiness: Array<{
     id: string;
     label: string;
@@ -1338,6 +1344,10 @@ export const api = {
     request<{ data: { modelId: string; enabled: boolean } }>(
       `/api/governance/models/${encodeURIComponent(modelId)}`,
       { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  completeGovernanceReview: (reviewKey: string, body: { evidenceReference: string; notes: string }) =>
+    request<{ data: { reviewKey: string; evidenceReference: string; nextDueInDays: number } }>(
+      `/api/governance/reviews/${encodeURIComponent(reviewKey)}/complete`,
+      { method: "POST", body: JSON.stringify(body) }),
   retention: () => request<{ data: RetentionOperationsData }>("/api/governance/retention"),
   retentionPreview: () => request<{ data: RetentionPreview }>("/api/governance/retention/preview"),
   updateRetention: (body: {

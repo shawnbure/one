@@ -1002,6 +1002,8 @@ Hourly Cron evaluates budget thresholds through one bounded aggregate query and 
 
 Exit criteria: multiple tenants can operate with measurable isolation, reliability, and cost controls.
 
+Customer governance uses recurring control-plane reviews rather than informal calendar reminders. Each tenant receives quarterly privacy/architecture, model inventory, access/role, and incident/recovery obligations. Due or overdue reviews degrade readiness; accountable completion requires an evidence reference and notes, advances the next due date, and emits audit evidence. These records are queried only by governance surfaces and never by agent hot paths.
+
 ### Phase 4 — AI Gateway handoff
 
 Deliverables:

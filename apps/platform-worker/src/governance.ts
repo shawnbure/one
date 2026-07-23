@@ -4,7 +4,7 @@ import { getDeploymentVerification } from "./deployment-verification";
 export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
-    tenantControl, dlpRules, dlpEvents, tools, modelPolicy] = await Promise.all([
+    tenantControl, dlpRules, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
       b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id,
       r.evaluation_status, r.evaluated_at,
@@ -56,6 +56,14 @@ export async function getGovernance(env: Env, tenantId: string) {
       LEFT JOIN tenant_model_policies p ON p.tenant_id=? AND p.model_id=m.model_id
       WHERE m.status='active' ORDER BY m.input_usd_per_million, m.model_id`)
       .bind(tenantId, tenantId).all()
+    ,
+    env.DB.prepare(`SELECT review_key, name, description, cadence_days, next_due_at,
+      last_completed_at, last_completed_by, evidence_reference, completion_notes,
+      CASE WHEN julianday(next_due_at) < julianday('now') THEN 'overdue'
+        WHEN julianday(next_due_at) <= julianday('now', '+14 days') THEN 'due'
+        ELSE 'current' END status
+      FROM tenant_governance_reviews WHERE tenant_id=? ORDER BY next_due_at, name`)
+      .bind(tenantId).all()
   ]);
   const processRows = processes.results as Array<Record<string, unknown>>;
   const connectionRows = connections.results as Array<Record<string, unknown>>;
@@ -87,6 +95,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     deploymentVerification,
     models,
     modelPolicy: modelPolicy.results,
+    governanceReviews: governanceReviews.results,
     readiness: [
       { id: "identity", label: "Cloudflare Access trust boundary", ready: Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), detail: env.ACCESS_TEAM_DOMAIN ? "JWT verification configured" : "Access application configuration required", action: "Customer setup", actionLabel: "Open setup" },
       ...deploymentVerification.checks.map((check) => ({ ...check, action: check.id === "service-principal" ? "Team & roles" : "Customer setup", actionLabel: check.id === "service-principal" ? "Manage principals" : "Open verification" })),
@@ -105,6 +114,12 @@ export async function getGovernance(env: Env, tenantId: string) {
       { id: "retention", label: "Retention and deletion policy", ready: retention.results.length > 0, detail: `${retention.results.length} policies defined`, action: "Governance", actionLabel: "Review retention" },
       { id: "dlp", label: "Model-boundary DLP policy", ready: dlpRules.results.length === 6,
         detail: `${dlpRules.results.filter((row) => Number((row as Record<string, unknown>).enabled) === 1).length}/6 detectors enabled`, action: "Governance", actionLabel: "Review DLP" },
+      { id: "governance-reviews", label: "Periodic governance reviews",
+        ready: governanceReviews.results.length === 4 && governanceReviews.results.every((row) =>
+          String((row as Record<string, unknown>).status) === "current"),
+        detail: `${governanceReviews.results.filter((row) =>
+          String((row as Record<string, unknown>).status) === "current").length}/${governanceReviews.results.length} reviews current`,
+        action: "Governance", actionLabel: "Complete reviews" },
       { id: "knowledge", label: "Governed knowledge review", ready: knowledgeRows.every((row) =>
         !row.object_key || (row.status === "ready" && (!row.expires_at || new Date(String(row.expires_at)) > new Date()))),
         detail: `${knowledgeRows.filter((row) => row.object_key && row.status === "ready").length}/${knowledgeRows.filter((row) => row.object_key).length} indexed sources retrieval-ready`, action: "Knowledge", actionLabel: "Review knowledge" },

@@ -23,6 +23,8 @@ const report: PrivacyArchitectureReport = {
   humanOversight: { pendingDecisions: 1, consequentialActions: 1, processPolicies: [] },
   loggingAndExport: ["Consequential actions are audited."],
   releaseInventory: [{ process: "Invoice review", processRelease: "release-1" }],
+  governanceReviews: [{ name: "Privacy and architecture", status: "current",
+    next_due_at: "2026-10-23T00:00:00.000Z" }],
   readiness: [{ id: "identity", label: "Access boundary", ready: true, detail: "Configured" }],
   subprocessors: [{ provider: "Cloudflare", purpose: "Runtime", enabledBy: "Deployment" }],
   limitations: ["Not a compliance certification."]
@@ -34,7 +36,7 @@ describe("privacy and architecture report", () => {
     for (const heading of [
       "Operating posture", "Cloudflare architecture", "AI processes and human oversight", "Models",
       "Data sources", "Storage, retention, and deletion", "Connections and credential scopes",
-      "External destinations", "Typed tool boundary", "Release inventory", "Logging and export behavior",
+      "External destinations", "Typed tool boundary", "Release inventory", "Periodic governance reviews", "Logging and export behavior",
       "Subprocessors and platform services", "Deployment readiness", "Important limitations"
     ]) expect(html).toContain(heading);
     expect(html).toContain("Example &lt;Operations&gt;");

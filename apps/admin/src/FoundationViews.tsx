@@ -1181,6 +1181,8 @@ function Governance({
   const [incidentBusy, setIncidentBusy] = useState(false);
   const [dlpBusy, setDlpBusy] = useState<string | null>(null);
   const [modelPolicyBusy, setModelPolicyBusy] = useState<string | null>(null);
+  const [reviewBusy, setReviewBusy] = useState<string | null>(null);
+  const [reviewForm, setReviewForm] = useState({ reviewKey: "", evidenceReference: "", notes: "" });
   const [retention, setRetention] = useState<RetentionOperationsData | null>(null);
   const [retentionPreview, setRetentionPreview] = useState<RetentionPreview | null>(null);
   const [retentionBusy, setRetentionBusy] = useState(false);
@@ -1203,6 +1205,17 @@ function Governance({
         : "Cloudflare model removed from future releases and evaluations.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "Model policy could not change"); }
     finally { setModelPolicyBusy(null); }
+  }
+  async function completeReview() {
+    if (!reviewForm.reviewKey) return;
+    setReviewBusy(reviewForm.reviewKey);
+    try {
+      await api.completeGovernanceReview(reviewForm.reviewKey, reviewForm);
+      setReviewForm({ reviewKey: "", evidenceReference: "", notes: "" });
+      await onReload();
+      onNotice("Governance review completed with attributable evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Governance review could not be completed"); }
+    finally { setReviewBusy(null); }
   }
   async function loadRetention() {
     try {
@@ -1479,6 +1492,33 @@ function Governance({
         </div>
       </div>
       <div className="governance-bottom">
+        <article className="governance-reviews panel">
+          <div className="section-head"><div><span className="eyebrow"><ShieldCheck size={14}/> ACCOUNTABLE REVIEW CYCLE</span>
+            <h2>Periodic governance reviews</h2>
+            <p>Quarterly customer attestations turn live controls into owned operating evidence.</p>
+          </div></div>
+          <div className="governance-review-list">
+            {data.governanceReviews.map((review) => <button key={review.review_key}
+              className={`governance-review-row ${review.status}`}
+              onClick={() => setReviewForm({ reviewKey: review.review_key,
+                evidenceReference: review.evidence_reference || "", notes: "" })}>
+              <span><strong>{review.name}</strong><small>{review.description}</small>
+                <small>{review.last_completed_at ? `Last completed ${dateTime(review.last_completed_at)}` : "First review pending"}</small></span>
+              <span><em>{review.status}</em><small>Due {dateTime(review.next_due_at)}</small></span>
+            </button>)}
+          </div>
+          {reviewForm.reviewKey && <div className="governance-review-form">
+            <label>Evidence reference<input value={reviewForm.evidenceReference}
+              placeholder="Privacy report, ticket, meeting record, or audit reference"
+              onChange={(event) => setReviewForm({ ...reviewForm, evidenceReference: event.target.value })}/></label>
+            <label>Review notes<textarea value={reviewForm.notes}
+              placeholder="What was reviewed, what changed, and who owns any follow-up?"
+              onChange={(event) => setReviewForm({ ...reviewForm, notes: event.target.value })}/></label>
+            <div><button onClick={() => setReviewForm({ reviewKey: "", evidenceReference: "", notes: "" })}>Cancel</button>
+              <button className="primary" disabled={!canManageModels || Boolean(reviewBusy)}
+                onClick={() => void completeReview()}>Complete review</button></div>
+          </div>}
+        </article>
         <article className="model-policy panel">
           <div className="section-head"><div><span className="eyebrow"><ShieldCheck size={14}/> ORGANIZATION MODEL POLICY</span>
             <h2>Approved Cloudflare models</h2>

@@ -19,6 +19,7 @@ export interface PrivacyArchitectureReport {
   humanOversight: { pendingDecisions: number; consequentialActions: number; processPolicies: Row[] };
   loggingAndExport: string[];
   releaseInventory: Row[];
+  governanceReviews: Row[];
   readiness: Array<{ id: string; label: string; ready: boolean; detail: string }>;
   subprocessors: Array<{ provider: string; purpose: string; enabledBy: string }>;
   limitations: string[];
@@ -26,7 +27,8 @@ export interface PrivacyArchitectureReport {
 
 export async function getPrivacyArchitectureReport(env: Env, tenantId: string, generatedBy: string,
   readiness: PrivacyArchitectureReport["readiness"]): Promise<PrivacyArchitectureReport> {
-  const [tenant, processes, knowledge, webhooks, retention, connections, tools, notifications, approvals] =
+  const [tenant, processes, knowledge, webhooks, retention, connections, tools, notifications, approvals,
+    governanceReviews] =
     await Promise.all([
       env.DB.prepare("SELECT id, name FROM tenants WHERE id=?").bind(tenantId).first<Row>(),
       env.DB.prepare(`SELECT b.id, b.name, b.department, b.business_owner, b.risk_level, b.status,
@@ -57,7 +59,13 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       env.DB.prepare(`SELECT event_type, channel, destination, enabled, severity
         FROM notification_policies WHERE tenant_id=? ORDER BY channel, event_type`).bind(tenantId).all<Row>(),
       env.DB.prepare(`SELECT status, COUNT(*) count FROM approvals WHERE tenant_id=? GROUP BY status`)
-        .bind(tenantId).all<Row>()
+        .bind(tenantId).all<Row>(),
+      env.DB.prepare(`SELECT name, cadence_days, next_due_at, last_completed_at,
+        last_completed_by, evidence_reference,
+        CASE WHEN julianday(next_due_at) < julianday('now') THEN 'overdue'
+          WHEN julianday(next_due_at) <= julianday('now', '+14 days') THEN 'due'
+          ELSE 'current' END status
+        FROM tenant_governance_reviews WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>()
     ]);
   const processRows = processes.results;
   const connectionRows = connections.results;
@@ -155,6 +163,7 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       process: row.name, promptRelease: row.prompt_release_id, processRelease: row.active_release_id,
       modelProfile: row.model_profile
     })),
+    governanceReviews: governanceReviews.results,
     readiness,
     subprocessors: [
       { provider: "Cloudflare", purpose: "Application runtime, storage, orchestration, security, and default inference",
@@ -199,6 +208,7 @@ ${section("Connections and credential scopes", rows(report.credentials))}
 ${section("External destinations", rows(report.externalDestinations))}
 ${section("Typed tool boundary", rows(report.tools))}
 ${section("Release inventory", rows(report.releaseInventory))}
+${section("Periodic governance reviews", rows(report.governanceReviews))}
 ${section("Logging and export behavior", list(report.loggingAndExport))}
 ${section("Subprocessors and platform services", rows(report.subprocessors))}
 ${section("Deployment readiness", rows(report.readiness.map((item) => ({ control: item.label, ready: item.ready ? "Ready" : "Needs attention", detail: item.detail }))))}

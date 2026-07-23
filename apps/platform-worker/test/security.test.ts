@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 80, name: "0080_tenant_model_policy.sql", applied_at: "2026-07-23 22:00:00"
+            id: 81, name: "0081_governance_reviews.sql", applied_at: "2026-07-23 22:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -561,6 +561,20 @@ describe("control-plane security boundary", () => {
     }), env as never, executionCtx as never);
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_bootstrap_runs"))).toBe(false);
+  });
+
+  it("prevents viewers from completing accountable governance reviews", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request(
+      "http://localhost/api/governance/reviews/privacy_architecture/complete", {
+        method: "POST",
+        headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ evidenceReference: "ticket-123",
+          notes: "Attempted review without accountable owner authority." }),
+      }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("UPDATE tenant_governance_reviews"))).toBe(false);
   });
 
   it("prevents builders and viewers from activating a rollback", async () => {

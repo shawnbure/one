@@ -28,3 +28,35 @@
   font-weight: 800;
 }
 .model-policy-toggle input { width: 18px; height: 18px; }
+
+.governance-reviews { grid-column: 1 / -1; overflow: hidden; }
+.governance-reviews > .section-head { padding: 19px 20px; border-bottom: 1px solid #e1e8e4; }
+.governance-review-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.governance-review-row {
+  appearance: none; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px; padding: 16px 18px; border: 0; border-right: 1px solid #e8eeeb;
+  border-bottom: 1px solid #e8eeeb; background: #fff; color: #263d33;
+  text-align: left; cursor: pointer;
+}
+.governance-review-row:nth-child(2n) { border-right: 0; }
+.governance-review-row:hover { background: #f7faf8; }
+.governance-review-row > span:last-child { text-align: right; }
+.governance-review-row strong, .governance-review-row small { display: block; }
+.governance-review-row strong { font-size: 14px; }
+.governance-review-row small { margin-top: 4px; color: #65766e; font-size: 13px; line-height: 1.4; }
+.governance-review-row em { color: #277554; font-size: 12px; font-style: normal; font-weight: 850; text-transform: uppercase; }
+.governance-review-row.due em { color: #9a6700; }
+.governance-review-row.overdue em { color: #b42318; }
+.governance-review-form {
+  display: grid; grid-template-columns: minmax(220px, .65fr) minmax(300px, 1.35fr) auto;
+  gap: 12px; align-items: end; padding: 16px 18px; background: #f7faf8;
+}
+.governance-review-form label { color: #40564c; font-size: 13px; font-weight: 750; }
+.governance-review-form input, .governance-review-form textarea { width: 100%; margin-top: 6px; }
+.governance-review-form textarea { min-height: 74px; resize: vertical; }
+.governance-review-form > div { display: flex; gap: 8px; padding-bottom: 1px; }
+@media (max-width: 900px) {
+  .governance-review-list { grid-template-columns: 1fr; }
+  .governance-review-row { border-right: 0; }
+  .governance-review-form { grid-template-columns: 1fr; }
+}
