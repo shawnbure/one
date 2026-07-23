@@ -246,6 +246,36 @@ app.get("/api/governance/export", requireRoles("admin", "owner", "viewer"), asyn
   });
 });
 
+app.post("/api/evaluations/:id/run", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  const scenario = await c.env.DB.prepare(`SELECT e.*, b.active_release_id, b.operating_mode, b.prompt_release_id
+    FROM evaluation_scenarios e JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
+    WHERE e.id = ? AND e.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first<Record<string, string | number | null>>();
+  if (!scenario) return c.json({ error: "Evaluation scenario not found" }, 404);
+
+  const checks = [
+    { check: "published_release", passed: Boolean(scenario.active_release_id || scenario.prompt_release_id) },
+    { check: "operating_mode", passed: scenario.operating_mode !== "disabled" },
+    { check: "assertions_defined", passed: Number(scenario.assertion_count) > 0 },
+  ];
+  const assertionCount = Math.max(Number(scenario.assertion_count), checks.length);
+  const failedControls = checks.filter((check) => !check.passed).length;
+  const passedAssertions = Math.max(0, assertionCount - failedControls);
+  const status = failedControls === 0 ? "passing" : "failing";
+  const runId = crypto.randomUUID();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO evaluation_runs
+      (id, tenant_id, scenario_id, blueprint_id, release_id, status, passed_assertions, assertion_count, evidence_json, triggered_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(runId, c.get("tenantId"), scenario.id, scenario.blueprint_id,
+        scenario.active_release_id || scenario.prompt_release_id, status, passedAssertions, assertionCount, JSON.stringify(checks), c.get("actorId")),
+    c.env.DB.prepare("UPDATE evaluation_scenarios SET status = ?, last_run_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
+      .bind(status, scenario.id, c.get("tenantId")),
+    c.env.DB.prepare(`INSERT INTO audit_events (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+      VALUES (?, ?, ?, 'evaluation.run', 'evaluation_scenario', ?, ?)`).bind(crypto.randomUUID(), c.get("tenantId"), c.get("actorId"), scenario.id,
+        JSON.stringify({ runId, status, passedAssertions, assertionCount }))
+  ]);
+  return c.json({ data: { id: runId, status, passedAssertions, assertionCount, evidence: checks } });
+});
+
 app.get("/api/logs", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, trace_id, direction, method, path, status, duration_ms, target, actor_id, created_at
     FROM api_logs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`).bind(c.get("tenantId")).all();

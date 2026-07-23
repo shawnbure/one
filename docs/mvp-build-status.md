@@ -83,8 +83,9 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 4. `0004_governance_foundations.sql`: operating controls and governance data.
 5. `0005_webhooks_and_api_logs.sql`: webhook and API observability records.
 6. `0006_process_discovery.sql`: discovery intake and value baselines.
+7. `0007_evaluation_runs.sql`: persisted deterministic release-gate evidence.
 
-Development has all six migrations. Production migration remains an explicit reviewed release action.
+Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
 ## Environments and deployment
 

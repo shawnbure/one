@@ -301,4 +301,5 @@ export const api = {
       body: JSON.stringify(body),
     }),
   value: () => request<{ data: ValueData }>("/api/value"),
+  runEvaluation: (id: string) => request<{ data: { id: string; status: string; passedAssertions: number; assertionCount: number } }>(`/api/evaluations/${id}/run`, { method: "POST" }),
 };

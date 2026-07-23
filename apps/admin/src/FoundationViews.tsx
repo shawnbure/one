@@ -45,7 +45,7 @@ export function FoundationView({ section, onNotice }: Props) {
     return <div className="loading-card">Loading {section.toLowerCase()}…</div>;
   if (section === "Connections") return <Connections data={data} />;
   if (section === "Knowledge") return <Knowledge data={data} />;
-  if (section === "Evaluations") return <Evaluations data={data} />;
+  if (section === "Evaluations") return <Evaluations data={data} onReload={load} onNotice={onNotice} />;
   return <Governance data={data} onReload={load} onNotice={onNotice} />;
 }
 
@@ -185,10 +185,23 @@ function Knowledge({ data }: { data: GovernanceData }) {
     </section>
   );
 }
-function Evaluations({ data }: { data: GovernanceData }) {
+function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
+  const [running, setRunning] = useState<string | null>(null);
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
   ).length;
+  async function run(id: string) {
+    setRunning(id);
+    try {
+      const result = await api.runEvaluation(id);
+      onNotice(`Evaluation ${result.data.status}: ${result.data.passedAssertions}/${result.data.assertionCount} assertions`);
+      await onReload();
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Evaluation could not run");
+    } finally {
+      setRunning(null);
+    }
+  }
   return (
     <section className="foundation-page">
       <Title
@@ -241,6 +254,9 @@ function Evaluations({ data }: { data: GovernanceData }) {
               <i />
               {item.status}
             </span>
+            <button disabled={running === item.id} onClick={() => void run(String(item.id))}>
+              <RefreshCw size={14} /> {running === item.id ? "Running…" : "Run"}
+            </button>
           </article>
         ))}
       </div>
