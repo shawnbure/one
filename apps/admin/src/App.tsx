@@ -28,6 +28,7 @@ import {
   Code2,
   CircleDollarSign,
   Lightbulb,
+  BookOpen,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import {
@@ -56,6 +57,7 @@ import { CustomerSetupView } from "./CustomerSetupView";
 import { NotificationsView } from "./NotificationsView";
 import { UsageView } from "./UsageView";
 import { OpportunitiesView } from "./OpportunitiesView";
+import { HelpCenterView } from "./HelpCenterView";
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -299,6 +301,10 @@ export function App() {
             <Users size={17} />
             Team & roles
           </button>
+          <button onClick={() => setActive("Help Center")}>
+            <BookOpen size={17} />
+            Help Center
+          </button>
         </div>
       </aside>
 
@@ -353,6 +359,8 @@ export function App() {
             <CustomerSetupView session={session} onNotice={setNotice} />
           ) : active === "Team & roles" ? (
             <TeamRolesView session={session} onNotice={setNotice} />
+          ) : active === "Help Center" ? (
+            <HelpCenterView session={session} onNotice={setNotice} />
           ) : active === "Work inbox" ? (
             <WorkInbox
               items={approvals}

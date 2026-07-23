@@ -16,6 +16,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - HMAC-signed outbound webhook and delegated Microsoft 365 email notifications with destination validation, Queue retries, delivery testing, and persisted attempt evidence.
 - Tenant-scoped credential references whose values remain in Cloudflare secrets rather than D1, exports, logs, or browser bundles.
 - An idempotent customer launch package that establishes branding, membership, a paused first process, discovery baseline, evaluation gate, and immutable draft release without duplicating records on retry.
+- A role-specific Help Center with versioned training acknowledgements, plain-language Cloudflare execution concepts, and live tenant process runbooks for no-dev customer operations.
 - A release quality lab with curated golden cases, expected/prohibited output assertions, exact-release Workers AI runs, weighted scoring, release comparison, and token/cost evidence.
 - Durable Cloudflare Workflow evaluation suites with human scorecards and explicit promotion of stored, truncated production previews into regression cases.
 - Parallel, independently retriable Workflow evaluation steps for up to 100 curated cases, with customer-weighted groundedness, completeness, safety, clarity, and format evidence.

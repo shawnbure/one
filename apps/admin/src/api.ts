@@ -41,6 +41,21 @@ export interface SessionData {
   accentColor: string;
 }
 
+export interface HelpCenterData {
+  roleGuide: { title: string; firstAction: string; escalation: string };
+  progress: { completed: number; total: number };
+  modules: Array<{
+    id: string; version: number; title: string; summary: string; minutes: number;
+    steps: string[]; acknowledgedAt: string | null;
+  }>;
+  concepts: Array<{ name: string; detail: string }>;
+  processRunbooks: Array<{
+    id: string; name: string; execution_profile: string; autonomy: string; status: string;
+    business_owner: string; department: string; risk_level: string; purpose: string;
+    steps: string[]; memory: string; start: string; exception: string;
+  }>;
+}
+
 export interface ApprovalDetail extends Approval {
   blueprint_id: string;
   input_preview: string;
@@ -673,6 +688,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  helpCenter: () => request<{ data: HelpCenterData }>("/api/help-center"),
+  acknowledgeLearning: (moduleId: string, version: number) =>
+    request<{ data: { moduleId: string; version: number; acknowledgedAt: string; recorded: boolean } }>(
+      `/api/help-center/modules/${encodeURIComponent(moduleId)}/acknowledge`,
+      { method: "POST", body: JSON.stringify({ version }) }),
   session: () => request<SessionData>("/api/session"),
   processes: () => request<{ data: AgentBlueprint[] }>("/api/processes"),
   overview: () => request<OverviewData>("/api/overview"),

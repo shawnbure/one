@@ -44,6 +44,7 @@ import { disposeProcess, enqueueDueProcessDisposals, getProcessRetirement, reque
   transitionProcessRetirement } from "./retirement";
 import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperations, previewRetention,
   updateRetentionControls } from "./retention";
+import { acknowledgeLearning, getHelpCenter } from "./help-center";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -89,6 +90,29 @@ app.get("/api/session", async (c) => {
     user: { id: c.get("actorId"), email: c.get("actorEmail"), name: c.get("actorName"), role: c.get("role") },
     tenantId: c.get("tenantId"), tenantName: tenant?.name ?? c.get("tenantId"), accentColor: tenant?.accent_color ?? "#1f7a5b"
   });
+});
+
+app.get("/api/help-center", async (c) =>
+  c.json({ data: await getHelpCenter(c.env, c.get("tenantId"), c.get("actorId"), c.get("role")) }));
+
+app.post("/api/help-center/modules/:moduleId/acknowledge", async (c) => {
+  try {
+    const moduleId = c.req.param("moduleId");
+    const body = await c.req.json<{ version?: number }>();
+    if (!moduleId || !Number.isInteger(body.version) || Number(body.version) < 1) {
+      return c.json({ error: "A valid learning module and version are required" }, 400);
+    }
+    const data = await acknowledgeLearning(
+      c.env, c.get("tenantId"), c.get("actorId"), c.get("role"), moduleId, Number(body.version)
+    );
+    if (data.recorded) {
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "learning.module.acknowledged",
+        "learning_module", moduleId, { version: body.version });
+    }
+    return c.json({ data }, data.recorded ? 201 : 200);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Training acknowledgement failed" }, 400);
+  }
 });
 
 app.get("/api/onboarding", requireRoles("admin", "owner", "viewer"), async (c) =>

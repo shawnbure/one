@@ -182,6 +182,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 47. `0047_tenant_retention_controls.sql`: tenant lifecycle periods, legal hold, daily enforcement state, and auditable content-expiry evidence.
 48. `0048_billing_reconciliation.sql`: normalized Cloudflare billing evidence, estimate variance, checksum idempotency, and non-destructive correction history.
 49. `0049_rubric_key_rotation.sql`: publisher key validity, predecessor-signed successor proofs, tenant rollover approval, overlap evidence, and expiry state.
+50. `0050_learning_center.sql`: tenant- and actor-scoped, versioned training acknowledgement evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -254,6 +255,8 @@ Organizations may maintain up to 20 tenant-scoped rubric templates, each contain
 Rubric libraries export as `workrr-rubrics/v1` packages containing only names, descriptions, bounded criteria, dimensions, weights, and prior activation state. Tenant IDs, D1 IDs, actors, credentials, and secret values are excluded. Destination imports merge idempotently by case-insensitive name, reject sensitive content and packages beyond the 20-template ceiling, write new rows in one D1 batch, and keep every imported template archived until a destination administrator explicitly reviews and restores it. Viewers may export standards; only owners, admins, and builders may import them.
 
 Production inputs are never sampled automatically. An authorized user may explicitly promote only the already-stored, truncated execution preview into a case. Before persistence, Workrr masks common email, phone, SSN, payment-card, and secret-token patterns and records redaction counts/types. This is a safety net, not a substitute for customer data-classification policy or a full DLP engine. Much larger batch datasets should add Workflow fan-out rather than extending one inference step indefinitely.
+
+The Help Center turns the platform's implementation boundaries into customer-operable guidance. Each signed-in user receives a short learning path selected by their server-resolved tenant role, with versioned acknowledgement evidence scoped to that tenant and actor. Administrator, builder, owner, operator, reviewer, viewer, and consumer guidance uses different first actions and escalation paths. Plain-language concepts distinguish instant agents from Agent SDK durable actors, Workflows, Queues, and approval records. Live process runbooks are derived from tenant process/discovery data and state the owner, status, autonomy, operating steps, exception path, and exact memory behavior for that execution profile. Documentation remains code-versioned while D1 stores only compact acknowledgement evidence and dynamic tenant reporting; it does not add a per-request content cache.
 
 ## Remaining aggressive-MVP work
 

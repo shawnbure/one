@@ -152,6 +152,19 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("UPDATE connections SET credential_expires_at"))).toBe(false);
   });
 
+  it("does not let a viewer acknowledge privileged administrator training", async () => {
+    const viewer = environment("viewer");
+    const response = await app.fetch(new Request(
+      "http://localhost/api/help-center/modules/customer-administration/acknowledge", {
+        method: "POST",
+        headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ version: 1 })
+      }), viewer.env as never, executionCtx as never);
+    expect(response.status).toBe(400);
+    expect(viewer.queries.some((sql) => sql.includes("INSERT OR IGNORE INTO learning_acknowledgements"))).toBe(false);
+  });
+
   it("lets viewers inspect opportunities but not capture, qualify, or convert them", async () => {
     const viewer = environment("viewer");
     const list = await app.fetch(new Request("http://localhost/api/opportunities", {
