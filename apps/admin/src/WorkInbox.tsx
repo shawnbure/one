@@ -42,6 +42,23 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
     finally { setBusy(false); }
   }
 
+  async function operateAction(action: ToolActionDispatch, operation: "retry" | "cancel") {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      const result = operation === "retry"
+        ? await api.retryToolAction(action.id)
+        : await api.cancelToolAction(action.id, note.trim() || undefined);
+      onNotice(operation === "retry"
+        ? `Approved action is ${result.status.replaceAll("_", " ")}. Provider idempotency remains unchanged.`
+        : "Approved action delivery was cancelled before provider completion.");
+      const refreshed = await api.approval(detail.id);
+      setDetail(refreshed.data); setAudit(refreshed.audit); setActions(refreshed.actions);
+      await onRefresh();
+    } catch (error) { onNotice(error instanceof Error ? error.message : `Action ${operation} failed`); }
+    finally { setBusy(false); }
+  }
+
   if (selectedId) return <section className="inbox-page detail-page">
     <button className="back-link" onClick={() => setSelectedId(null)}><ArrowLeft size={15}/>Back to work inbox</button>
     {!detail ? <div className="loading-card">Loading review evidence…</div> : <div className="review-layout">
@@ -59,6 +76,10 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
           {actions.map((action) => <span key={action.id}><strong>{action.tool_name.replaceAll("_", " ")}</strong>
             <small>{action.status.replaceAll("_", " ")} · {action.attempt_count} attempt{action.attempt_count === 1 ? "" : "s"}</small>
             <em>{action.provider_resource_id ? `Provider confirmed resource ${action.provider_resource_id}` : action.last_error ?? actionStatus(action.status)}</em>
+            {canOperate(session) && action.status === "failed" &&
+              <button disabled={busy} onClick={() => void operateAction(action, "retry")}>Retry safely</button>}
+            {canOperate(session) && ["pending", "queued", "retrying", "enqueue_failed"].includes(action.status) &&
+              <button disabled={busy} onClick={() => void operateAction(action, "cancel")}>Cancel delivery</button>}
           </span>)}
         </div>}
         <div className="decision-context"><span><ShieldCheck size={17}/><div><strong>{detail.impact} impact</strong><small>{detail.autonomy_level ? `${detail.autonomy_level} autonomy routed this proposal to review` : "Human authorization required by process policy"}</small></div></span><span><UserRound size={17}/><div><strong>{detail.assigned_to ?? "Unassigned"}</strong><small>Assigned reviewer</small></div></span></div>
@@ -93,6 +114,10 @@ function actionStatus(status: ToolActionDispatch["status"]): string {
   if (status === "processing") return "Calling the fixed provider adapter.";
   if (status === "retrying") return "A bounded Queue retry is pending.";
   return "No provider completion was recorded.";
+}
+
+function canOperate(session: SessionData | null) {
+  return Boolean(session && ["admin", "owner", "operator"].includes(session.user.role));
 }
 
 function formatDate(value: string): string {

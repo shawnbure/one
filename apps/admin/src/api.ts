@@ -513,6 +513,16 @@ export const api = {
       `/api/approvals/${encodeURIComponent(id)}/${decision}`,
       { method: "POST", body: JSON.stringify({ note }) },
     ),
+  retryToolAction: (id: string) =>
+    request<{ updated: boolean; status: string }>(
+      `/api/tool-actions/${encodeURIComponent(id)}/retry`,
+      { method: "POST" },
+    ),
+  cancelToolAction: (id: string, note?: string) =>
+    request<{ updated: boolean; status: string }>(
+      `/api/tool-actions/${encodeURIComponent(id)}/cancel`,
+      { method: "POST", body: JSON.stringify({ note }) },
+    ),
   assignApproval: (id: string, assignedTo: string) =>
     request<{ updated: boolean }>(
       `/api/approvals/${encodeURIComponent(id)}/assign`,

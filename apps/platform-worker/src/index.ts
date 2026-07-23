@@ -24,7 +24,8 @@ import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, mar
 import { ContractViolationError, isContractViolation } from "./contracts";
 import { createTool, listTools, setToolBindings, setToolEnabled } from "./tools";
 import { listBoundAdapters } from "./tool-adapters";
-import { decideApproval, enqueueRecoverableToolActions, markToolActionFailure, processToolAction } from "./tool-actions";
+import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markToolActionFailure,
+  processToolAction, retryToolAction } from "./tool-actions";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -514,8 +515,10 @@ app.get("/api/executions/:id", async (c) => {
       .bind(c.get("tenantId"), executionId).all(),
     c.env.DB.prepare(`SELECT actor_id, event_type, target_type, target_id, detail_json, created_at FROM audit_events
       WHERE tenant_id = ? AND ((target_type = 'execution' AND target_id = ?) OR
-      (target_type = 'approval' AND target_id IN (SELECT id FROM approvals WHERE execution_id = ?))) ORDER BY created_at`)
-      .bind(c.get("tenantId"), executionId, executionId).all(),
+      (target_type = 'approval' AND target_id IN (SELECT id FROM approvals WHERE execution_id = ?)) OR
+      (target_type = 'tool_action' AND target_id IN
+        (SELECT id FROM tool_action_dispatches WHERE tenant_id=? AND execution_id=?))) ORDER BY created_at`)
+      .bind(c.get("tenantId"), executionId, executionId, c.get("tenantId"), executionId).all(),
     c.env.DB.prepare(`SELECT source_id, source_name, chunk_id, ordinal, score, provenance, excerpt, created_at
       FROM execution_knowledge_citations WHERE tenant_id=? AND execution_id=? ORDER BY ordinal`)
       .bind(c.get("tenantId"), executionId).all(),
@@ -626,8 +629,10 @@ app.get("/api/approvals/:id", async (c) => {
       FROM approvals a JOIN executions e ON e.id = a.execution_id
       WHERE a.id = ? AND a.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first(),
     c.env.DB.prepare(`SELECT actor_id, event_type, detail_json, created_at FROM audit_events
-      WHERE tenant_id = ? AND target_type = 'approval' AND target_id = ? ORDER BY created_at`)
-      .bind(c.get("tenantId"), c.req.param("id")).all(),
+      WHERE tenant_id = ? AND ((target_type = 'approval' AND target_id = ?) OR
+        (target_type = 'tool_action' AND target_id IN
+          (SELECT id FROM tool_action_dispatches WHERE tenant_id=? AND approval_id=?))) ORDER BY created_at`)
+      .bind(c.get("tenantId"), c.req.param("id"), c.get("tenantId"), c.req.param("id")).all(),
     c.env.DB.prepare(`SELECT d.*, i.tool_name, i.handler_key, i.input_json, i.output_json
       FROM tool_action_dispatches d JOIN tool_invocations i ON i.id=d.invocation_id AND i.tenant_id=d.tenant_id
       WHERE d.tenant_id=? AND d.approval_id=? ORDER BY d.created_at`)
@@ -645,6 +650,27 @@ app.post("/api/approvals/:id/assign", requireRoles("admin", "owner", "operator",
     .bind(body.assignedTo, approvalId, c.get("tenantId")).run();
   if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "approval.assigned", "approval", approvalId, { assignedTo: body.assignedTo });
   return c.json({ updated: result.meta.changes === 1 });
+});
+
+app.post("/api/tool-actions/:id/retry", requireRoles("admin", "owner", "operator"), async (c) => {
+  const dispatchId = c.req.param("id");
+  if (!dispatchId) return c.json({ error: "Approved action ID is required" }, 400);
+  try {
+    return c.json(await retryToolAction(c.env, c.get("tenantId"), c.get("actorId"), dispatchId), 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Approved action retry failed" }, 409);
+  }
+});
+
+app.post("/api/tool-actions/:id/cancel", requireRoles("admin", "owner", "operator"), async (c) => {
+  const dispatchId = c.req.param("id");
+  if (!dispatchId) return c.json({ error: "Approved action ID is required" }, 400);
+  const body: { note?: string } = await c.req.json<{ note?: string }>().catch(() => ({}));
+  try {
+    return c.json(await cancelToolAction(c.env, c.get("tenantId"), c.get("actorId"), dispatchId, body.note));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Approved action cancellation failed" }, 409);
+  }
 });
 
 app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {

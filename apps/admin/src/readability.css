@@ -364,6 +364,18 @@ a:focus-visible {
 .run-tool-evidence > span { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #e7ece9; }
 .run-tool-evidence strong,
 .run-tool-evidence small { font-size: 12px; line-height: 1.45; }
+.run-tool-evidence > span button {
+  flex: 0 0 auto;
+  align-self: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #c9d8d1;
+  border-radius: 7px;
+  background: #fff;
+  color: #315f4c;
+  font-size: 12px;
+  font-weight: 700;
+}
 .evidence-block pre {
   margin: 12px 0 0;
   padding: 12px;

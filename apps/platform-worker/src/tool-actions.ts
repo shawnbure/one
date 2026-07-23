@@ -47,7 +47,7 @@ export async function decideApproval(env: Env, tenantId: string, actorId: string
       env.DB.prepare(`UPDATE executions SET status='blocked', autonomy_disposition='rejected', completed_at=?
         WHERE tenant_id=? AND approval_id=? AND status='waiting_approval'`)
         .bind(decidedAt, tenantId, approvalId),
-      audit(env, tenantId, actorId, `approval.${decision}`, approvalId,
+      audit(env, tenantId, actorId, `approval.${decision}`, "approval", approvalId,
         { decision, note, proposedInvocations: proposed.map((item) => item.id) })
     ]);
     return { updated: true, dispatched: 0, enqueueFailed: 0 };
@@ -59,7 +59,7 @@ export async function decideApproval(env: Env, tenantId: string, actorId: string
       env.DB.prepare(`UPDATE executions SET status='completed', autonomy_disposition='approved', completed_at=COALESCE(completed_at, ?)
         WHERE tenant_id=? AND approval_id=? AND status='waiting_approval'`)
         .bind(decidedAt, tenantId, approvalId),
-      audit(env, tenantId, actorId, `approval.${decision}`, approvalId, { decision, note, dispatched: 0 })
+      audit(env, tenantId, actorId, `approval.${decision}`, "approval", approvalId, { decision, note, dispatched: 0 })
     ]);
     return { updated: true, dispatched: 0, enqueueFailed: 0 };
   }
@@ -75,7 +75,7 @@ export async function decideApproval(env: Env, tenantId: string, actorId: string
     env.DB.prepare(`UPDATE executions SET status='queued', autonomy_disposition='approved_action_queued',
       completed_at=NULL WHERE tenant_id=? AND approval_id=? AND status='waiting_approval'`)
       .bind(tenantId, approvalId),
-    audit(env, tenantId, actorId, `approval.${decision}`, approvalId,
+    audit(env, tenantId, actorId, `approval.${decision}`, "approval", approvalId,
       { decision, note, dispatches: dispatches.map((item) => item.id) })
   ]);
   let enqueueFailed = 0;
@@ -97,10 +97,81 @@ export async function decideApproval(env: Env, tenantId: string, actorId: string
   return { updated: true, dispatched: dispatches.length, enqueueFailed };
 }
 
+export async function retryToolAction(env: Env, tenantId: string, actorId: string, dispatchId: string) {
+  const now = new Date().toISOString();
+  const dispatch = await env.DB.prepare(`SELECT d.execution_id, d.invocation_id, d.status,
+    a.status approval_status FROM tool_action_dispatches d
+    JOIN approvals a ON a.id=d.approval_id AND a.tenant_id=d.tenant_id
+    WHERE d.id=? AND d.tenant_id=?`).bind(dispatchId, tenantId).first<{
+      execution_id: string; invocation_id: string; status: string; approval_status: string;
+    }>();
+  if (!dispatch) throw new Error("Approved tool action was not found");
+  if (dispatch.approval_status !== "approved") throw new Error("The action no longer has an approved decision");
+  if (dispatch.status !== "failed") throw new Error("Only a terminally failed action can be retried manually");
+  const claimed = await env.DB.prepare(`UPDATE tool_action_dispatches SET status='pending', last_error=NULL,
+    completed_at=NULL, updated_at=? WHERE id=? AND tenant_id=? AND status='failed'`)
+    .bind(now, dispatchId, tenantId).run();
+  if (claimed.meta.changes !== 1) return { updated: false, status: dispatch.status };
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE tool_invocations SET status='proposed', error=NULL, completed_at=NULL
+      WHERE id=? AND tenant_id=?`).bind(dispatch.invocation_id, tenantId),
+    env.DB.prepare(`UPDATE executions SET status='queued', error=NULL, completed_at=NULL,
+      autonomy_disposition='approved_action_queued' WHERE id=? AND tenant_id=?`)
+      .bind(dispatch.execution_id, tenantId),
+    audit(env, tenantId, actorId, "tool_action.retry_requested", "tool_action", dispatchId, {
+      executionId: dispatch.execution_id, invocationId: dispatch.invocation_id
+    })
+  ]);
+  try {
+    await env.PROCESS_QUEUE.send({ kind: "tool_action", tenantId, dispatchId } satisfies ToolActionJob,
+      { contentType: "json" });
+    await env.DB.prepare(`UPDATE tool_action_dispatches SET status='queued', enqueued_at=?,
+      updated_at=? WHERE id=? AND tenant_id=? AND status='pending'`)
+      .bind(now, now, dispatchId, tenantId).run();
+    return { updated: true, status: "queued" };
+  } catch (error) {
+    await env.DB.prepare(`UPDATE tool_action_dispatches SET status='enqueue_failed', last_error=?,
+      updated_at=? WHERE id=? AND tenant_id=? AND status='pending'`)
+      .bind(message(error), now, dispatchId, tenantId).run();
+    return { updated: true, status: "enqueue_failed" };
+  }
+}
+
+export async function cancelToolAction(env: Env, tenantId: string, actorId: string, dispatchId: string,
+  note?: string) {
+  const now = new Date().toISOString();
+  const dispatch = await env.DB.prepare(`SELECT execution_id, invocation_id, status
+    FROM tool_action_dispatches WHERE id=? AND tenant_id=?`).bind(dispatchId, tenantId).first<{
+      execution_id: string; invocation_id: string; status: string;
+    }>();
+  if (!dispatch) throw new Error("Approved tool action was not found");
+  const result = await env.DB.prepare(`UPDATE tool_action_dispatches SET status='rejected',
+    last_error=?, completed_at=?, updated_at=? WHERE id=? AND tenant_id=?
+    AND status IN ('pending','queued','retrying','enqueue_failed')`)
+    .bind(note?.trim().slice(0, 500) || "Cancelled by an authorized operator", now, now, dispatchId, tenantId).run();
+  if (result.meta.changes !== 1) {
+    throw new Error(`An action in ${dispatch.status.replaceAll("_", " ")} state cannot be cancelled`);
+  }
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE tool_invocations SET status='denied', error=?, completed_at=?
+      WHERE id=? AND tenant_id=? AND status='proposed'`)
+      .bind("Approved action delivery cancelled by an authorized operator", now, dispatch.invocation_id, tenantId),
+    env.DB.prepare(`UPDATE executions SET status='blocked', error=NULL, completed_at=?,
+      autonomy_disposition='approved_action_cancelled' WHERE id=? AND tenant_id=?`)
+      .bind(now, dispatch.execution_id, tenantId),
+    audit(env, tenantId, actorId, "tool_action.cancelled", "tool_action", dispatchId, {
+      executionId: dispatch.execution_id, invocationId: dispatch.invocation_id, note: note?.trim().slice(0, 500) || null
+    })
+  ]);
+  return { updated: true, status: "rejected" };
+}
+
 export async function processToolAction(env: Env, job: ToolActionJob) {
   const dispatch = await loadDispatch(env, job.tenantId, job.dispatchId);
   if (!dispatch) throw new Error("Approved tool action dispatch was not found");
-  if (dispatch.status === "completed") return { duplicate: true, providerResourceId: null };
+  if (["completed", "failed", "rejected"].includes(dispatch.status)) {
+    return { duplicate: true, providerResourceId: dispatch.status === "completed" ? null : undefined };
+  }
   const claimed = await env.DB.prepare(`UPDATE tool_action_dispatches SET status='processing',
     attempt_count=attempt_count+1, started_at=COALESCE(started_at, CURRENT_TIMESTAMP),
     updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=? AND status IN ('queued','retrying','enqueue_failed')`)
@@ -122,7 +193,7 @@ export async function processToolAction(env: Env, job: ToolActionJob) {
     env.DB.prepare(`UPDATE tool_invocations SET status='completed', output_json=?, error=NULL,
       completed_at=? WHERE id=? AND tenant_id=?`)
       .bind(JSON.stringify(result.evidenceOutput).slice(0, 8000), completedAt, current.invocation_id, job.tenantId),
-    audit(env, job.tenantId, "system", "tool_action.completed", current.id, {
+    audit(env, job.tenantId, "system", "tool_action.completed", "tool_action", current.id, {
       invocationId: current.invocation_id, providerResourceId: result.providerResourceId
     })
   ]);
@@ -150,6 +221,8 @@ export async function markToolActionFailure(env: Env, job: ToolActionJob, error:
     );
   }
   await env.DB.batch(statements);
+  await audit(env, job.tenantId, "system", terminal ? "tool_action.failed" : "tool_action.retry_scheduled",
+    "tool_action", job.dispatchId, { executionId: dispatch.execution_id, error: message(error), terminal }).run();
   if (terminal) await emitNotification(env, job.tenantId, {
     eventType: "queue.retry_exhausted", title: "Approved tool action exhausted retries",
     detail: message(error), targetType: "execution", targetId: dispatch.execution_id
@@ -213,11 +286,12 @@ function parseJson(value: string): unknown {
   catch { throw new Error("Approved tool action evidence is not valid JSON"); }
 }
 
-function audit(env: Env, tenantId: string, actorId: string, eventType: string, targetId: string, detail: unknown) {
+function audit(env: Env, tenantId: string, actorId: string, eventType: string, targetType: string,
+  targetId: string, detail: unknown) {
   return env.DB.prepare(`INSERT INTO audit_events
     (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
-    VALUES (?, ?, ?, ?, 'approval', ?, ?)`)
-    .bind(crypto.randomUUID(), tenantId, actorId, eventType, targetId, JSON.stringify(detail));
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), tenantId, actorId, eventType, targetType, targetId, JSON.stringify(detail));
 }
 
 function message(error: unknown) {

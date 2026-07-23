@@ -220,6 +220,20 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("FROM process_queue_jobs q JOIN executions"))).toBe(false);
   });
 
+  it("prevents reviewers and viewers from retrying or cancelling approved action delivery", async () => {
+    for (const role of ["reviewer", "viewer"]) {
+      for (const operation of ["retry", "cancel"]) {
+        const { env, queries } = environment(role);
+        const response = await app.fetch(new Request(`http://localhost/api/tool-actions/action-1/${operation}`, {
+          method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" }, body: "{}"
+        }), env as never, executionCtx as never);
+        expect(response.status).toBe(403);
+        expect(queries.some((sql) => sql.includes("tool_action_dispatches"))).toBe(false);
+      }
+    }
+  });
+
   it("allows viewers to inspect knowledge but not alter source lifecycle", async () => {
     for (const request of [
       new Request("http://localhost/api/knowledge-sources/source-1/reindex", {
