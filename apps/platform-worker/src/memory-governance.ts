@@ -10,6 +10,7 @@ interface ActorReference {
   blueprintId: string;
   instanceKey: string;
   executionProfile: string;
+  processReleaseId: string | null;
 }
 
 export async function listExecutionMemory(env: Env, tenantId: string, executionId: string) {
@@ -17,11 +18,26 @@ export async function listExecutionMemory(env: Env, tenantId: string, executionI
   const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, reference.instanceKey);
   await agent.bindTenant(tenantId, reference.blueprintId);
   const turns = await agent.listGovernedMemory(tenantId, reference.blueprintId, 50);
+  const currentReleaseId = await agent.pinnedReleaseId() ?? reference.processReleaseId;
+  const releases = await env.DB.prepare(`SELECT b.active_release_id, active.version active_version,
+      current.version current_version
+    FROM agent_blueprints b
+    LEFT JOIN process_releases active ON active.id=b.active_release_id AND active.tenant_id=b.tenant_id
+    LEFT JOIN process_releases current ON current.id=? AND current.tenant_id=b.tenant_id
+    WHERE b.id=? AND b.tenant_id=?`).bind(currentReleaseId, reference.blueprintId, tenantId).first<{
+      active_release_id: string | null; active_version: number | null; current_version: number | null;
+    }>();
   return {
     executionProfile: reference.executionProfile,
     storage: "agent_sqlite",
     contextPolicy: { maximumTurns: 20, maximumCharacters: 24_000, maximumCharactersPerTurn: 8_000 },
     durableFactPromotion: "disabled",
+    currentReleaseId,
+    currentVersion: releases?.current_version ?? null,
+    activeReleaseId: releases?.active_release_id ?? null,
+    activeVersion: releases?.active_version ?? null,
+    migrationAvailable: Boolean(currentReleaseId && releases?.active_release_id &&
+      currentReleaseId !== releases.active_release_id),
     turns
   };
 }
@@ -66,9 +82,9 @@ export function validateMemoryChange(raw: {
 }
 
 async function actorReference(env: Env, tenantId: string, executionId: string): Promise<ActorReference> {
-  const execution = await env.DB.prepare(`SELECT blueprint_id, execution_profile, instance_key
+  const execution = await env.DB.prepare(`SELECT blueprint_id, execution_profile, instance_key, process_release_id
     FROM executions WHERE id=? AND tenant_id=?`).bind(executionId, tenantId).first<{
-      blueprint_id: string; execution_profile: string; instance_key: string | null;
+      blueprint_id: string; execution_profile: string; instance_key: string | null; process_release_id: string | null;
     }>();
   if (!execution) throw new Error("Execution was not found");
   if (!durableProfiles.has(execution.execution_profile) || !execution.instance_key) {
@@ -77,6 +93,7 @@ async function actorReference(env: Env, tenantId: string, executionId: string): 
   return {
     blueprintId: execution.blueprint_id,
     instanceKey: execution.instance_key,
-    executionProfile: execution.execution_profile
+    executionProfile: execution.execution_profile,
+    processReleaseId: execution.process_release_id
   };
 }

@@ -296,6 +296,8 @@ The release bundle also contains the exact Workers AI model ID. Profile names su
 
 For durable profiles, the Agent actor's installed release wins over the blueprint's newer active release on later turns. The Worker resolves that tenant-scoped immutable release before validating contracts or invoking tools. For Workflow profiles, the execution row's admission-time release wins on every retry. Neither path silently upgrades in-flight or conversational work.
 
+An explicit actor migration is an operator action, not a side effect of publication. It uses optimistic source-release confirmation, permits only the current published and evaluated target, installs the target prompt bundle inside the serialized Agent actor, retains governed conversation turns, and records tenant-scoped from/to evidence and rationale in D1 and the audit log.
+
 If an Agent has not received the publication event, it may finish in-flight runs on the previous release. New run creation supplies the intended release ID. This gives deterministic behavior with a single authoritative prompt store.
 
 ### 5.4 Prompt composition

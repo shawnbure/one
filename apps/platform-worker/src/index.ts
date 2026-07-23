@@ -50,6 +50,7 @@ import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperatio
 import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConflict, updateHelpRequest } from "./help-center";
 import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence } from "./execution-evidence";
 import { governExecutionMemory, listExecutionMemory } from "./memory-governance";
+import { migrateExecutionActorRelease } from "./actor-release-migration";
 import { getRecoveryOperations, RecoveryConflict, updateRecoveryTask } from "./recovery";
 import { DelegationConflict, listApprovalDelegations, setApprovalDelegation } from "./approval-delegations";
 import { getDeploymentVerification } from "./deployment-verification";
@@ -1044,6 +1045,29 @@ app.patch("/api/executions/:executionId/memory/:turnId",
       const status = isDlpBlocked(error) ? 422 : message.includes("changed") ? 409 :
         message.includes("not found") ? 404 : 400;
       return c.json({ error: message }, status);
+    }
+  });
+
+app.post("/api/executions/:id/actor-release",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const result = await migrateExecutionActorRelease(c.env, c.get("tenantId"), c.get("actorId"),
+        executionId, await c.req.json());
+      if (result.changed) {
+        await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "actor_release.migrated",
+          "execution_actor", executionId, {
+            fromReleaseId: result.fromReleaseId, toReleaseId: result.toReleaseId,
+            targetVersion: result.targetVersion
+          });
+      }
+      c.header("cache-control", "no-store");
+      return c.json({ data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor release could not be migrated";
+      return c.json({ error: message }, message.includes("not found") ? 404 :
+        message.includes("changed") || message.includes("Confirm") ? 409 : 400);
     }
   });
 

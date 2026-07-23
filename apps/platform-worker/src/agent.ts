@@ -92,6 +92,13 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     this.setState({ ...this.state, tenantId, blueprintId: bundle.blueprintId, releaseId: bundle.releaseId });
   }
 
+  migratePromptBundle(bundle: PromptBundle, tenantId: string, expectedFromReleaseId: string): void {
+    if (this.state.releaseId && this.state.releaseId !== expectedFromReleaseId) {
+      throw new Error("Actor release changed; reload before migrating");
+    }
+    this.installPromptBundle(bundle, tenantId);
+  }
+
   async execute(input: string, safeInput: string, modelProfile: string, modelId: string | null, executionId: string,
     outputSchema: ProcessSchema | null = null, persistAssistant = true,
     autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = []): Promise<{

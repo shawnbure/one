@@ -48,6 +48,7 @@ import "./notifications.css";
 import "./usage.css";
 import "./execution-explainer.css";
 import "./memory-governance.css";
+import "./actor-release.css";
 import "./recovery.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";

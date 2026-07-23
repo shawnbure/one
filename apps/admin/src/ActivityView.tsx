@@ -680,6 +680,7 @@ function MemoryGovernance({ executionId, onNotice }: {
     action: "correct" | "quarantine" | "restore" | "delete" } | null>(null);
   const [reason, setReason] = useState("");
   const [content, setContent] = useState("");
+  const [migrationReason, setMigrationReason] = useState("");
 
   async function load() {
     setLoading(true);
@@ -705,6 +706,24 @@ function MemoryGovernance({ executionId, onNotice }: {
     } catch (error) { onNotice(error instanceof Error ? error.message : "Actor memory could not change"); }
     finally { setLoading(false); }
   }
+  async function migrateRelease() {
+    if (!memory?.activeReleaseId || !memory.currentReleaseId || migrationReason.trim().length < 10) {
+      onNotice("Add a specific migration reason of at least ten characters."); return;
+    }
+    setLoading(true);
+    try {
+      const result = await api.migrateExecutionActorRelease(executionId, {
+        targetReleaseId: memory.activeReleaseId,
+        confirmFromReleaseId: memory.currentReleaseId,
+        reason: migrationReason.trim()
+      });
+      await load(); setMigrationReason("");
+      onNotice(result.data.changed
+        ? `Conversation migrated to release v${result.data.targetVersion ?? "current"} with audit evidence.`
+        : "Conversation already uses the current release.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Actor release could not migrate"); }
+    finally { setLoading(false); }
+  }
 
   return <section className="memory-governance">
     <div className="memory-heading"><span><BrainCircuit size={20}/></span><div>
@@ -717,6 +736,21 @@ function MemoryGovernance({ executionId, onNotice }: {
       <span><strong>{memory.contextPolicy.maximumTurns}</strong> turn context ceiling</span>
       <span><strong>{memory.contextPolicy.maximumCharacters.toLocaleString()}</strong> character ceiling</span>
       <span><strong>Off</strong> automatic fact promotion</span>
+    </div>
+    <div className={`actor-release-state ${memory.migrationAvailable ? "update" : "current"}`}>
+      <div><small>INSTALLED RELEASE</small><strong>v{memory.currentVersion ?? "unknown"}</strong>
+        <span>{memory.currentReleaseId ?? "No actor release recorded"}</span></div>
+      <div><small>CURRENT PROCESS RELEASE</small><strong>v{memory.activeVersion ?? "none"}</strong>
+        <span>{memory.activeReleaseId ?? "No published release"}</span></div>
+      {memory.migrationAvailable ? <div className="actor-release-migrate">
+        <label>Migration reason<textarea maxLength={500} value={migrationReason}
+          placeholder="Why should this existing conversation adopt the current release?"
+          onChange={(event) => setMigrationReason(event.target.value)}/></label>
+        <button disabled={loading || migrationReason.trim().length < 10}
+          onClick={() => void migrateRelease()}>Migrate this conversation</button>
+        <small>Memory remains with this actor. Prompt, model, contracts, and tool policy move together.</small>
+      </div> : <em>{memory.currentReleaseId && memory.currentReleaseId === memory.activeReleaseId
+        ? "Current" : "No migration available"}</em>}
     </div>
     <div className="memory-turns">{memory.turns.length ? memory.turns.map((turn) =>
       <article className={turn.status} key={turn.id}><header><span>{turn.role}</span>

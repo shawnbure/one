@@ -206,6 +206,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 57. `0057_approval_delegations.sql`: time-bounded substitute approvers, optimistic delegation revisions, and visible assignment lineage.
 58. `0058_configuration_restores.sql`: checksummed configuration-restore lineage, section counts, source metadata, and attributable apply evidence.
 59. `0059_release_model_pinning.sql`: exact allowlisted Workers AI model identity on every immutable process release, including deterministic backfill for existing profiles.
+60. `0060_actor_release_migrations.sql`: attributable per-actor release transition evidence with exact source/target lineage and operator rationale.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

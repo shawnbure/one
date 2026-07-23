@@ -225,6 +225,11 @@ export interface ExecutionMemory {
   storage: "agent_sqlite";
   contextPolicy: { maximumTurns: number; maximumCharacters: number; maximumCharactersPerTurn: number };
   durableFactPromotion: "disabled";
+  currentReleaseId: string | null;
+  currentVersion: number | null;
+  activeReleaseId: string | null;
+  activeVersion: number | null;
+  migrationAvailable: boolean;
   turns: GovernedMemoryTurn[];
 }
 export interface RecoveryTask {
@@ -931,6 +936,12 @@ export const api = {
   }) => request<{ data: GovernedMemoryTurn }>(
     `/api/executions/${encodeURIComponent(executionId)}/memory/${encodeURIComponent(turnId)}`,
     { method: "PATCH", body: JSON.stringify(body) }),
+  migrateExecutionActorRelease: (executionId: string, body: {
+    targetReleaseId: string; confirmFromReleaseId: string; reason: string;
+  }) => request<{ data: { changed: boolean; fromReleaseId: string; toReleaseId: string;
+    targetVersion: number | null; migratedAt: string | null } }>(
+    `/api/executions/${encodeURIComponent(executionId)}/actor-release`,
+    { method: "POST", body: JSON.stringify(body) }),
   studio: (id: string) =>
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
