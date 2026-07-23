@@ -74,7 +74,7 @@ import { createActorReleaseRollout, listActorReleaseRollouts } from "./actor-rel
 import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
   setLaunchpadThreadArchived } from "./launchpad";
-import { runScheduledMaintenance } from "./maintenance";
+import { emitMaintenanceDegradedAlerts, runScheduledMaintenance } from "./maintenance";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -2285,7 +2285,10 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       { name: "autonomy_safety", run: () => evaluateAllAutonomySafety(env, now) },
       { name: "access_session_expiry", run: () => expireAccessSessions(env, now) },
       { name: "value_target_reviews", run: () => emitValueTargetReviewAlerts(env, now) }
-    ], now));
+    ], now).then(async (result) => {
+      await emitMaintenanceDegradedAlerts(env, result);
+      return result;
+    }));
   }
 };
 

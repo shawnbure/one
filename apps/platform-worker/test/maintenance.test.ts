@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runScheduledMaintenance } from "../src/maintenance";
+import { emitMaintenanceDegradedAlerts, runScheduledMaintenance } from "../src/maintenance";
 
 function fixture(failStart = false) {
   const writes: Array<{ sql: string; bindings: unknown[] }> = [];
@@ -8,6 +8,14 @@ function fixture(failStart = false) {
       let bindings: unknown[] = [];
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
+        async all() {
+          if (sql.includes("SELECT DISTINCT tenant_id")) return { results: [{ tenant_id: "tenant-1" }] };
+          if (sql.includes("SELECT * FROM notification_policies")) return { results: [{
+            id: "policy-1", channel: "in_app", severity: "critical", quiet_hours_enabled: 0,
+            quiet_start_hour_utc: 22, quiet_end_hour_utc: 7, critical_bypass: 1
+          }] };
+          return { results: [] };
+        },
         async run() {
           if (failStart && sql.includes("INSERT INTO platform_maintenance_runs")) throw new Error("ledger unavailable");
           writes.push({ sql, bindings });
@@ -47,5 +55,17 @@ describe("scheduled maintenance evidence", () => {
     expect(result.status).toBe("healthy");
     expect(first).toHaveBeenCalledOnce();
     expect(second).toHaveBeenCalledOnce();
+  });
+
+  it("creates accountable alerts with control names but without internal task errors", async () => {
+    const { env, writes } = fixture();
+    const result = await runScheduledMaintenance(env, [
+      { name: "retention_control", run: async () => { throw new Error("private database detail"); } }
+    ]);
+    const alerts = await emitMaintenanceDegradedAlerts(env, result);
+    expect(alerts).toMatchObject({ tenants: 1, events: 1 });
+    const event = writes.find(({ sql }) => sql.includes("INSERT OR IGNORE INTO notification_events"));
+    expect(JSON.stringify(event?.bindings)).toContain("retention_control");
+    expect(JSON.stringify(event?.bindings)).not.toContain("private database detail");
   });
 });

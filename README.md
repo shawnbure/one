@@ -15,7 +15,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Owner-approved 30-day process targets with volume, effort, value, exception thresholds, review dates, DLP-protected evidence, optimistic revisions, and progress reporting that never promotes autonomy automatically.
 - Hourly bounded target-review reminders with seven-day and overdue stages, D1-enforced per-revision deduplication, accountable in-app response tasks, and opt-in email/webhook delivery.
 - Product-wide readability floors for metadata, body copy, controls, statuses, and mobile touch targets.
-- Failure-isolated hourly maintenance with bounded per-control receipts visible in Customer Setup.
+- Failure-isolated hourly maintenance with bounded per-control receipts and owned degradation alerts visible in Customer Setup.
 - Server-enforced launch readiness that blocks a new release publication until the process has both a discovery baseline and a current owner-approved value target, with the exact evidence shown in Process Studio.
 - A Cloudflare Worker API with verified tenant and role context, immutable releases, execution history and replay, deterministic “why did this happen?” explanations, redacted evidence exports, approvals, audit evidence, operating controls, and deployment exports.
 - Evidence-backed deployment verification that requires an active Access operator service principal and a recent complete tenant-scoped create/read/delete smoke cycle.

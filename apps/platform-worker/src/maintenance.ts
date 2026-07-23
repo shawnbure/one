@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { emitNotification } from "./notifications";
 
 export interface MaintenanceTask {
   name: string;
@@ -55,6 +56,39 @@ export async function runScheduledMaintenance(
   }
   return { id, status: failedCount ? "degraded" as const : "healthy" as const,
     taskCount: tasks.length, failedCount, evidence };
+}
+
+export async function emitMaintenanceDegradedAlerts(
+  env: Env,
+  result: Awaited<ReturnType<typeof runScheduledMaintenance>>,
+) {
+  if (result.status !== "degraded") return { tenants: 0, events: 0 };
+  const failedTasks = result.evidence.filter((item) => item.status === "failed")
+    .map((item) => item.name).slice(0, 14);
+  const { results } = await env.DB.prepare(`SELECT DISTINCT tenant_id
+    FROM notification_policies
+    WHERE event_type='platform.maintenance_degraded' AND enabled=1
+    ORDER BY tenant_id LIMIT 100`).all<{ tenant_id: string }>();
+  let events = 0;
+  for (const row of results) {
+    try {
+      const ids = await emitNotification(env, row.tenant_id, {
+        eventType: "platform.maintenance_degraded",
+        title: "Hourly platform maintenance degraded",
+        detail: `${failedTasks.length} control(s) need operator review: ${failedTasks.join(", ")}. Open Customer Setup for sanitized run evidence.`,
+        targetType: "maintenance_run",
+        targetId: result.id
+      });
+      events += ids.length;
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: "maintenance_degraded_alert_failed",
+        tenantId: row.tenant_id,
+        error: safeError(error)
+      }));
+    }
+  }
+  return { tenants: results.length, events };
 }
 
 function safeError(error: unknown) {
