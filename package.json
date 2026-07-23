@@ -1,0 +1,16 @@
+{
+  "name": "workrr-one",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @workrr/admin",
+    "dev:worker": "npm run dev -w @workrr/platform-worker",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "cf:types": "npm run cf:types -w @workrr/platform-worker"
+  },
+  "engines": { "node": ">=22" }
+}

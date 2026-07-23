@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>workrr one — sales playbook</title>
+<style>
+  @page { size: Letter; margin: 15mm 16mm; }
+  :root{
+    --ink:#191C22; --ink-soft:#4A4F59; --line:#DCDED6;
+    --accent:#1E5945; --accent-deep:#153E30; --tint:#EEF3EF; --stone:#F6F6F2;
+    --serif:Georgia,"Times New Roman",serif;
+    --sans:-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--ink);font-size:10.4pt;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em}
+  p,li{max-width:74ch}
+  .eyebrow{font-family:var(--mono);font-size:7.6pt;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+  header{border-bottom:2px solid var(--accent);padding-bottom:10pt;margin-bottom:14pt}
+  header .brand{font-family:var(--serif);font-size:19pt;margin:3pt 0}
+  header .brand b{color:var(--accent)}
+  header .sub{color:var(--ink-soft);font-size:10.5pt}
+  h2{font-size:13.5pt;color:var(--accent-deep);margin:16pt 0 5pt;padding-top:3pt;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none}
+  h3{font-size:11pt;margin:9pt 0 3pt}
+  p{margin:4pt 0}
+  ul{margin:4pt 0 4pt 0;list-style:none}
+  li{padding-left:14pt;position:relative;margin:2.5pt 0}
+  li::before{content:"–";position:absolute;left:0;color:var(--accent)}
+  .pitch{background:var(--tint);border-radius:4px;padding:11pt 14pt;font-size:11pt;border-left:3px solid var(--accent)}
+  .pitch b{font-family:var(--serif)}
+  table{border-collapse:collapse;width:100%;margin:7pt 0;font-size:9.4pt}
+  th,td{text-align:left;vertical-align:top;padding:5pt 8pt;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:7.6pt;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);background:var(--stone)}
+  td b{font-family:var(--serif);color:var(--accent-deep)}
+  .obj{margin:6pt 0;padding-left:14pt;border-left:2px solid var(--line)}
+  .obj .q{font-weight:600}
+  .obj .a{color:var(--ink-soft);font-size:10pt}
+  .q-list li::before{content:"?";color:var(--accent);font-weight:700}
+  .callout{font-family:var(--mono);font-size:9pt;color:var(--accent-deep);background:var(--stone);padding:8pt 11pt;border-radius:3px;margin-top:6pt}
+  strong{color:var(--ink)}
+  .pagebreak{page-break-before:always}
+</style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Internal · Sales Enablement</p>
+    <div class="brand">workrr <b>one</b> — Sales Playbook</div>
+    <p class="sub">The background behind the one-pager: who we sell to, the story to tell, and how to handle every objection.</p>
+  </header>
+
+  <h2>The pitch, in one breath</h2>
+  <div class="pitch"><b>workrr one is “Palantir for the mid-market,” deployed inside the customer's own Cloudflare account.</b> We connect a company's scattered systems into one private, always-live model of their business, then deliver decision apps that replace the monthly spreadsheet fire drills — turning “gather data and build a report” into “open the app and decide.”</div>
+
+  <h2>Who we sell to</h2>
+  <p><strong>Company:</strong> mid-size businesses (~50–500 employees) with data spread across Microsoft 365 or Google, a CRM/ERP, SQL databases, and files — and recurring cross-departmental reporting pain. Cloud-comfortable (they don't require on-premise).</p>
+  <p><strong>Entry buyer (start here, not the CEO):</strong> the department head who owns one painful monthly ritual — VP Sales, Finance/Controller, Head of Ops, Head of CS. They feel the pain and have a budget for a point solution.</p>
+  <p><strong>Expansion buyer:</strong> the C-suite — reached <em>after</em> a decision app is already indispensable in one department, when the pitch becomes “four teams already run on this.”</p>
+
+  <h2>The pain we remove</h2>
+  <p>The universal, expensive ritual: <strong>several people, from several departments, manually pulling data from several systems into a spreadsheet or deck — every month, forever.</strong> The work is in <em>assembling</em> the data; the decision waits on it; and the answer is stale on arrival. In the buyer's words:</p>
+  <ul>
+    <li>“We don't actually know which customers make us money.”</li>
+    <li>“Closing the monthly board deck takes a week and five people.”</li>
+    <li>“Deals and invoices get stuck and nobody sees it end-to-end.”</li>
+    <li>“Our forecast is a spreadsheet full of guesses.”</li>
+  </ul>
+
+  <h2>How to tell the story (the arc)</h2>
+  <ul>
+    <li><strong>Problem:</strong> name their specific monthly ritual and what it costs in people-days.</li>
+    <li><strong>Why now:</strong> the data already exists across their systems — it's just never connected. AI can finally blend it.</li>
+    <li><strong>Why not Copilot:</strong> an assistant answers <em>inside one app</em>; it can't join finance + sales + ops into one model. Different category.</li>
+    <li><strong>The apps:</strong> show the decision app that matches their pain (see cheat sheet).</li>
+    <li><strong>Private:</strong> it runs in <em>their</em> Cloudflare account — data never leaves.</li>
+    <li><strong>Why us:</strong> workrr are Cloudflare + AI specialists; we deploy it in their account and wire it to their data.</li>
+    <li><strong>Land &amp; expand:</strong> start with one app for one team; it spreads sideways as the catalog grows.</li>
+  </ul>
+
+  <h2>Discovery questions (qualify hard)</h2>
+  <ul class="q-list">
+    <li>What report or number does your team compile by hand every month?</li>
+    <li>How many people touch it, and how long does it take?</li>
+    <li>Which systems do they pull from to build it?</li>
+    <li>What decision is waiting on that report — and how often is it late or stale?</li>
+    <li>Do you actually know your true margin by customer / product / project?</li>
+    <li>Are you on Microsoft 365 or Google? Do you use Cloudflare today?</li>
+  </ul>
+  <div class="callout">Best qualifier: “a recurring report, built by hand, from 3+ systems, that a real decision waits on.” That's a decision app, and a deal.</div>
+
+  <div class="pagebreak"></div>
+  <h2>Decision apps — cheat sheet</h2>
+  <table>
+    <thead><tr><th>App</th><th>Buyer</th><th>Pain it kills</th><th>Blends</th></tr></thead>
+    <tbody>
+      <tr><td><b>Business Review</b></td><td>C-suite / Finance</td><td>The monthly board-deck fire drill</td><td>Revenue, pipeline, cash, headcount, delivery</td></tr>
+      <tr><td><b>True Profitability</b></td><td>CFO / Controller</td><td>“We don't know who's profitable”</td><td>Revenue, cost, labor/time, delivery effort</td></tr>
+      <tr><td><b>Account Intelligence</b></td><td>VP Sales / CS</td><td>Manual at-risk / QBR reviews</td><td>Pipeline, support, payments, usage, comms</td></tr>
+      <tr><td><b>Quote-to-Cash</b></td><td>Ops / Finance</td><td>“Where is this stuck?” email chains</td><td>Deal → contract → order → invoice → payment</td></tr>
+      <tr><td><b>Spend &amp; Vendor</b></td><td>Finance / Procurement</td><td>Annual spend-audit spreadsheet</td><td>AP, contracts, budgets, vendors</td></tr>
+      <tr><td><b>Capacity &amp; Utilization</b></td><td>Ops / Services lead</td><td>Staffing vs. pipeline spreadsheet</td><td>Pipeline, projects, headcount, time</td></tr>
+      <tr><td><b>Forecast Reality</b></td><td>Sales Ops / Finance</td><td>The forecast nobody believes</td><td>Pipeline, historical conversion, capacity</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Objection handling</h2>
+  <div class="obj"><p class="q">“We already have Microsoft Copilot / Google Gemini.”</p><p class="a">Great — keep it. Those answer <em>inside one app</em> (the email you're in, the doc you opened). They can't resolve the same customer across your CRM, inbox, and finance system, or tell you true margin. We build the connected model underneath; different category, and they're complementary.</p></div>
+  <div class="obj"><p class="q">“We have Power BI / Tableau / dashboards.”</p><p class="a">Those need someone to build and maintain the data model and pipelines — that's the expensive part, and it's why your reports are stale. We build the model automatically, resolve entities across systems, answer in plain language, and stay live. BI shows charts; we drive decisions.</p></div>
+  <div class="obj"><p class="q">“How do we know our data is safe?”</p><p class="a">It never leaves your control. workrr one is deployed <strong>in your own Cloudflare account</strong> — your data stays in your cloud boundary, is never sent to a model vendor, never pooled, never used for training. Our access is Zero-Trust, auditable, and revocable.</p></div>
+  <div class="obj"><p class="q">“Our data is a mess.”</p><p class="a">That's exactly the engagement — and where the value is highest. Wiring up messy, siloed data is what we do; it's the hard part nobody else will touch for a mid-size company. Your mess is your moat once it's connected.</p></div>
+  <div class="obj"><p class="q">“Isn't this like Palantir? We can't afford millions.”</p><p class="a">Same idea, built for you. Palantir needs millions and an army of engineers because it serves giant enterprises. We deliver the same connected-decision model on Cloudflare, services-led, starting with one app and one team. You pay for the ritual we eliminate — measured in the people-days it used to cost.</p></div>
+
+  <h2>Competitive one-liners</h2>
+  <ul>
+    <li><strong>vs. Copilot/Gemini:</strong> they answer in one app; we model the whole business.</li>
+    <li><strong>vs. BI tools:</strong> they need a data team to build the model; ours builds itself and stays live.</li>
+    <li><strong>vs. Palantir:</strong> same shape, mid-market price, on your own Cloudflare.</li>
+    <li><strong>vs. RAG chatbots:</strong> they search documents; we resolve entities and track facts over time — decisions, not snippets.</li>
+  </ul>
+
+  <h2>Land &amp; expand + pricing frame</h2>
+  <ul>
+    <li><strong>Land:</strong> a services engagement — connect the client's data and stand up <em>one</em> decision app (or a quick-win on-ramp). Priced against the people-days it eliminates.</li>
+    <li><strong>Expand:</strong> the catalog is now built, so the next app for the next team is fast and cheap. Add apps, add teams.</li>
+    <li><strong>Recur:</strong> ongoing subscription for the running catalog + apps in their Cloudflare account, plus expansion engagements.</li>
+    <li><strong>Anchor value:</strong> “this report costs you X people-days a month; we make it free and always-current.” The ROI argument writes itself.</li>
+  </ul>
+</body>
+</html>

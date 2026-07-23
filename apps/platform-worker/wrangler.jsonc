@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "workrr-platform",
+  "account_id": "567f3196420ce625839042b03f9fd706",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
+  "ai": { "binding": "AI" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "workrr-platform",
+    "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+    "migrations_dir": "migrations"
+  }],
+  "durable_objects": { "bindings": [{ "name": "PROCESS_AGENT", "class_name": "ProcessAgent" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProcessAgent"] }],
+  "queues": {
+    "producers": [{ "binding": "PROCESS_QUEUE", "queue": "workrr-process-jobs" }],
+    "consumers": [{
+      "queue": "workrr-process-jobs",
+      "max_batch_size": 10,
+      "max_batch_timeout": 5,
+      "max_retries": 5,
+      "dead_letter_queue": "workrr-process-jobs-dlq"
+    }]
+  },
+  "workflows": [{ "name": "workrr-process-workflow", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" }],
+  "triggers": { "crons": ["0 * * * *"] },
+  "vars": { "ENVIRONMENT": "development" }
+}
