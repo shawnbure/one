@@ -435,6 +435,27 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
     } catch (error) { onNotice(error instanceof Error ? error.message : "Package review could not be completed"); }
     finally { setTemplateBusy(null); }
   }
+  async function trustPublisher(reviewId: string) {
+    if (!selected) return;
+    setTemplateBusy(reviewId);
+    try {
+      await api.trustRubricPublisher(reviewId, "manual");
+      await inspect(selected);
+      onNotice("Publisher key trusted with manual approval required. You can change its policy below.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Publisher trust could not be saved"); }
+    finally { setTemplateBusy(null); }
+  }
+  async function updatePublisher(id: string, body: { policy?: "manual" | "auto_approve" | "block";
+    status?: "active" | "suspended" }) {
+    if (!selected) return;
+    setTemplateBusy(id);
+    try {
+      await api.updateRubricPublisher(id, body);
+      await inspect(selected);
+      onNotice("Publisher trust policy updated and audited.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Publisher trust could not be updated"); }
+    finally { setTemplateBusy(null); }
+  }
   async function importDataset(file: File | undefined) {
     if (!selected || !file) return;
     setDatasetBusy("import");
@@ -525,11 +546,27 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
           </div>
           <div className="rubric-library">
             <div className="section-head"><div><h3>Organization rubric templates</h3><p>Reusable standards are copied into each case, keeping durable runs independent from later template edits.</p></div><span className="rubric-library-actions"><small>{detail.rubricTemplates.length}/20 templates</small><button disabled={rubricPackageBusy !== null} onClick={() => void exportRubrics()}><Download size={14}/>{rubricPackageBusy === "export" ? "Exporting…" : "Export standards"}</button><label className="dataset-import"><Upload size={14}/>{rubricPackageBusy === "import" ? "Importing…" : "Import standards"}<input type="file" accept="application/json,.json" disabled={rubricPackageBusy !== null} onChange={(event) => { void importRubrics(event.target.files?.[0]); event.target.value = ""; }}/></label></span></div>
-            {detail.rubricPackageReviews.filter((review) => review.status === "pending").map((review) =>
-              <article className="rubric-package-review" key={review.id}><ShieldCheck size={18}/><span>
-                <strong>{review.publisher_name}</strong><small>Verified signature · {review.template_count} templates · key {review.publisher_key_id?.slice(0, 12)}…</small>
-              </span><button disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "rejected")}>Reject</button>
-              <button className="primary" disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "approved")}>Approve import</button></article>)}
+            {detail.rubricPackageReviews.filter((review) => review.status === "pending").map((review) => {
+              const trust = detail.rubricPublisherTrust.find((item) => item.publisher_key_id === review.publisher_key_id);
+              return <article className="rubric-package-review" key={review.id}><ShieldCheck size={18}/><span>
+                <strong>{review.publisher_name}</strong><small>{trust
+                  ? `Valid signature · recognized key · ${trust.status === "active" ? trust.policy.replace("_", " ") : "trust suspended"}`
+                  : `Valid signature · untrusted until this tenant recognizes key ${review.publisher_key_id?.slice(0, 12)}…`}</small>
+              </span>{!trust && <button disabled={templateBusy === review.id} onClick={() => void trustPublisher(review.id)}>Trust key</button>}
+              <button disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "rejected")}>Reject</button>
+              <button className="primary" disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "approved")}>Approve import</button></article>;
+            })}
+            {detail.rubricPublisherTrust.length > 0 && <div className="publisher-trust-list"><div><strong>Trusted publisher keys</strong>
+              <small>Trust is tenant-specific. Automatic approval still imports templates archived.</small></div>
+              {detail.rubricPublisherTrust.map((trust) => <article key={trust.id}><ShieldCheck size={16}/><span>
+                <strong>{trust.publisher_name}</strong><small>{trust.publisher_key_id.slice(0, 16)}…</small></span>
+                <select value={trust.policy} disabled={templateBusy === trust.id || trust.status === "suspended"}
+                  onChange={(event) => void updatePublisher(trust.id, { policy: event.target.value as typeof trust.policy })}>
+                  <option value="manual">Manual approval</option><option value="auto_approve">Auto-approve signed packages</option>
+                  <option value="block">Block publisher</option></select>
+                <button disabled={templateBusy === trust.id} onClick={() => void updatePublisher(trust.id,
+                  { status: trust.status === "active" ? "suspended" : "active" })}>{trust.status === "active" ? "Suspend" : "Restore"}</button>
+              </article>)}</div>}
             <div className="rubric-template-grid">
               <div className="rubric-template-list">
                 {detail.rubricTemplates.map((template) => {

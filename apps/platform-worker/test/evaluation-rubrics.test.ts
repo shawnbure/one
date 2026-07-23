@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createRubricTemplate,
+  createRubricPublisherTrust,
   exportRubricPackage,
   importRubricPackage,
   listRubricTemplates,
@@ -13,7 +14,8 @@ function rubricEnvironment(options: {
   current?: { id: string; name: string; description: string; criteria_json: string; enabled: number } | null;
   templates?: Array<Record<string, unknown>>;
   existingNames?: string[];
-  review?: { id: string; status: string; package_json: string } | null;
+  review?: { id: string; status: string; package_json: string; publisher_name?: string; publisher_key_id?: string } | null;
+  trust?: { id: string; policy: "manual" | "auto_approve" | "block" } | null;
 } = {}) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const reads: Array<{ sql: string; values: unknown[] }> = [];
@@ -26,6 +28,7 @@ function rubricEnvironment(options: {
           reads.push({ sql, values });
           if (sql.includes("COUNT(*)")) return { count: options.count ?? 0 };
           if (sql.includes("FROM rubric_package_reviews")) return options.review ?? null;
+          if (sql.includes("FROM rubric_publisher_trust")) return options.trust ?? null;
           if (sql.includes("FROM evaluation_rubric_templates")) return options.current ?? null;
           return null;
         },
@@ -222,5 +225,51 @@ describe("tenant evaluation rubric templates", () => {
     expect(result).toMatchObject({ status: "approved", imported: 1, activationRequired: 1 });
     expect(writes.some(({ sql }) => sql.includes("VALUES (?, ?, ?, ?, ?, 0, ?)"))).toBe(true);
     expect(writes.some(({ sql }) => sql.includes("UPDATE rubric_package_reviews SET status"))).toBe(true);
+  });
+
+  it("auto-approves only an exact active trusted key and still archives templates", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    const source = rubricEnvironment({ templates: [{
+      name: "Trusted standard", description: "", criteria_json: JSON.stringify([
+        { criterion: "Stay safe", dimension: "safety", weight: 1 }
+      ]), enabled: 1
+    }] });
+    const pkg = await exportRubricPackage({ ...source.env, RUBRIC_SIGNING_JWK: JSON.stringify(privateJwk),
+      RUBRIC_PUBLISHER_NAME: "Trusted publisher" } as never, "source");
+    if (pkg.schema !== "workrr-rubrics/v2") throw new Error("Expected signed package");
+    const destination = rubricEnvironment({ trust: { id: "trust-1", policy: "auto_approve" } });
+    const result = await importRubricPackage(destination.env, "tenant-1", "builder-1", pkg);
+    expect(result).toMatchObject({ status: "approved", autoApproved: true, imported: 1, activationRequired: 1 });
+    expect(destination.writes.some(({ sql }) => sql.includes("VALUES (?, ?, ?, ?, ?, 0, ?)"))).toBe(true);
+    expect(destination.writes.some(({ sql }) => sql.includes("'approved'"))).toBe(true);
+    const trustRead = destination.reads.find(({ sql }) => sql.includes("FROM rubric_publisher_trust"));
+    expect(trustRead?.values).toEqual(["tenant-1", pkg.publisher.keyId, pkg.publisher.publicKey.x]);
+  });
+
+  it("retains blocked-publisher evidence without creating templates", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    const source = rubricEnvironment({ templates: [{
+      name: "Blocked standard", description: "", criteria_json: JSON.stringify([
+        { criterion: "Be clear", dimension: "clarity", weight: 1 }
+      ]), enabled: 1
+    }] });
+    const pkg = await exportRubricPackage({ ...source.env, RUBRIC_SIGNING_JWK: JSON.stringify(privateJwk) } as never, "source");
+    const destination = rubricEnvironment({ trust: { id: "trust-block", policy: "block" } });
+    const result = await importRubricPackage(destination.env, "tenant-1", "builder-1", pkg);
+    expect(result).toMatchObject({ status: "rejected", autoApproved: false, imported: 0 });
+    expect(destination.writes.some(({ sql }) => sql.includes("evaluation_rubric_templates"))).toBe(false);
+    expect(destination.writes.some(({ sql }) => sql.includes("'rejected'"))).toBe(true);
+  });
+
+  it("creates tenant-scoped trust only from a verified retained package", async () => {
+    const packageJson = JSON.stringify({ publisher: { publicKey: { x: "public-key-x" } } });
+    const review = { id: "review-2", status: "pending", package_json: packageJson,
+      publisher_name: "Publisher", publisher_key_id: "key-id" };
+    const { env, writes } = rubricEnvironment({ review });
+    const result = await createRubricPublisherTrust(env, "tenant-2", "owner-2", "review-2", "manual");
+    expect(result).toMatchObject({ publisherName: "Publisher", keyId: "key-id", policy: "manual" });
+    expect(writes.some(({ values }) => values.includes("tenant-2") && values.includes("public-key-x"))).toBe(true);
   });
 });

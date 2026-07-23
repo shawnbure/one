@@ -11,7 +11,7 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, reviewRubricPackage, runEvaluation, updateRubricTemplate } from "./evaluation";
+import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust, updateRubricTemplate } from "./evaluation";
 import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
@@ -582,6 +582,34 @@ app.post("/api/evaluation-rubric-reviews/:id/:decision", requireRoles("admin", "
   } catch (error) {
     const message = error instanceof Error ? error.message : "Rubric package review failed";
     return c.json({ error: message }, message.includes("already complete") ? 409 : 400);
+  }
+});
+
+app.post("/api/evaluation-rubric-publishers/from-review/:id", requireRoles("admin", "owner"), async (c) => {
+  const reviewId = c.req.param("id");
+  if (!reviewId) return c.json({ error: "Review ID is required" }, 400);
+  try {
+    const body = await c.req.json<{ policy?: "manual" | "auto_approve" | "block" }>();
+    const result = await createRubricPublisherTrust(c.env, c.get("tenantId"), c.get("actorId"),
+      reviewId, body.policy ?? "manual");
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_rubric_publisher.trusted",
+      "rubric_publisher", result.keyId, { publisherName: result.publisherName, policy: result.policy });
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Publisher trust could not be created" }, 400);
+  }
+});
+
+app.patch("/api/evaluation-rubric-publishers/:id", requireRoles("admin", "owner"), async (c) => {
+  const trustId = c.req.param("id");
+  if (!trustId) return c.json({ error: "Publisher trust ID is required" }, 400);
+  try {
+    const result = await updateRubricPublisherTrust(c.env, c.get("tenantId"), trustId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_rubric_publisher.updated",
+      "rubric_publisher", trustId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Publisher trust could not be updated" }, 400);
   }
 });
 

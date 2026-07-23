@@ -252,6 +252,16 @@ export interface EvaluationDetail {
     reviewed_at: string | null;
     review_note: string | null;
   }>;
+  rubricPublisherTrust: Array<{
+    id: string;
+    publisher_name: string;
+    publisher_key_id: string;
+    policy: "manual" | "auto_approve" | "block";
+    status: "active" | "suspended";
+    created_by: string;
+    created_at: string;
+    updated_at: string;
+  }>;
   modelProfiles: Array<{ id: string; label: string; model: string; use: string }>;
 }
 export interface RubricCriterion {
@@ -466,6 +476,15 @@ export const api = {
     request<{ data: { id: string; status: string; imported: number; skipped: number; activationRequired: number } }>(
       `/api/evaluation-rubric-reviews/${encodeURIComponent(id)}/${decision}`,
       { method: "POST", body: JSON.stringify({ note }) }),
+  trustRubricPublisher: (reviewId: string, policy: "manual" | "auto_approve" | "block") =>
+    request<{ data: { id: string; publisherName: string; keyId: string; policy: string; status: string } }>(
+      `/api/evaluation-rubric-publishers/from-review/${encodeURIComponent(reviewId)}`,
+      { method: "POST", body: JSON.stringify({ policy }) }),
+  updateRubricPublisher: (id: string, body: { policy?: "manual" | "auto_approve" | "block";
+    status?: "active" | "suspended" }) =>
+    request<{ data: { id: string; updated: boolean } }>(
+      `/api/evaluation-rubric-publishers/${encodeURIComponent(id)}`,
+      { method: "PATCH", body: JSON.stringify(body) }),
   exportEvaluationDataset: (id: string) =>
     request<{ data: EvaluationDataset }>(`/api/evaluations/${encodeURIComponent(id)}/dataset`),
   importEvaluationDataset: (id: string, body: EvaluationDataset) =>

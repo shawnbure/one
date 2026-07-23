@@ -216,13 +216,22 @@ describe("control-plane security boundary", () => {
 
   it("prevents builders and viewers from approving governed rubric packages", async () => {
     for (const role of ["builder", "viewer"]) {
-      const { env, queries } = environment(role);
-      const response = await app.fetch(new Request("http://localhost/api/evaluation-rubric-reviews/review-1/approved", {
-        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
-          "x-workrr-user": "operator@example.com" }, body: "{}"
-      }), env as never, executionCtx as never);
-      expect(response.status).toBe(403);
-      expect(queries.some((sql) => sql.includes("UPDATE rubric_package_reviews"))).toBe(false);
+      for (const request of [
+        new Request("http://localhost/api/evaluation-rubric-reviews/review-1/approved", {
+          method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" }, body: "{}"
+        }),
+        new Request("http://localhost/api/evaluation-rubric-publishers/from-review/review-1", {
+          method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ policy: "auto_approve" })
+        })
+      ]) {
+        const { env, queries } = environment(role);
+        const response = await app.fetch(request, env as never, executionCtx as never);
+        expect(response.status).toBe(403);
+        expect(queries.some((sql) => sql.includes("rubric_publisher_trust") ||
+          sql.includes("UPDATE rubric_package_reviews"))).toBe(false);
+      }
     }
   });
 });

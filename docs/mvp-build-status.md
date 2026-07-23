@@ -114,6 +114,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 22. `0022_evaluation_rubric_templates.sql`: reusable organization quality standards.
 23. `0023_service_principals_and_smoke_fixtures.sql`: Access machine identities and disposable live probes.
 24. `0024_governed_rubric_packages.sql`: signed standards review and destination approval evidence.
+25. `0025_rubric_publisher_trust.sql`: tenant publisher keys and manual, automatic, or blocked trust policy.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -168,7 +169,7 @@ Production inputs are never sampled automatically. An authorized user may explic
 The foundation is usable, but these are the highest-value next slices:
 
 1. Register and credential the first customer Microsoft Entra application. The provider-specific lifecycle is implemented with delegated PKCE authorization, capability-scoped consent, encrypted refresh-token persistence, rotation-aware health checks, and disconnect/reconnect controls.
-2. Establish customer-specific publisher trust policies when centrally attested standards need automatic approval. Ed25519-signed v2 publisher metadata, tamper verification, owner/admin package approval, audit evidence, and archived destination activation are implemented. Customer-configurable DLP policy is implemented across execution, Queue, Workflow, Durable Agent, evaluation, judge traffic, import, and preview-storage boundaries.
+2. Add key-expiry and rotation handoff when centrally managed publishers need scheduled cryptographic rollover. Tenant-specific exact-key trust policies, manual/automatic/block decisions, suspension, Ed25519-signed v2 publisher metadata, tamper verification, owner/admin approval, audit evidence, and archived destination activation are implemented.
 3. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
 4. Add authenticated email delivery using the Microsoft lifecycle; Queue-backed signed webhook delivery is implemented.
 5. Provision a least-privilege Cloudflare Access service token for each environment, register its Client ID as an operator service principal, and run the implemented `smoke:live` command. It authenticates through Access, validates tenant identity and read surfaces, and creates/reads/deletes a ten-minute tenant-scoped fixture with failure cleanup. Promotion already provides dry-run planning, clean/fast-forward Git gates, exact-SHA confirmation, required-secret inventory, mandatory verification, ordered D1 migrations, Cloudflare build polling, Worker version evidence, and Access redirect verification.

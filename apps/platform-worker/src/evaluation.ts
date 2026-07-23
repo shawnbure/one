@@ -389,7 +389,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
 }
 
 export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId: string) {
-  const [scenario, cases, runs, rubricTemplates, rubricPackageReviews] = await Promise.all([
+  const [scenario, cases, runs, rubricTemplates, rubricPackageReviews, rubricPublisherTrust] = await Promise.all([
     env.DB.prepare(`SELECT e.*, b.name process_name, b.active_release_id FROM evaluation_scenarios e
       JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
       WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first(),
@@ -402,7 +402,9 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
     listRubricTemplates(env, tenantId),
     env.DB.prepare(`SELECT id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
       template_count, status, submitted_by, submitted_at, reviewed_by, reviewed_at, review_note
-      FROM rubric_package_reviews WHERE tenant_id = ? ORDER BY submitted_at DESC LIMIT 20`).bind(tenantId).all()
+      FROM rubric_package_reviews WHERE tenant_id = ? ORDER BY submitted_at DESC LIMIT 20`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT id, publisher_name, publisher_key_id, policy, status, created_by, created_at, updated_at
+      FROM rubric_publisher_trust WHERE tenant_id = ? ORDER BY publisher_name`).bind(tenantId).all()
   ]);
   if (!scenario) return null;
   const runIds = runs.results.map((row) => String((row as Record<string, unknown>).id));
@@ -425,7 +427,7 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
   ]);
   return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results,
     suites: suites.results, humanReviews: reviews.results, modelTrials: modelTrials.results,
-    rubricTemplates, rubricPackageReviews: rubricPackageReviews.results,
+    rubricTemplates, rubricPackageReviews: rubricPackageReviews.results, rubricPublisherTrust: rubricPublisherTrust.results,
     modelProfiles: Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile })) };
 }
 
@@ -667,6 +669,30 @@ async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: st
   const packageJson = canonicalJson({ ...signed, signature: manifest.signature });
   const digest = await digestText(packageJson);
   const id = crypto.randomUUID();
+  const trust = await env.DB.prepare(`SELECT id, policy FROM rubric_publisher_trust
+    WHERE tenant_id = ? AND publisher_key_id = ? AND public_key_x = ? AND status = 'active'`)
+    .bind(tenantId, publisher.keyId, publicJwk.x).first<{ id: string; policy: "manual" | "auto_approve" | "block" }>();
+  if (trust?.policy === "auto_approve") {
+    const imported = await importRubricTemplates(env, tenantId, actorId, manifest);
+    await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
+      (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
+       package_json, template_count, status, submitted_by, reviewed_by, reviewed_at, review_note)
+      VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP, ?)`)
+      .bind(id, tenantId, digest, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
+        actorId, `trust-policy:${trust.id}`, "Automatically approved by active publisher trust policy").run();
+    return { pendingReview: undefined, reviewId: id, status: "approved", duplicate: false,
+      autoApproved: true, ...imported };
+  }
+  if (trust?.policy === "block") {
+    await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
+      (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
+       package_json, template_count, status, submitted_by, reviewed_by, reviewed_at, review_note)
+      VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, 'rejected', ?, ?, CURRENT_TIMESTAMP, ?)`)
+      .bind(id, tenantId, digest, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
+        actorId, `trust-policy:${trust.id}`, "Rejected by active publisher block policy").run();
+    return { pendingReview: undefined, reviewId: id, status: "rejected", duplicate: false,
+      autoApproved: false, imported: 0, skipped: 0, activationRequired: 0 };
+  }
   const result = await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
     (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
      package_json, template_count, submitted_by) VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, ?)`)
@@ -678,6 +704,42 @@ async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: st
       imported: 0, skipped: 0, activationRequired: 0 };
   }
   return { pendingReview: id, status: "pending", duplicate: false, imported: 0, skipped: 0, activationRequired: 0 };
+}
+
+export async function createRubricPublisherTrust(env: Env, tenantId: string, actorId: string, reviewId: string,
+  policy: "manual" | "auto_approve" | "block") {
+  if (!["manual", "auto_approve", "block"].includes(policy)) throw new Error("Publisher policy is invalid");
+  const review = await env.DB.prepare(`SELECT publisher_name, publisher_key_id, package_json
+    FROM rubric_package_reviews WHERE id = ? AND tenant_id = ? AND signature_status = 'verified'`)
+    .bind(reviewId, tenantId).first<{ publisher_name: string; publisher_key_id: string; package_json: string }>();
+  if (!review?.publisher_key_id) throw new Error("Verified rubric package review not found");
+  const manifest = JSON.parse(review.package_json) as { publisher?: { publicKey?: { x?: unknown } } };
+  const publicKeyX = manifest.publisher?.publicKey?.x;
+  if (typeof publicKeyX !== "string" || !publicKeyX) throw new Error("Review does not contain a valid publisher key");
+  const id = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO rubric_publisher_trust
+    (id, tenant_id, publisher_name, publisher_key_id, public_key_x, policy, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(tenant_id, publisher_key_id) DO UPDATE SET publisher_name = excluded.publisher_name,
+      public_key_x = excluded.public_key_x, policy = excluded.policy, status = 'active',
+      updated_at = CURRENT_TIMESTAMP`).bind(
+      id, tenantId, review.publisher_name, review.publisher_key_id, publicKeyX, policy, actorId).run();
+  return { id, publisherName: review.publisher_name, keyId: review.publisher_key_id, policy, status: "active" };
+}
+
+export async function updateRubricPublisherTrust(env: Env, tenantId: string, trustId: string, input: {
+  policy?: unknown; status?: unknown;
+}) {
+  const policy = typeof input.policy === "string" ? input.policy : undefined;
+  const status = typeof input.status === "string" ? input.status : undefined;
+  if ((policy && !["manual", "auto_approve", "block"].includes(policy)) ||
+      (status && !["active", "suspended"].includes(status)) || (!policy && !status)) {
+    throw new Error("Publisher trust update is invalid");
+  }
+  const result = await env.DB.prepare(`UPDATE rubric_publisher_trust SET policy = COALESCE(?, policy),
+    status = COALESCE(?, status), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
+    .bind(policy ?? null, status ?? null, trustId, tenantId).run();
+  return { id: trustId, updated: result.meta.changes === 1, policy, status };
 }
 
 export async function reviewRubricPackage(env: Env, tenantId: string, actorId: string, reviewId: string,

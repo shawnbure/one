@@ -124,6 +124,14 @@ The smoke principal must be an `operator`. The command verifies session identity
 
 When `RUBRIC_SIGNING_JWK` is configured, rubric exports use `workrr-rubrics/v2` with Ed25519 publisher metadata and a detached signature over the canonical package. The private JWK remains a Wrangler secret. Imports verify the public-key fingerprint and signature before retaining a package for review; they do not create templates until an owner or admin approves the package. Approved templates remain archived until explicitly restored.
 
+A valid signature establishes package integrity, not publisher trust. Each destination tenant may recognize an exact publisher key and choose one policy:
+
+- **Manual approval** identifies the publisher but keeps every package in the owner/admin review queue.
+- **Auto-approve** accepts only packages matching both the stored key fingerprint and public key; templates still arrive archived.
+- **Block** retains rejection evidence and creates no templates.
+
+Trust policies are tenant-scoped, auditable, suspendable, and can be created only by an owner or administrator from a previously verified package.
+
 Generate a different signing key for each publishing environment and pipe the private JWK directly into Wrangler without committing it:
 
 ```sh
