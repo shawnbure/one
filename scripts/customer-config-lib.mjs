@@ -26,8 +26,8 @@ export function generateCustomerWrangler(input) {
   const base = `workrr-${value.slug}`;
   const environment = (suffix, domain, audience, label) => ({
     name: `${base}${suffix}`,
-    workers_dev: true,
-    preview_urls: true,
+    workers_dev: false,
+    preview_urls: false,
     routes: [{ pattern: domain, custom_domain: true }],
     assets: { directory: "../admin/dist", not_found_handling: "single-page-application",
       run_worker_first: ["/api/*", "/oauth/*", "/health"] },

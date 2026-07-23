@@ -20,6 +20,10 @@ test("generates isolated, secret-free customer environments", () => {
   assert.equal(config.env.dev.d1_databases[0].database_name, "workrr-acme-platform-dev");
   assert.equal(config.d1_databases[0].database_id, undefined);
   assert.equal(config.vars.ACCESS_AUD, input.productionAudience);
+  assert.equal(config.workers_dev, false);
+  assert.equal(config.preview_urls, false);
+  assert.equal(config.env.dev.workers_dev, false);
+  assert.equal(config.env.dev.preview_urls, false);
   assert.equal(JSON.stringify(config).includes("SECRET"), false);
 });
 
