@@ -105,6 +105,21 @@ The development domain is protected by Cloudflare Access and the Worker verifies
 
 Production remains closed until its own Access application, audience, allow policy, and membership records are explicitly configured. Never reuse a development audience for production.
 
+### Machine access and live smoke tests
+
+Workrr maps Cloudflare Access service tokens by the verified JWT `common_name` claim. Register the service-token Client ID (`…access`) under **Team & roles → Service principals** with an `operator` or `viewer` role. Workrr stores the Client ID as a tenant-scoped identity, but never accepts or stores the Client Secret.
+
+The Access application also needs a Service Auth policy that includes that service token. Keep both credentials in the calling CI/FDE secret manager, then run:
+
+```sh
+WORKRR_BASE_URL=https://one-dev.workrr.ai \
+CF_ACCESS_CLIENT_ID=... \
+CF_ACCESS_CLIENT_SECRET=... \
+npm run smoke:live
+```
+
+The smoke principal must be an `operator`. The command verifies session identity, governance and rubric reads, then creates, reads, and deletes a tenant-scoped disposable fixture. Cleanup is attempted even after failure, and a scheduled sweep removes abandoned fixtures after their ten-minute expiry. The command prints no credential values.
+
 ### Cloudflare Access member handoff
 
 Customer Setup exports the active tenant member list as an environment-bound Access handoff with no API credentials. Apply it from a trusted FDE workstation using a narrowly scoped Cloudflare token:

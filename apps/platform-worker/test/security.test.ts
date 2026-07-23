@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../src/index";
+import { resolveAccessPrincipal } from "../src/auth";
 
 type Row = Record<string, unknown>;
 
@@ -33,6 +34,27 @@ function environment(role = "admin") {
 const executionCtx = { waitUntil(promise: Promise<unknown>) { void promise; }, passThroughOnException() {} };
 
 describe("control-plane security boundary", () => {
+  it("maps an Access service-token common name to one active tenant principal", async () => {
+    let bound: unknown[] = [];
+    const DB = { prepare(sql: string) {
+      expect(sql).toContain("FROM access_service_principals");
+      const statement = {
+        bind(...values: unknown[]) { bound = values; return statement; },
+        async first() { return { id: "machine-1", tenant_id: "customer-a", email: "service:client.access",
+          display_name: "Deployment smoke", role: "operator", identity_type: "service" }; }
+      };
+      return statement;
+    } };
+    const principal = await resolveAccessPrincipal({ DB } as never, { common_name: "client.access" });
+    expect(bound).toEqual(["client.access"]);
+    expect(principal).toMatchObject({ tenant_id: "customer-a", role: "operator", identity_type: "service" });
+  });
+
+  it("does not fall back from an unknown machine identity to local tenant headers", async () => {
+    const DB = { prepare() { return { bind() { return this; }, async first() { return null; } }; } };
+    expect(await resolveAccessPrincipal({ DB } as never, { common_name: "unknown.access" })).toBeNull();
+  });
+
   it("derives tenant membership server-side and ignores forged tenant headers", async () => {
     const { env } = environment();
     const response = await app.fetch(new Request("http://localhost/api/session", { headers: {
@@ -58,6 +80,19 @@ describe("control-plane security boundary", () => {
     }), env as never, executionCtx as never);
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies"))).toBe(false);
+  });
+
+  it("prevents viewers from creating smoke fixtures or machine identities", async () => {
+    for (const path of ["/api/smoke-fixtures", "/api/service-principals"]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(new Request(`http://localhost${path}`, {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }), env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("INSERT INTO smoke_fixtures") ||
+        sql.includes("INSERT INTO access_service_principals"))).toBe(false);
+    }
   });
 
   it("rejects malformed process packages before creating tenant data", async () => {

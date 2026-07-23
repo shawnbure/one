@@ -104,6 +104,9 @@ select,
 
 /* Dense operational surfaces need the same floor as forms and navigation.
    These selectors intentionally override legacy prototype declarations in live.css. */
+aside {
+  overflow-y: auto;
+}
 .empty-approval strong,
 .empty-approval span,
 .assignment-chip strong,

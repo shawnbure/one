@@ -226,6 +226,80 @@ app.patch("/api/members/:id", requireRoles("admin"), async (c) => {
   return c.json({ updated: result.meta.changes === 1 });
 });
 
+app.get("/api/service-principals", requireRoles("admin", "owner", "viewer"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, access_common_name, display_name, role, status, created_at, last_seen_at
+    FROM access_service_principals WHERE tenant_id = ? ORDER BY display_name`)
+    .bind(c.get("tenantId")).all();
+  return c.json({ data: results });
+});
+
+app.post("/api/service-principals", requireRoles("admin", "owner"), async (c) => {
+  const body = await c.req.json<{ commonName?: string; displayName?: string; role?: string }>();
+  const commonName = body.commonName?.trim() ?? "";
+  const displayName = body.displayName?.trim() ?? "";
+  if (!/^[A-Za-z0-9._-]{8,200}$/.test(commonName) || !commonName.endsWith(".access") ||
+      !displayName || displayName.length > 100 || !["operator", "viewer"].includes(body.role ?? "")) {
+    return c.json({ error: "A valid Access service-token client ID, display name, and operator or viewer role are required" }, 400);
+  }
+  const id = crypto.randomUUID();
+  try {
+    await c.env.DB.prepare(`INSERT INTO access_service_principals
+      (id, tenant_id, access_common_name, display_name, role, created_by) VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(id, c.get("tenantId"), commonName, displayName, body.role, c.get("actorId")).run();
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "service_principal.created",
+      "service_principal", id, { commonName, role: body.role });
+    return c.json({ id, status: "active" }, 201);
+  } catch (error) {
+    return c.json({ error: String(error).includes("UNIQUE") ?
+      "That Access service-token client ID is already registered" : "Machine identity creation failed" }, 409);
+  }
+});
+
+app.patch("/api/service-principals/:id", requireRoles("admin", "owner"), async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ role?: string; status?: string }>();
+  if (!id || (body.role && !["operator", "viewer"].includes(body.role)) ||
+      (body.status && !["active", "suspended"].includes(body.status)) ||
+      (!body.role && !body.status)) return c.json({ error: "Invalid machine identity update" }, 400);
+  const result = await c.env.DB.prepare(`UPDATE access_service_principals
+    SET role = COALESCE(?, role), status = COALESCE(?, status) WHERE id = ? AND tenant_id = ?`)
+    .bind(body.role ?? null, body.status ?? null, id, c.get("tenantId")).run();
+  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+    "service_principal.updated", "service_principal", id, body);
+  return c.json({ updated: result.meta.changes === 1 });
+});
+
+app.post("/api/smoke-fixtures", requireRoles("admin", "owner", "operator"), async (c) => {
+  const body = await c.req.json<{ label?: string }>();
+  const label = body.label?.trim() ?? "";
+  if (!label || label.length > 120) return c.json({ error: "A label of 120 characters or fewer is required" }, 400);
+  const id = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  await c.env.DB.prepare(`INSERT INTO smoke_fixtures (id, tenant_id, created_by, label, expires_at)
+    VALUES (?, ?, ?, ?, ?)`).bind(id, c.get("tenantId"), c.get("actorId"), label, expiresAt).run();
+  await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "smoke_fixture.created",
+    "smoke_fixture", id, { expiresAt });
+  return c.json({ data: { id, label, expiresAt } }, 201);
+});
+
+app.get("/api/smoke-fixtures/:id", requireRoles("admin", "owner", "operator"), async (c) => {
+  const fixture = await c.env.DB.prepare(`SELECT id, label, expires_at, created_at FROM smoke_fixtures
+    WHERE id = ? AND tenant_id = ? AND created_by = ?`).bind(
+      c.req.param("id"), c.get("tenantId"), c.get("actorId")).first();
+  return fixture ? c.json({ data: fixture }) : c.json({ error: "Smoke fixture not found" }, 404);
+});
+
+app.delete("/api/smoke-fixtures/:id", requireRoles("admin", "owner", "operator"), async (c) => {
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Smoke fixture ID is required" }, 400);
+  const result = await c.env.DB.prepare(`DELETE FROM smoke_fixtures
+    WHERE id = ? AND tenant_id = ? AND created_by = ?`).bind(
+      id, c.get("tenantId"), c.get("actorId")).run();
+  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+    "smoke_fixture.deleted", "smoke_fixture", id, {});
+  return c.json({ deleted: result.meta.changes === 1 });
+});
+
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
 
 app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "viewer"), async (c) => {
@@ -802,6 +876,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       env.DB.prepare(`DELETE FROM oauth_states WHERE expires_at < ? OR
         (used_at IS NOT NULL AND used_at < ?)`).bind(
           new Date().toISOString(), new Date(Date.now() - 24 * 60 * 60_000).toISOString()),
+      env.DB.prepare("DELETE FROM smoke_fixtures WHERE expires_at < ?").bind(new Date().toISOString()),
       env.DB.prepare(`INSERT INTO audit_events
         (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
         VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)

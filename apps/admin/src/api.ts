@@ -182,6 +182,15 @@ export interface Member {
   created_at: string;
   last_seen_at: string | null;
 }
+export interface ServicePrincipal {
+  id: string;
+  access_common_name: string;
+  display_name: string;
+  role: "operator" | "viewer";
+  status: "active" | "suspended";
+  created_at: string;
+  last_seen_at: string | null;
+}
 export interface ValueData {
   totals: { items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number };
   byProcess: Array<Record<string, string | number>>;
@@ -402,6 +411,15 @@ export const api = {
     request<{ updated: boolean }>(`/api/members/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(body),
+    }),
+  servicePrincipals: () => request<{ data: ServicePrincipal[] }>("/api/service-principals"),
+  createServicePrincipal: (body: { commonName: string; displayName: string; role: "operator" | "viewer" }) =>
+    request<{ id: string; status: string }>("/api/service-principals", {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  updateServicePrincipal: (id: string, body: { role?: "operator" | "viewer"; status?: "active" | "suspended" }) =>
+    request<{ updated: boolean }>(`/api/service-principals/${encodeURIComponent(id)}`, {
+      method: "PATCH", body: JSON.stringify(body),
     }),
   value: () => request<{ data: ValueData }>("/api/value"),
   runEvaluation: (id: string, releaseId?: string) => request<{ data: { id: string; status: string; score: number;

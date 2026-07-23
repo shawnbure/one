@@ -19,6 +19,7 @@ interface MemberRow {
   email: string;
   display_name: string;
   role: Role;
+  identity_type: "human" | "service";
 }
 
 type AppContext = Context<{ Bindings: Env; Variables: AuthVariables }>;
@@ -31,7 +32,8 @@ export async function requireIdentity(c: AppContext, next: Next): Promise<Respon
   c.set("actorEmail", identity.email);
   c.set("actorName", identity.display_name);
   c.set("role", identity.role);
-  await c.env.DB.prepare("UPDATE tenant_members SET last_seen_at = ? WHERE id = ?")
+  const identityTable = identity.identity_type === "service" ? "access_service_principals" : "tenant_members";
+  await c.env.DB.prepare(`UPDATE ${identityTable} SET last_seen_at = ? WHERE id = ?`)
     .bind(new Date().toISOString(), identity.id).run();
   await next();
 }
@@ -47,8 +49,7 @@ async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
         issuer,
         audience: c.env.ACCESS_AUD
       });
-      if (typeof payload.email !== "string") return null;
-      return membershipByEmail(c.env, payload.email);
+      return resolveAccessPrincipal(c.env, payload);
     } catch (error) {
       console.warn(JSON.stringify({ event: "access_token_rejected", error: error instanceof Error ? error.message : String(error) }));
       return null;
@@ -64,13 +65,25 @@ async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
   const tenantId = c.req.header("x-workrr-tenant") ?? "demo";
   const requestedRole = c.req.header("x-workrr-role");
   const role: Role = requestedRole && roles.includes(requestedRole as Role) ? requestedRole as Role : "admin";
-  return { id: "local-admin", tenant_id: tenantId, email, display_name: "Local Administrator", role };
+  return { id: "local-admin", tenant_id: tenantId, email, display_name: "Local Administrator", role,
+    identity_type: "human" };
 }
 
 async function membershipByEmail(env: Env, email: string): Promise<MemberRow | null> {
-  return env.DB.prepare(`SELECT id, tenant_id, email, display_name, role FROM tenant_members
+  return env.DB.prepare(`SELECT id, tenant_id, email, display_name, role, 'human' identity_type FROM tenant_members
     WHERE email = ? COLLATE NOCASE AND status = 'active' ORDER BY created_at LIMIT 1`)
     .bind(email).first<MemberRow>();
+}
+
+export async function resolveAccessPrincipal(env: Env, payload: Record<string, unknown>): Promise<MemberRow | null> {
+  if (typeof payload.email === "string" && payload.email.trim()) {
+    return membershipByEmail(env, payload.email);
+  }
+  if (typeof payload.common_name !== "string" || !payload.common_name.trim()) return null;
+  return env.DB.prepare(`SELECT id, tenant_id, 'service:' || access_common_name email, display_name, role,
+      'service' identity_type FROM access_service_principals
+    WHERE access_common_name = ? AND status = 'active' LIMIT 1`)
+    .bind(payload.common_name.trim()).first<MemberRow>();
 }
 
 function normalizeIssuer(value: string): string {

@@ -12,6 +12,7 @@
     "test": "npm run test --workspaces --if-present && node --test scripts/*.test.mjs",
     "cf:types": "npm run cf:types -w @workrr/platform-worker",
     "access:sync": "node scripts/sync-cloudflare-access.mjs",
+    "smoke:live": "node scripts/smoke-live.mjs",
     "promote:production": "node scripts/promote-production.mjs"
   },
   "engines": { "node": ">=22" }

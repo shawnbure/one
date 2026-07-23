@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --var LOCAL_DEV:true",
+    "dev": "wrangler dev --env dev --var LOCAL_DEV:true",
     "deploy": "wrangler deploy --env=\"\"",
     "deploy:dev": "wrangler deploy --env dev",
     "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
