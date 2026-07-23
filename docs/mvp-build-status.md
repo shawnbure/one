@@ -24,6 +24,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Customer setup | Organization profile, readiness checklist, and secret-free portable deployment manifest |
 | Notifications | Tenant-scoped routing policies and persisted delivery evidence for operational events |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
+| Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, and optional hard limit |
 
 ## Execution architecture
 
@@ -93,6 +94,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 9. `0009_customer_onboarding.sql`: customer branding, operating defaults, and bootstrap state.
 10. `0010_notification_policies.sql`: alert routing policies and delivery evidence.
 11. `0011_release_evaluation_gate.sql`: release-specific evaluation status and scenario backfill.
+12. `0012_usage_budgets.sql`: captured model rates, execution cost estimates, and tenant budget policy.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -136,7 +138,7 @@ The foundation is usable, but these are the highest-value next slices:
 1. Customer onboarding wizard that provisions membership, branding, default controls, and a first process from a single manifest.
 2. Connector credential vault and OAuth lifecycle, beginning with one real customer system rather than a broad empty catalog.
 3. Rich evaluation datasets, expected-output assertions, and release-to-release comparison. Deterministic release-specific publish gates are implemented.
-4. Convert token accounting into a priced cost ledger once customer model pricing policy is selected.
+4. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
 5. Add authenticated delivery workers for email/webhook notification channels; in-app policy routing is implemented.
 6. Production Access bootstrap and a scripted, reviewable environment promotion command.
 7. Expand the current identity, tenant, role, package, durable-stickiness, Workflow accounting, and webhook-deduplication tests into live-environment smoke tests with disposable customer fixtures.

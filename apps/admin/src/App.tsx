@@ -26,6 +26,7 @@ import {
   Workflow,
   X,
   Code2,
+  CircleDollarSign,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import {
@@ -40,9 +41,10 @@ import "./live.css";
 import "./wizard.css";
 import "./team.css";
 import "./export.css";
-import "./readability.css";
 import "./setup.css";
 import "./notifications.css";
+import "./usage.css";
+import "./readability.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";
@@ -52,6 +54,7 @@ import { CreateProcessWizard } from "./CreateProcessWizard";
 import { TeamRolesView } from "./TeamRolesView";
 import { CustomerSetupView } from "./CustomerSetupView";
 import { NotificationsView } from "./NotificationsView";
+import { UsageView } from "./UsageView";
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -106,6 +109,7 @@ const nav = [
   ["Evaluations", FileCheck2],
   ["Governance", ShieldCheck],
   ["Notifications", Bell],
+  ["Usage & budgets", CircleDollarSign],
 ] as const;
 
 function Status({ value }: { value: string }) {
@@ -333,7 +337,9 @@ export function App() {
               <X size={14} />
             </button>
           )}
-          {active === "Notifications" ? (
+          {active === "Usage & budgets" ? (
+            <UsageView session={session} onNotice={setNotice} />
+          ) : active === "Notifications" ? (
             <NotificationsView onNotice={setNotice} />
           ) : active === "Customer setup" ? (
             <CustomerSetupView session={session} onNotice={setNotice} />

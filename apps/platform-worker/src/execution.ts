@@ -4,8 +4,10 @@ import { runModel } from "./model";
 import { getBlueprint, getPromptBundle } from "./repository";
 import type { ProcessAgent } from "./agent";
 import type { Env } from "./types";
+import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
+  await assertBudgetAvailable(env, tenantId);
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
   if (!blueprint) throw new Error("Process not found");
   if (blueprint.status === "paused" || blueprint.status === "draft") throw new Error(`Process is ${blueprint.status}`);
@@ -55,7 +57,7 @@ async function markStatus(env: Env, id: string, status: string): Promise<void> {
 }
 
 async function complete(env: Env, id: string, result: { output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number }): Promise<void> {
-  await env.DB.prepare(`UPDATE executions SET status = 'completed', output_preview = ?, model = ?, input_tokens = ?,
-    output_tokens = ?, total_tokens = ?, completed_at = ? WHERE id = ?`)
-    .bind(result.output.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens, new Date().toISOString(), id).run();
+  await env.DB.prepare(pricedCompletionSql())
+    .bind(result.output.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
+      result.inputTokens, result.model, result.outputTokens, result.model, new Date().toISOString(), id).run();
 }

@@ -36,7 +36,7 @@ dt,
 .release-version small,
 .api-head,
 .webhook-row small {
-  font-size: 11px !important;
+  font-size: 12px !important;
   line-height: 1.45;
 }
 
@@ -98,7 +98,7 @@ select,
 .template-grid em,
 .definition-summary small,
 .definition-summary strong {
-  font-size: 12px !important;
+  font-size: 13px !important;
   line-height: 1.5;
 }
 

@@ -187,6 +187,15 @@ export interface NotificationData {
   policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string; updated_at: string }>;
   events: Array<{ id: string; event_type: string; severity: string; title: string; detail: string; delivery_status: string; created_at: string }>;
 }
+export interface UsageData {
+  summary: { executions: number; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number };
+  budget: { monthly_limit_usd: number; warning_percent: number; hard_limit: number } | null;
+  models: Array<{ model_id: string; label: string; input_usd_per_million: number; output_usd_per_million: number; context_tokens: number; pricing_effective_at: string; pricing_source: string }>;
+  byModel: Array<{ model: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
+  byProcess: Array<{ blueprint_id: string; process_name: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
+  recent: Array<{ id: string; blueprint_id: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number; started_at: string }>;
+  estimateNotice: string;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -328,4 +337,7 @@ export const api = {
   notifications: () => request<{ data: NotificationData }>("/api/notifications"),
   updateNotificationPolicy: (id: string, body: { enabled: boolean }) => request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   importProcessPackage: (body: unknown) => request<{ data: { id: string; status: string } }>("/api/process-packages/import", { method: "POST", body: JSON.stringify(body) }),
+  usage: () => request<{ data: UsageData }>("/api/usage"),
+  updateBudget: (body: { monthlyLimitUsd: number; warningPercent: number; hardLimit: boolean }) =>
+    request<{ updated: boolean }>("/api/usage/budget", { method: "PATCH", body: JSON.stringify(body) }),
 };

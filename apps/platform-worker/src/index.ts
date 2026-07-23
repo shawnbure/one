@@ -12,6 +12,7 @@ import { applyOnboarding, exportCustomerManifest, getOnboarding } from "./onboar
 import { emitNotification } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { runEvaluation } from "./evaluation";
+import { getUsageLedger } from "./usage";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -146,6 +147,23 @@ app.post("/api/process-packages/import", requireRoles("admin", "builder", "owner
 
 app.get("/api/value", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await getValueDashboard(c.env, c.get("tenantId")) }));
+
+app.get("/api/usage", requireRoles("admin", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await getUsageLedger(c.env, c.get("tenantId")) }));
+
+app.patch("/api/usage/budget", requireRoles("admin", "owner"), async (c) => {
+  const body = await c.req.json<{ monthlyLimitUsd?: number; warningPercent?: number; hardLimit?: boolean }>();
+  if (!Number.isFinite(body.monthlyLimitUsd) || Number(body.monthlyLimitUsd) < 1 || Number(body.monthlyLimitUsd) > 1_000_000 ||
+      !Number.isInteger(body.warningPercent) || Number(body.warningPercent) < 1 || Number(body.warningPercent) > 100) {
+    return c.json({ error: "Budget must be $1–$1,000,000 and warning threshold must be 1–100%" }, 400);
+  }
+  await c.env.DB.prepare(`INSERT INTO tenant_budgets (tenant_id, monthly_limit_usd, warning_percent, hard_limit, updated_by)
+    VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id) DO UPDATE SET monthly_limit_usd=excluded.monthly_limit_usd,
+    warning_percent=excluded.warning_percent, hard_limit=excluded.hard_limit, updated_at=CURRENT_TIMESTAMP, updated_by=excluded.updated_by`)
+    .bind(c.get("tenantId"), body.monthlyLimitUsd, body.warningPercent, Number(Boolean(body.hardLimit)), c.get("actorId")).run();
+  await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "usage_budget.updated", "tenant", c.get("tenantId"), body);
+  return c.json({ updated: true });
+});
 
 app.get("/api/processes/:id/studio", async (c) => {
   const studio = await getStudio(c.env, c.get("tenantId"), c.req.param("id"));

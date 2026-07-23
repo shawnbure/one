@@ -88,7 +88,7 @@ export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequ
 }
 
 export const modelProfiles = {
-  fast: { label: "Fast", model: "@cf/meta/llama-3.1-8b-instruct-fast", use: "Classification and extraction" },
+  fast: { label: "Fast", model: "@cf/meta/llama-3.1-8b-instruct-fp8", use: "Classification and extraction" },
   balanced: { label: "Balanced", model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", use: "General process work" },
   reasoning: { label: "Reasoning", model: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", use: "Complex analysis" }
 } as const;
