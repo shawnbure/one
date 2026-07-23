@@ -6,7 +6,11 @@ export async function getGovernance(env: Env, tenantId: string) {
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
     tenantControl, dlpRules, dlpEvents, tools] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
-      b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id
+      b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id,
+      r.evaluation_status, r.evaluated_at,
+      (SELECT MAX(e.completed_at) FROM executions e
+        WHERE e.tenant_id=b.tenant_id AND e.blueprint_id=b.id
+          AND e.process_release_id=b.active_release_id AND e.status='completed') model_last_success_at
       FROM agent_blueprints b LEFT JOIN process_releases r
         ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
       WHERE b.tenant_id = ? ORDER BY b.name`).bind(tenantId).all(),
@@ -55,18 +59,8 @@ export async function getGovernance(env: Env, tenantId: string) {
   const lifecycleConnectionRows = requiredConnectionRows.filter((row) => row.kind !== "model_provider");
   const lifecycleReadyRows = lifecycleConnectionRows.filter((row) =>
     Boolean(row.rotation_owner) && (row.kind === "oauth" || Boolean(row.credential_expires_at)));
-  const modelKeys = [...new Set(processRows.map((row) =>
-    `${String(row.model_profile)}\u0000${String(row.model_id ?? "")}`))];
-  const models = modelKeys.map((key) => {
-    const [profile, modelId] = key.split("\u0000");
-    return {
-    profile: profile!,
-    modelId: modelId || "Legacy profile mapping",
-    provider: "Cloudflare Workers AI",
-    processes: processRows.filter((row) =>
-      String(row.model_profile) === profile && String(row.model_id ?? "") === modelId).length,
-    boundary: "Cloudflare account"
-  }; });
+  const models = buildModelInventory(processRows);
+  const readyModels = models.filter((model) => model.ready).length;
   return {
     processes: processRows,
     connections: connectionRows,
@@ -88,6 +82,9 @@ export async function getGovernance(env: Env, tenantId: string) {
       ...deploymentVerification.checks,
       { id: "members", label: "Organization membership and roles", ready: members.results.length > 0, detail: `${members.results.length} active membership records` },
       { id: "releases", label: "Published process releases", ready: processRows.every((row) => Boolean(row.active_release_id)), detail: `${processRows.filter((row) => row.active_release_id).length}/${processRows.length} processes pinned` },
+      { id: "models", label: "Recent Workers AI execution evidence",
+        ready: models.length > 0 && readyModels === models.length,
+        detail: `${readyModels}/${models.length} exact models have successful execution or passing evaluation evidence from the last 30 days` },
       { id: "connections", label: "Connection secret readiness", ready: requiredConnectionRows.every((row) => Number(row.secret_configured) === 1), detail: `${requiredConnectionRows.filter((row) => Number(row.secret_configured) === 1).length}/${requiredConnectionRows.length} required connections configured` },
       { id: "connection-lifecycle", label: "Credential rotation ownership", ready: lifecycleReadyRows.length === lifecycleConnectionRows.length,
         detail: `${lifecycleReadyRows.length}/${lifecycleConnectionRows.length} external credentials have an owner and expiry strategy` },
@@ -105,4 +102,31 @@ export async function getGovernance(env: Env, tenantId: string) {
     ],
     dataFlow: ["Process input", "Cloudflare Worker", "Durable Agent / Workflow", "Workers AI", "Typed tool policy", "Human checkpoint", "Business outcome"]
   };
+}
+
+export function buildModelInventory(processRows: Array<Record<string, unknown>>, now = Date.now()) {
+  const evidenceWindowMs = 30 * 86_400_000;
+  const modelKeys = [...new Set(processRows.map((row) =>
+    `${String(row.model_profile)}\u0000${String(row.model_id ?? "")}`))];
+  return modelKeys.map((key) => {
+    const [profile, rawModelId] = key.split("\u0000");
+    const matching = processRows.filter((row) =>
+      String(row.model_profile) === profile && String(row.model_id ?? "") === rawModelId);
+    const evidence = matching.flatMap((row) => [
+      row.model_last_success_at ? { at: String(row.model_last_success_at), kind: "successful execution" } : null,
+      row.evaluation_status === "passing" && row.evaluated_at
+        ? { at: String(row.evaluated_at), kind: "passing evaluation" } : null
+    ]).filter((item): item is { at: string; kind: string } => Boolean(item))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+    return {
+      profile: profile!,
+      modelId: rawModelId || "Legacy profile mapping",
+      provider: "Cloudflare Workers AI",
+      processes: matching.length,
+      boundary: "Cloudflare account",
+      ready: Boolean(rawModelId && evidence && Date.parse(evidence.at) >= now - evidenceWindowMs),
+      lastVerifiedAt: evidence?.at ?? null,
+      evidence: evidence?.kind ?? null
+    };
+  });
 }

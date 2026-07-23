@@ -440,6 +440,9 @@ export interface GovernanceData {
     provider: string;
     processes: number;
     boundary: string;
+    ready: boolean;
+    lastVerifiedAt: string | null;
+    evidence: string | null;
   }>;
   readiness: Array<{
     id: string;

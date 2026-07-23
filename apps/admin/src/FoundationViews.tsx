@@ -1325,7 +1325,7 @@ function Governance({
             </div>
           </div>
           {data.models.map((model) => (
-            <div key={model.profile}>
+            <div key={`${model.profile}-${model.modelId}`}>
               <span className="foundation-icon">
                 <Bot size={16} />
               </span>
@@ -1335,8 +1335,17 @@ function Governance({
                   {model.provider} · {model.boundary}
                 </small>
                 <small>{model.modelId}</small>
+                <small className={model.ready ? "model-ready" : "model-due"}>
+                  {model.ready
+                    ? `Verified by ${model.evidence} · ${dateTime(model.lastVerifiedAt!)}`
+                    : model.lastVerifiedAt
+                      ? `Verification expired · last ${dateTime(model.lastVerifiedAt)}`
+                      : "No successful execution evidence yet"}
+                </small>
               </span>
-              <em>{model.processes} processes</em>
+              <em className={model.ready ? "ready-badge" : "attention-badge"}>
+                {model.ready ? "Ready" : "Verify"}
+              </em>
             </div>
           ))}
         </article>

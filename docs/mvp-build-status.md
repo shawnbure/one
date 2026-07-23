@@ -94,6 +94,8 @@ The stable agent identifier is passed to Workers AI as `sessionAffinity`, improv
 
 Process Studio presents a curated exact-model selector for Cloudflare-hosted inference. Each option includes qualitative workload guidance and automatically selects its governed profile. The server rejects catalog/profile mismatches, while the system-capabilities endpoint exposes the same catalog for client tooling. The immutable process release remains the source of truth for runtime model identity.
 
+Governance derives model readiness from existing control-plane evidence rather than spending tokens on synthetic probes. Each exact model is marked ready when an active release has either a successful execution or passing evaluation within 30 days. The evidence is computed in the existing process inventory query, avoiding an additional D1 request, and legacy profile-only releases never count as verified.
+
 Do not add KV for prompts unless measurement proves a distinct global distribution need. It would add another consistency boundary without replacing durable conversation memory.
 
 ## Security and tenancy invariants

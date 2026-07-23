@@ -314,6 +314,12 @@ a:focus-visible {
 .model-evidence strong { font-size: 14px; }
 .model-evidence small { margin-top: 3px; color: #566b60; font-size: 13px; line-height: 1.5; }
 .model-evidence code { margin-top: 7px; overflow-wrap: anywhere; color: #3f5d4f; font-size: 12px; }
+.model-inventory .model-ready,
+.model-inventory .model-due { margin-top: 6px !important; font-size: 12px !important; }
+.model-inventory .model-ready { color: #2f7658 !important; }
+.model-inventory .model-due { color: #956728 !important; }
+.model-inventory em.ready-badge,
+.model-inventory em.attention-badge { flex: none; font-size: 11px !important; font-weight: 700; }
 .contract-evidence {
   display: flex;
   align-items: flex-start;
