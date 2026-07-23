@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, Circle, Download, FileDown, KeyRound, LifeBuoy, Rocket, Settings2, ShieldCheck, UserPlus } from "lucide-react";
-import { api, type ManagedLifecycleData, type OnboardingData, type ProcessTemplate, type SessionData } from "./api";
+import { CalendarClock, CheckCircle2, Circle, Download, FileDown, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, Upload, UserPlus } from "lucide-react";
+import { api, type ConfigurationRestorePreview, type ManagedLifecycleData, type OnboardingData, type ProcessTemplate, type SessionData } from "./api";
+import "./configuration-backup.css";
 
 export function CustomerSetupView({ session, onNotice }: { session: SessionData | null; onNotice: (message: string) => void }) {
   const [data, setData] = useState<OnboardingData | null>(null);
@@ -8,6 +9,11 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
   const [lifecycle, setLifecycle] = useState<ManagedLifecycleData | null>(null);
   const [saving, setSaving] = useState(false);
   const [launching, setLaunching] = useState(false);
+  const [restorePackage, setRestorePackage] = useState<unknown>(null);
+  const [restorePreview, setRestorePreview] = useState<ConfigurationRestorePreview | null>(null);
+  const [restoreReason, setRestoreReason] = useState("");
+  const [restoreConfirmation, setRestoreConfirmation] = useState("");
+  const [restoreBusy, setRestoreBusy] = useState(false);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [form, setForm] = useState({ organizationName: "", supportEmail: "", accentColor: "#1f7a5b", defaultModelProfile: "balanced", dataRegion: "Cloudflare global network" });
   const [launch, setLaunch] = useState({
@@ -84,6 +90,33 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
     } catch (error) { onNotice(error instanceof Error ? error.message : "Lifecycle settings could not be saved"); }
     finally { setSaving(false); }
   }
+  async function chooseRestoreFile(file?: File) {
+    setRestorePreview(null);
+    if (!file) { setRestorePackage(null); return; }
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      setRestorePackage(parsed);
+      setRestorePreview((await api.previewConfigurationRestore(parsed)).data);
+      onNotice("Configuration package validated. Review every section before applying.");
+    } catch (error) {
+      setRestorePackage(null);
+      onNotice(error instanceof Error ? error.message : "Configuration package could not be read");
+    }
+  }
+  async function restoreConfiguration() {
+    if (!restorePackage || !restorePreview) return;
+    setRestoreBusy(true);
+    try {
+      await api.applyConfigurationRestore({
+        package: restorePackage, checksum: restorePreview.checksum,
+        reason: restoreReason, confirmation: restoreConfirmation
+      });
+      setRestorePackage(null); setRestorePreview(null); setRestoreReason(""); setRestoreConfirmation("");
+      await load();
+      onNotice("Configuration restored with tenant-scoped audit evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Configuration restore failed"); }
+    finally { setRestoreBusy(false); }
+  }
 
   if (!data) return <div className="loading-card">Loading customer setup…</div>;
   const ready = data.checklist.filter((item) => item.ready).length;
@@ -133,6 +166,32 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
       <span><strong>Cloudflare Access member handoff</strong><small>Export the active Workrr member allowlist for review and idempotent application by an FDE. No API token or customer secret is included.</small></span>
       <a className="export-button" href="/api/onboarding/access-handoff"><Download size={15}/>Download Access handoff</a>
     </article>
+    {["admin","owner"].includes(session?.user.role ?? "") && <article className="configuration-backup panel">
+      <div className="section-head"><div><h2><RotateCcw size={18}/> Configuration backup & restore</h2>
+        <p>Move reviewed operating controls without moving credentials, content, identities, processes, legal holds, or audit history.</p></div>
+        <a className="export-button" href="/api/configuration/export"><Download size={15}/>Download configuration</a></div>
+      <div className="configuration-restore-grid">
+        <label className="configuration-upload"><Upload size={20}/><span><strong>Select a Workrr configuration file</strong>
+          <small>JSON · workrr-configuration/v1</small></span>
+          <input type="file" accept="application/json,.json" onChange={(event) => void chooseRestoreFile(event.target.files?.[0])}/></label>
+        {restorePreview ? <section className="restore-preview">
+          <header><CheckCircle2 size={18}/><span><strong>Package validated</strong>
+            <small>{restorePreview.source.environment} · checksum {restorePreview.checksum.slice(0, 12)}</small></span></header>
+          <div className="restore-counts">{Object.entries(restorePreview.counts).map(([name, count]) =>
+            <span key={name}><strong>{count}</strong><small>{name.replace(/([A-Z])/g, " $1")}</small></span>)}</div>
+          {restorePreview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+          <label>Restore reason<textarea maxLength={500} value={restoreReason}
+            placeholder="Who approved this restore, why it is needed, and the expected outcome."
+            onChange={(event) => setRestoreReason(event.target.value)}/></label>
+          <label>Confirmation<input value={restoreConfirmation} placeholder="Type RESTORE CONFIGURATION"
+            onChange={(event) => setRestoreConfirmation(event.target.value)}/></label>
+          <button className="primary" disabled={restoreBusy || restoreReason.trim().length < 10 ||
+            restoreConfirmation !== "RESTORE CONFIGURATION"} onClick={() => void restoreConfiguration()}>
+            <RotateCcw size={15}/>{restoreBusy ? "Restoring…" : "Apply reviewed configuration"}</button>
+        </section> : <section className="restore-boundary"><ShieldCheck size={20}/><div><strong>Safe restore boundary</strong>
+          <p>The file is validated and checksummed before the apply controls appear. External notification routes return disabled and must be reviewed locally.</p></div></section>}
+      </div>
+    </article>}
     {lifecycle && <article className="lifecycle-center panel">
       <div className="section-head"><div><h2><LifeBuoy size={18}/> Managed lifecycle</h2><p>Named ownership, maintenance timing, recovery review, and redacted evidence for the team operating Workrr after handoff.</p></div>
         <span className={`connection-state ${lifecycle.preflight.status === "ready" ? "healthy" : "attention"}`}><i/>

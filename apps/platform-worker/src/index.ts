@@ -53,6 +53,8 @@ import { governExecutionMemory, listExecutionMemory } from "./memory-governance"
 import { getRecoveryOperations, RecoveryConflict, updateRecoveryTask } from "./recovery";
 import { DelegationConflict, listApprovalDelegations, setApprovalDelegation } from "./approval-delegations";
 import { getDeploymentVerification } from "./deployment-verification";
+import { applyConfigurationRestore, ConfigurationRestoreConflict, exportConfigurationPackage,
+  previewConfigurationRestore } from "./configuration-packages";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -192,6 +194,32 @@ app.get("/api/onboarding/access-handoff", requireRoles("admin", "owner"), async 
   c.header("content-disposition", `attachment; filename="workrr-access-handoff-${c.env.ENVIRONMENT}.json"`);
   c.header("cache-control", "no-store");
   return c.json(await exportAccessHandoff(c.env, c.get("tenantId")));
+});
+
+app.get("/api/configuration/export", requireRoles("admin", "owner"), async (c) => {
+  c.header("content-disposition",
+    `attachment; filename="workrr-configuration-${c.env.ENVIRONMENT}-${new Date().toISOString().slice(0, 10)}.json"`);
+  c.header("cache-control", "no-store");
+  return c.json(await exportConfigurationPackage(c.env, c.get("tenantId")));
+});
+
+app.post("/api/configuration/restore/preview", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await previewConfigurationRestore((await c.req.json<{ package?: unknown }>()).package) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Configuration package is invalid" }, 400);
+  }
+});
+
+app.post("/api/configuration/restore", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await applyConfigurationRestore(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Configuration restore failed" },
+      error instanceof ConfigurationRestoreConflict ? 409 : 400);
+  }
 });
 
 app.get("/api/lifecycle", requireRoles("admin", "owner", "operator", "viewer"), async (c) =>

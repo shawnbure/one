@@ -626,6 +626,14 @@ export interface OnboardingData {
   bootstrap: null | { status: "started" | "completed" | "failed"; member_id: string | null; process_id: string | null;
     started_at: string; completed_at: string | null; last_error: string | null };
 }
+export interface ConfigurationRestorePreview {
+  checksum: string;
+  source: { environment: string; tenantId: string };
+  counts: { organization: number; lifecycle: number; retention: number;
+    dlpRules: number; notificationPolicies: number };
+  warnings: string[];
+  package: Record<string, unknown>;
+}
 export interface ManagedLifecycleData {
   settings: null | {
     support_owner_id: string | null; recovery_owner_id: string | null; escalation_email: string;
@@ -1199,6 +1207,15 @@ export const api = {
     request<{ data: { disconnected: boolean; connectionId?: string } }>(
       "/api/oauth/microsoft/disconnect", { method: "POST", body: "{}" }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
+  previewConfigurationRestore: (configurationPackage: unknown) =>
+    request<{ data: ConfigurationRestorePreview }>("/api/configuration/restore/preview", {
+      method: "POST", body: JSON.stringify({ package: configurationPackage })
+    }),
+  applyConfigurationRestore: (body: {
+    package: unknown; checksum: string; reason: string; confirmation: string;
+  }) => request<{ data: { id: string; checksum: string;
+    counts: ConfigurationRestorePreview["counts"]; appliedAt: string } }>(
+      "/api/configuration/restore", { method: "POST", body: JSON.stringify(body) }),
   lifecycle: () => request<{ data: ManagedLifecycleData }>("/api/lifecycle"),
   updateLifecycle: (body: { supportOwnerId: string; recoveryOwnerId: string; escalationEmail: string;
     maintenanceDayUtc: number; maintenanceHourUtc: number; recoveryReviewDueAt: string | null;

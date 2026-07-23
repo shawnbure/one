@@ -346,6 +346,23 @@ describe("control-plane security boundary", () => {
     expect(consumer.queries.some((sql) => sql.includes("FROM audit_events deleted"))).toBe(false);
   });
 
+  it("restricts configuration backup and restore to owners and administrators", async () => {
+    for (const role of ["builder", "operator", "reviewer", "viewer", "consumer"]) {
+      const principal = environment(role);
+      const preview = await app.fetch(new Request("http://localhost/api/configuration/restore/preview", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ package: {} })
+      }), principal.env as never, executionCtx as never);
+      const apply = await app.fetch(new Request("http://localhost/api/configuration/restore", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }), principal.env as never, executionCtx as never);
+      expect(preview.status).toBe(403);
+      expect(apply.status).toBe(403);
+      expect(principal.queries.some((sql) => sql.includes("configuration_restores"))).toBe(false);
+    }
+  });
+
   it("allows viewers to inspect typed tools but not create or change them", async () => {
     const registryEnvironment = environment("viewer");
     const registryResponse = await app.fetch(new Request("http://localhost/api/tool-adapters", {
