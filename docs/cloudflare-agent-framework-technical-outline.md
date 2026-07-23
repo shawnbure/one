@@ -974,6 +974,8 @@ Deliverables:
   and recovery-exercise sign-off.
 - explicit provider acceptance runs for code-owned read-only endpoints, with capability/scope,
   HTTP outcome, and latency evidence but no provider payload retention.
+- native Worker version metadata and an exact additive-migration compatibility check visible in the
+  customer handoff surface, with no dependency on agent hot paths.
 
 Exit criteria: an FDE can configure a new customer without modifying framework core.
 

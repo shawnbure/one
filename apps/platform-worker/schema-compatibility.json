@@ -1,0 +1,5 @@
+{
+  "applicationRelease": "0.1.0",
+  "requiredMigrationId": 68,
+  "requiredMigrationName": "0068_provider_acceptance.sql"
+}

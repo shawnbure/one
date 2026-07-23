@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, Circle, ClipboardCheck, Clock3, Download, FileDown, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, Upload, UserPlus } from "lucide-react";
-import { api, type ConfigurationRestorePreview, type ManagedLifecycleData, type OnboardingData, type ProcessTemplate, type SessionData } from "./api";
+import { CalendarClock, CheckCircle2, Circle, ClipboardCheck, Clock3, Cloud, Database, Download, FileDown, GitCommitHorizontal, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, TriangleAlert, Upload, UserPlus } from "lucide-react";
+import { api, type ConfigurationRestorePreview, type ManagedLifecycleData, type OnboardingData, type PlatformVersionData, type ProcessTemplate, type SessionData } from "./api";
 import "./configuration-backup.css";
+import "./deployment-version.css";
 import "./handoff.css";
 
 export function CustomerSetupView({ session, onNotice }: { session: SessionData | null; onNotice: (message: string) => void }) {
   const [data, setData] = useState<OnboardingData | null>(null);
   const [templates, setTemplates] = useState<ProcessTemplate[]>([]);
   const [lifecycle, setLifecycle] = useState<ManagedLifecycleData | null>(null);
+  const [platformVersion, setPlatformVersion] = useState<PlatformVersionData | null>(null);
   const [saving, setSaving] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [restorePackage, setRestorePackage] = useState<unknown>(null);
@@ -31,13 +33,14 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
 
   async function load() {
     try {
-      const [result, templateResult, lifecycleResult] = await Promise.all([
-        api.onboarding(), api.processTemplates(), api.lifecycle()
+      const [result, templateResult, lifecycleResult, versionResult] = await Promise.all([
+        api.onboarding(), api.processTemplates(), api.lifecycle(), api.platformVersion()
       ]);
       setTemplates(templateResult.data);
       const next = result.data;
       setData(next);
       setLifecycle(lifecycleResult.data);
+      setPlatformVersion(versionResult.data);
       const lifecycleSettings = lifecycleResult.data.settings;
       if (lifecycleSettings) setLifecycleForm({
         supportOwnerId: lifecycleSettings.support_owner_id ?? "",
@@ -192,6 +195,28 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
       <span><strong>Cloudflare Access member handoff</strong><small>Export the active Workrr member allowlist for review and idempotent application by an FDE. No API token or customer secret is included.</small></span>
       <a className="export-button" href="/api/onboarding/access-handoff"><Download size={15}/>Download Access handoff</a>
     </article>
+    {platformVersion && <article className={`deployment-version panel ${platformVersion.schema.status}`}>
+      <div className="section-head"><div><h2><Cloud size={18}/> Running deployment</h2>
+        <p>Cloudflare runtime identity and D1 compatibility evidence for support, upgrades, and rollback decisions.</p></div>
+        <span className={`deployment-compatibility ${platformVersion.schema.compatible ? "compatible" : "attention"}`}>
+          {platformVersion.schema.compatible ? <CheckCircle2 size={16}/> : <TriangleAlert size={16}/>}
+          {schemaStatusLabel(platformVersion.schema.status)}
+        </span>
+      </div>
+      <div className="deployment-version-grid">
+        <section><GitCommitHorizontal size={19}/><span><small>Application release</small>
+          <strong>Workrr One {platformVersion.applicationRelease}</strong>
+          <em>{platformVersion.environment} · {platformVersion.domain}</em></span></section>
+        <section><Cloud size={19}/><span><small>Cloudflare Worker version</small>
+          <strong className="version-identifier" title={platformVersion.worker.versionId}>{platformVersion.worker.versionId}</strong>
+          <em>{platformVersion.worker.createdAt ? `Created ${formatDateTime(platformVersion.worker.createdAt)}` : "Local version metadata"}</em></span></section>
+        <section><Database size={19}/><span><small>D1 schema</small>
+          <strong>Migration {platformVersion.schema.appliedMigrationId ?? "unknown"} of {platformVersion.schema.requiredMigrationId}</strong>
+          <em>{platformVersion.schema.appliedMigrationName ?? "Applied migration evidence unavailable"}</em></span></section>
+      </div>
+      {!platformVersion.schema.compatible && <p className="deployment-guidance">{schemaGuidance(platformVersion.schema.status)}</p>}
+      <p className="deployment-boundary">Version metadata comes from the Worker binding. Schema evidence is one bounded D1 read only when Customer Setup opens; agent requests never consult it.</p>
+    </article>}
     <article className="implementation-journey panel">
       <div className="section-head"><div><h2><Clock3 size={18}/> Implementation journey</h2>
         <p>Actual tenant evidence against the aggressive MVP targets. Missing evidence remains pending.</p></div>
@@ -315,4 +340,28 @@ function formatDate(value: string | null) {
   if (!value) return "recorded";
   const date = new Date(value.endsWith("Z") ? value : `${value.replace(" ", "T")}Z`);
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit"
+  }).format(date);
+}
+
+function schemaStatusLabel(status: PlatformVersionData["schema"]["status"]) {
+  if (status === "current") return "Schema compatible";
+  if (status === "migration_required") return "Migration required";
+  if (status === "application_upgrade_required") return "Application upgrade required";
+  return "Compatibility unknown";
+}
+
+function schemaGuidance(status: PlatformVersionData["schema"]["status"]) {
+  if (status === "migration_required") {
+    return "Do not promote this deployment. Apply the repository's additive D1 migrations, then verify this environment again.";
+  }
+  if (status === "application_upgrade_required") {
+    return "This database is newer than the running application. Deploy a compatible Workrr release before operating the environment.";
+  }
+  return "D1 migration evidence could not be read. Treat the environment as unverified until the database binding and migration table are checked.";
 }

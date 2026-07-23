@@ -28,6 +28,7 @@ import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, 
 import { isDlpBlocked, updateDlpRule } from "./dlp";
 import { getShadowReview, listShadowReviews, reviewShadowExecution, ShadowReviewConflict } from "./shadow";
 import { getProviderAcceptance, runMicrosoftAcceptance } from "./provider-acceptance";
+import { getPlatformVersion } from "./platform-version";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
@@ -2055,6 +2056,9 @@ app.get("/api/system/capabilities", (c) => c.json({
   promptCache: "Agent-local SQLite plus Workers AI session affinity",
   gateway: "planned"
 }));
+
+app.get("/api/system/version", requireRoles("admin", "owner", "operator", "builder", "viewer"), async (c) =>
+  c.json({ data: await getPlatformVersion(c.env) }));
 
 const handler: ExportedHandler<Env, WorkrrQueueJob> = {
   fetch: app.fetch,

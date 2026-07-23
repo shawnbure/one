@@ -14,6 +14,8 @@ The FDE provisioning command derives environment-isolated D1, R2, Vectorize, Que
 
 Customer forks no longer require hand-editing every account-specific binding. A configuration generator validates the customer slug, Cloudflare account ID, production/development hostnames, Access organization origin, and distinct Access audiences before emitting a complete two-environment Wrangler file. Resource and Workflow names are deterministically isolated by customer and environment, D1 identifiers remain unassigned until provisioning, no credential values are accepted or emitted, output permissions are owner-only, and existing files are never overwritten.
 
+Customer Setup exposes the exact running Cloudflare Worker version ID and creation time through the native Version Metadata binding. It compares the latest applied D1 migration with a repository-validated compatibility manifest and distinguishes current, migration-required, newer-database, and unavailable states. The manifest must identify the repository's latest sequential migration or repository validation fails. This adds no API call or storage read to agent execution; the one bounded `d1_migrations` read occurs only when an authorized operator opens Customer Setup.
+
 The product is deliberately process-first. Agents are an execution primitive, not the organizing metaphor in the customer UI.
 
 ## Implemented product surfaces
@@ -35,6 +37,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Knowledge Center | Governed text/file intake, pre-storage DLP, R2 source/chunk storage, queued Workers AI embedding, tenant-filtered Vectorize retrieval, process bindings, review/expiry enforcement, execution citation evidence, diagnostics, test query, reindex, and removal |
 | Foundations | Truthful connection health, credential ownership/expiry, typed tool catalog, evaluations, and model profile starting points |
 | Customer setup | Idempotent launch manifest plus managed-lifecycle ownership, maintenance timing, recovery review, evidence-based preflight, Access handoff, and redacted support export |
+| Deployment identity | Exact Worker version metadata, environment/domain identity, and fail-visible D1 schema compatibility evidence |
 | Notifications | Owned in-app response tasks with acknowledgement SLAs and Cron escalation, plus quiet-hour-aware webhook delivery and true hourly/daily Microsoft 365 email digests with persisted provider evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 | Process retirement | Immediate execution/ingestion shutdown, legal hold, independent approval, cooling period, Cron/Queue disposal, durable-actor erasure, selected content redaction, and retained audit evidence |

@@ -16,6 +16,9 @@ function environment(role = "admin") {
         async first<T extends Row>() {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
+          if (sql.includes("FROM d1_migrations")) return {
+            id: 68, name: "0068_provider_acceptance.sql", applied_at: "2026-07-23 16:45:00"
+          } as T;
           if (sql.includes("SELECT p.channel, p.destination")) return {
             channel: "webhook", destination: "https://customer.example/events", secret_binding: "NOTIFICATION_WEBHOOK_SECRET"
           } as T;
@@ -68,6 +71,23 @@ describe("control-plane security boundary", () => {
       appDomain: "one-dev.workrr.ai",
       user: { role: "admin" }
     });
+  });
+
+  it("exposes deployment compatibility only to operating and audit roles", async () => {
+    const viewer = environment("viewer");
+    const allowed = await app.fetch(new Request("http://localhost/api/system/version", {
+      headers: { "x-workrr-user": "operator@example.com", "x-workrr-role": "admin" }
+    }), viewer.env as never, executionCtx as never);
+    expect(allowed.status).toBe(200);
+    expect(await allowed.json()).toMatchObject({
+      data: { environment: "development", schema: { status: "current", compatible: true } }
+    });
+
+    const consumer = environment("consumer");
+    const denied = await app.fetch(new Request("http://localhost/api/system/version", {
+      headers: { "x-workrr-user": "operator@example.com", "x-workrr-role": "admin" }
+    }), consumer.env as never, executionCtx as never);
+    expect(denied.status).toBe(403);
   });
 
   it("rejects cross-origin browser mutations before business data changes", async () => {

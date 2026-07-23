@@ -31,6 +31,7 @@ export function generateCustomerWrangler(input) {
     routes: [{ pattern: domain, custom_domain: true }],
     assets: { directory: "../admin/dist", not_found_handling: "single-page-application",
       run_worker_first: ["/api/*", "/oauth/*", "/health"] },
+    version_metadata: { binding: "CF_VERSION_METADATA" },
     ai: { binding: "AI" },
     r2_buckets: [{ binding: "KNOWLEDGE_BUCKET", bucket_name: `${base}-knowledge${suffix}` }],
     vectorize: [{ binding: "KNOWLEDGE_INDEX", index_name: `${base}-knowledge${suffix}` }],

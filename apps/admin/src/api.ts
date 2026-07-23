@@ -755,6 +755,21 @@ export interface ManagedLifecycleData {
   counts: Record<string, number>;
   operatingControl: null | { mode: string; reason: string | null; updated_at: string };
 }
+export interface PlatformVersionData {
+  applicationRelease: string;
+  environment: string;
+  domain: string;
+  worker: { versionId: string; tag: string | null; createdAt: string | null };
+  schema: {
+    status: "current" | "migration_required" | "application_upgrade_required" | "unavailable";
+    compatible: boolean;
+    appliedMigrationId: number | null;
+    appliedMigrationName: string | null;
+    appliedAt: string | null;
+    requiredMigrationId: number;
+    requiredMigrationName: string;
+  };
+}
 export interface ProviderAcceptanceData {
   provider: "microsoft";
   connected: boolean;
@@ -1395,6 +1410,7 @@ export const api = {
         method: "POST", body: JSON.stringify({ capabilities })
       }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
+  platformVersion: () => request<{ data: PlatformVersionData }>("/api/system/version"),
   previewConfigurationRestore: (configurationPackage: unknown) =>
     request<{ data: ConfigurationRestorePreview }>("/api/configuration/restore/preview", {
       method: "POST", body: JSON.stringify({ package: configurationPackage })

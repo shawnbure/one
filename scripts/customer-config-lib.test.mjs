@@ -24,6 +24,8 @@ test("generates isolated, secret-free customer environments", () => {
   assert.equal(config.preview_urls, false);
   assert.equal(config.env.dev.workers_dev, false);
   assert.equal(config.env.dev.preview_urls, false);
+  assert.equal(config.version_metadata.binding, "CF_VERSION_METADATA");
+  assert.equal(config.env.dev.version_metadata.binding, "CF_VERSION_METADATA");
   assert.equal(JSON.stringify(config).includes("SECRET"), false);
 });
 

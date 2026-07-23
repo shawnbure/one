@@ -8,9 +8,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root })
   .toString().split("\0").filter(Boolean);
 const migrations = tracked.filter((file) => file.startsWith("apps/platform-worker/migrations/") && file.endsWith(".sql"));
+const schemaCompatibility = JSON.parse(readFileSync(path.join(root, "apps/platform-worker/schema-compatibility.json"), "utf8"));
 const readable = tracked.filter((file) => !/\.(?:png|jpg|jpeg|gif|webp|ico|pdf|woff2?)$/i.test(file));
 const entries = readable.map((file) => ({ file, content: readFileSync(path.join(root, file), "utf8") }));
 const errors = [...validateMigrationNames(migrations), ...findHighConfidenceSecrets(entries)];
+const latestMigration = migrations.toSorted().at(-1)?.split("/").at(-1);
+if (latestMigration !== schemaCompatibility.requiredMigrationName ||
+  Number(latestMigration?.slice(0, 4)) !== schemaCompatibility.requiredMigrationId) {
+  errors.push("schema-compatibility.json must identify the repository's latest D1 migration");
+}
 
 if (errors.length) {
   console.error(`Repository validation failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
