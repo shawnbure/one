@@ -157,7 +157,7 @@
 .knowledge-list article {
   grid-template-columns: 40px minmax(220px, 1.4fr) minmax(100px, .5fr) minmax(120px, .6fr) auto auto;
 }
-.knowledge-actions { display: flex; gap: 6px; }
+.knowledge-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .knowledge-actions button {
   display: inline-flex;
   align-items: center;

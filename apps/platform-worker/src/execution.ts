@@ -44,7 +44,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "queued", startedAt };
   }
 
-  const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, inputDlp.modelText);
+  const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, inputDlp.modelText, executionId);
   if (blueprint.executionProfile === "instant") {
     const prompt = await requiredPrompt(env, promptReleaseId);
     const result = await runModel(env, blueprint.modelProfile, prompt, grounded.input);

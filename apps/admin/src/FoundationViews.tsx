@@ -211,7 +211,7 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
 function Knowledge({ data, onReload, onNotice }: {
   data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void;
 }) {
-  const [form, setForm] = useState({ name: "", owner: "", provenance: "", sensitivity: "internal", text: "" });
+  const [form, setForm] = useState({ name: "", owner: "", provenance: "", sensitivity: "internal", expiresAt: "", text: "" });
   const [file, setFile] = useState<File | null>(null);
   const [processes, setProcesses] = useState<string[]>([]);
   const [query, setQuery] = useState("");
@@ -227,7 +227,7 @@ function Knowledge({ data, onReload, onNotice }: {
       body.set("allowedProcesses", JSON.stringify(processes));
       if (file) body.set("file", file);
       await api.createKnowledgeSource(body);
-      setForm({ name: "", owner: "", provenance: "", sensitivity: "internal", text: "" });
+      setForm({ name: "", owner: "", provenance: "", sensitivity: "internal", expiresAt: "", text: "" });
       setFile(null);
       setProcesses([]);
       onNotice("Source accepted. Cloudflare Queue is indexing it now.");
@@ -249,6 +249,14 @@ function Knowledge({ data, onReload, onNotice }: {
     setBusy(id);
     try { await api.reindexKnowledgeSource(id); onNotice("Reindex queued."); await onReload(); }
     catch (error) { onNotice(error instanceof Error ? error.message : "Reindex failed"); }
+    finally { setBusy(null); }
+  }
+  async function review(id: string) {
+    const proposed = window.prompt("Review expiry (YYYY-MM-DD). Leave blank for no expiry:", "");
+    if (proposed === null) return;
+    setBusy(id);
+    try { await api.reviewKnowledgeSource(id, proposed || null); onNotice("Source review recorded and retrieval restored."); await onReload(); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Review failed"); }
     finally { setBusy(null); }
   }
   async function remove(id: string, name: string) {
@@ -278,6 +286,9 @@ function Knowledge({ data, onReload, onNotice }: {
               <option value="public">Public</option><option value="internal">Internal</option>
               <option value="confidential">Confidential</option><option value="restricted">Restricted</option>
             </select></label>
+            <label>Review expiry<input type="date" value={form.expiresAt}
+              min={new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)}
+              onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} /></label>
           </div>
           <label>Approved processes <small>Leave empty to make this source available to all processes.</small></label>
           <div className="knowledge-processes">
@@ -325,6 +336,8 @@ function Knowledge({ data, onReload, onNotice }: {
             <span>
               <strong>{item.name}</strong>
               <small>{item.provenance}</small>
+              <small>{item.chunk_count ? `${item.chunk_count} chunks · v${item.version}` : "No indexed content"}
+                {item.expires_at ? ` · review by ${new Date(item.expires_at).toLocaleDateString()}` : " · no review expiry"}</small>
               <em>
                 {parseArray(item.allowed_processes_json ?? "[]").join(" · ") || "All processes"}
               </em>
@@ -345,6 +358,8 @@ function Knowledge({ data, onReload, onNotice }: {
               {item.object_key
                 ? <button type="button" disabled={busy === item.id} onClick={() => void reindex(String(item.id))}><RefreshCw size={14} /> Reindex</button>
                 : <small className="legacy-source">Legacy catalog entry</small>}
+              {item.object_key && <button type="button" disabled={busy === item.id} onClick={() => void review(String(item.id))}>
+                <FileCheck2 size={14} /> Review</button>}
               <button type="button" disabled={busy === item.id} onClick={() => void remove(String(item.id), String(item.name))}><XCircle size={14} /> Remove</button>
             </span>
           </article>

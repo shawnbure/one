@@ -15,7 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type Approval, type AuditEvent, type Execution, type QueueOperationsData } from "./api";
+import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation, type QueueOperationsData } from "./api";
 import "./queue-operations.css";
 
 interface Props {
@@ -30,6 +30,7 @@ export function ActivityView({ processes, onNotice }: Props) {
   const [detail, setDetail] = useState<Execution | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [citations, setCitations] = useState<ExecutionKnowledgeCitation[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -59,6 +60,7 @@ export function ActivityView({ processes, onNotice }: Props) {
         setDetail(result.data);
         setApprovals(result.approvals);
         setAudit(result.audit);
+        setCitations(result.citations);
       })
       .catch((error: Error) => onNotice(error.message));
   }, [selectedId]);
@@ -191,6 +193,21 @@ export function ActivityView({ processes, onNotice }: Props) {
                     "No output has been recorded yet."}
                 </p>
               </div>
+              {citations.length > 0 && (
+                <div className="execution-citations">
+                  <div>
+                    <ShieldCheck size={16} />
+                    <span><strong>Governed knowledge used</strong><small>{citations.length} attributable retrieval matches</small></span>
+                  </div>
+                  {citations.map((citation) => (
+                    <article key={citation.chunk_id}>
+                      <strong>[K{citation.ordinal + 1}] {citation.source_name}</strong>
+                      <small>{Math.round(citation.score * 100)}% match · {citation.provenance}</small>
+                      <p>{citation.excerpt}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
               {detail.instance_key && (
                 <div className="affinity-note">
                   <GitBranch size={16} />
@@ -220,6 +237,11 @@ export function ActivityView({ processes, onNotice }: Props) {
                     detail={detail.instance_key}
                     state="done"
                   />
+                )}
+                {citations.length > 0 && (
+                  <TraceItem title="Governed knowledge retrieved"
+                    detail={`${citations.length} cited chunks from ${new Set(citations.map((item) => item.source_id)).size} sources`}
+                    state="done" />
                 )}
                 {approvals.map((approval) => (
                   <TraceItem

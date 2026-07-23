@@ -192,6 +192,28 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("FROM process_queue_jobs q JOIN executions"))).toBe(false);
   });
 
+  it("allows viewers to inspect knowledge but not alter source lifecycle", async () => {
+    for (const request of [
+      new Request("http://localhost/api/knowledge-sources/source-1/reindex", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }),
+      new Request("http://localhost/api/knowledge-sources/source-1/review", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }),
+      new Request("http://localhost/api/knowledge-sources/source-1", {
+        method: "DELETE", headers: { origin: "http://localhost", "x-workrr-user": "operator@example.com" }
+      })
+    ]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(request, env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("UPDATE knowledge_sources") ||
+        sql.includes("DELETE FROM knowledge_sources"))).toBe(false);
+    }
+  });
+
   it("prevents viewers from weakening DLP policy", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/dlp/rules/ssn", {

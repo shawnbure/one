@@ -19,7 +19,7 @@ import { isDlpBlocked, updateDlpRule } from "./dlp";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
-  queryKnowledge, queueKnowledgeReindex } from "./knowledge";
+  queryKnowledge, queueKnowledgeReindex, reviewKnowledgeSource, expireKnowledgeSources } from "./knowledge";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -502,15 +502,18 @@ app.get("/api/executions/:id", async (c) => {
     FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(executionId, c.get("tenantId")).first();
   if (!execution) return c.json({ error: "Execution not found" }, 404);
-  const [approvals, audit] = await Promise.all([
+  const [approvals, audit, citations] = await Promise.all([
     c.env.DB.prepare("SELECT * FROM approvals WHERE tenant_id = ? AND execution_id = ? ORDER BY requested_at")
       .bind(c.get("tenantId"), executionId).all(),
     c.env.DB.prepare(`SELECT actor_id, event_type, target_type, target_id, detail_json, created_at FROM audit_events
       WHERE tenant_id = ? AND ((target_type = 'execution' AND target_id = ?) OR
       (target_type = 'approval' AND target_id IN (SELECT id FROM approvals WHERE execution_id = ?))) ORDER BY created_at`)
-      .bind(c.get("tenantId"), executionId, executionId).all()
+      .bind(c.get("tenantId"), executionId, executionId).all(),
+    c.env.DB.prepare(`SELECT source_id, source_name, chunk_id, ordinal, score, provenance, excerpt, created_at
+      FROM execution_knowledge_citations WHERE tenant_id=? AND execution_id=? ORDER BY ordinal`)
+      .bind(c.get("tenantId"), executionId).all()
   ]);
-  return c.json({ data: execution, approvals: approvals.results, audit: audit.results });
+  return c.json({ data: execution, approvals: approvals.results, audit: audit.results, citations: citations.results });
 });
 
 app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
@@ -649,6 +652,17 @@ app.post("/api/knowledge-sources/:id/reindex", requireRoles("admin", "builder", 
     return c.json({ data: await queueKnowledgeReindex(c.env, c.get("tenantId"), c.get("actorId"), sourceId) }, 202);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Knowledge source could not be reindexed" }, 404);
+  }
+});
+
+app.post("/api/knowledge-sources/:id/review", requireRoles("admin", "builder", "owner"), async (c) => {
+  const sourceId = c.req.param("id");
+  if (!sourceId) return c.json({ error: "Knowledge source ID is required" }, 400);
+  try {
+    return c.json({ data: await reviewKnowledgeSource(c.env, c.get("tenantId"), c.get("actorId"),
+      sourceId, await c.req.json<{ expiresAt?: string | null }>()) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Knowledge source review failed" }, 400);
   }
 });
 
@@ -1114,7 +1128,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
           VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
           .bind(crypto.randomUUID(), JSON.stringify({ at: now.toISOString() }))
       ]),
-      dispatchDueSchedules(env, now)
+      dispatchDueSchedules(env, now),
+      expireKnowledgeSources(env, now)
     ]));
   }
 };

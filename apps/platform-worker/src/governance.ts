@@ -34,6 +34,7 @@ export async function getGovernance(env: Env, tenantId: string) {
   const connectionRows = connections.results as Array<Record<string, unknown>>;
   const evaluationRows = evaluations.results as Array<Record<string, unknown>>;
   const credentialRows = credentials.results as Array<Record<string, unknown>>;
+  const knowledgeRows = knowledge.results as Array<Record<string, unknown>>;
   const requiredConnectionRows = connectionRows.filter((row) => row.kind !== "oauth" || row.status !== "disconnected");
   const models = [...new Set(processRows.map((row) => String(row.model_profile)))].map((profile) => ({
     profile,
@@ -66,6 +67,9 @@ export async function getGovernance(env: Env, tenantId: string) {
       { id: "retention", label: "Retention and deletion policy", ready: retention.results.length > 0, detail: `${retention.results.length} policies defined` },
       { id: "dlp", label: "Model-boundary DLP policy", ready: dlpRules.results.length === 6,
         detail: `${dlpRules.results.filter((row) => Number((row as Record<string, unknown>).enabled) === 1).length}/6 detectors enabled` },
+      { id: "knowledge", label: "Governed knowledge review", ready: knowledgeRows.every((row) =>
+        !row.object_key || (row.status === "ready" && (!row.expires_at || new Date(String(row.expires_at)) > new Date()))),
+        detail: `${knowledgeRows.filter((row) => row.status === "ready").length}/${knowledgeRows.filter((row) => row.object_key).length} indexed sources retrieval-ready` },
       { id: "observability", label: "Workers logs and traces", ready: true, detail: "Cloudflare observability enabled" }
     ],
     dataFlow: ["Process input", "Cloudflare Worker", "Durable Agent / Workflow", "Workers AI", "Human checkpoint", "Business outcome"]

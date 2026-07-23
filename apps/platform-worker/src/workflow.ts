@@ -30,7 +30,7 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       return result.modelText;
     });
     const groundedInput = await step.do("retrieve approved knowledge", async () =>
-      (await augmentWithKnowledge(this.env, tenantId, request.blueprintId, protectedInput)).input);
+      (await augmentWithKnowledge(this.env, tenantId, request.blueprintId, protectedInput, event.instanceId)).input);
     const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
       runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput));
     const result = await step.do("enforce output DLP policy", async () => {

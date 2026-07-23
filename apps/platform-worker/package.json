@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "cf:types": "wrangler types",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --env dev",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env=\"\"",
     "db:migrate:dev": "wrangler d1 migrations apply DB --remote --env dev"
   },

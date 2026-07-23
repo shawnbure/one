@@ -202,6 +202,16 @@ export interface KnowledgeCitation {
   excerpt: string;
   provenance: string;
 }
+export interface ExecutionKnowledgeCitation {
+  source_id: string;
+  source_name: string;
+  chunk_id: string;
+  ordinal: number;
+  score: number;
+  provenance: string;
+  excerpt: string;
+  created_at: string;
+}
 
 export interface ApiLog {
   id: string;
@@ -432,7 +442,7 @@ export const api = {
       `/api/queue-jobs/${encodeURIComponent(id)}/replay`, { method: "POST" },
     ),
   execution: (id: string) =>
-    request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[] }>(
+    request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[]; citations: ExecutionKnowledgeCitation[] }>(
       `/api/executions/${encodeURIComponent(id)}`,
     ),
   retryExecution: (id: string) =>
@@ -496,6 +506,10 @@ export const api = {
   reindexKnowledgeSource: (id: string) =>
     request<{ data: { id: string; status: string } }>(
       `/api/knowledge-sources/${encodeURIComponent(id)}/reindex`, { method: "POST", body: "{}" }),
+  reviewKnowledgeSource: (id: string, expiresAt?: string | null) =>
+    request<{ data: { id: string; status: string; expiresAt: string | null; updated: boolean } }>(
+      `/api/knowledge-sources/${encodeURIComponent(id)}/review`,
+      { method: "POST", body: JSON.stringify({ expiresAt: expiresAt || null }) }),
   deleteKnowledgeSource: (id: string) =>
     request<{ data: { id: string; deleted: boolean } }>(
       `/api/knowledge-sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
