@@ -1020,6 +1020,83 @@ a:focus-visible {
 .retention-run-progress em {
   color: #176b4b; font-size: 12px; font-style: normal; font-weight: 800; text-transform: uppercase;
 }
+
+/* Legacy prototype screens used sub-12px labels. Keep operational metadata compact without
+   requiring browser zoom, including the setup wizard and high-density review surfaces. */
+.process-wizard > header small,
+.wizard-progress i,
+.wizard-progress small,
+.wizard-step > p,
+.wizard-step > label,
+.wizard-step .two-fields label,
+.baseline-grid label,
+.wizard-step input,
+.wizard-step textarea,
+.wizard-step select,
+.template-grid strong,
+.template-grid small,
+.template-grid em,
+.definition-summary small,
+.definition-summary strong,
+.opportunity-result strong,
+.opportunity-result small,
+.process-wizard > footer > button,
+.process-wizard > footer > span,
+.empty-approval span,
+.assignment-chip strong,
+.work-copy small,
+.work-meta small,
+.work-meta strong,
+.back-link,
+.review-heading p,
+.evidence-block p,
+.explainer-head small,
+.explainer-head > em,
+.explanation-outcome small,
+.execution-explainer footer,
+.reconciliation-head,
+.reconciliation-row button,
+.rotation-state,
+.support-priority,
+.support-status {
+  font-size: 12px !important;
+  line-height: 1.45;
+}
+
+.process-wizard > header small,
+.wizard-step > p,
+.template-grid small,
+.template-grid em,
+.definition-summary small,
+.opportunity-result small,
+.process-wizard > footer > span {
+  color: #52645b !important;
+}
+.wizard-progress > span { color: #65766e; }
+.wizard-step > label,
+.wizard-step .two-fields label,
+.baseline-grid label { color: #405149 !important; }
+
+.wizard-step input,
+.wizard-step textarea,
+.wizard-step select,
+.process-wizard > footer > button {
+  font-size: 13px !important;
+}
+
+.workspace strong,
+.private strong,
+nav button em,
+.search kbd,
+.header-actions .user,
+.panel-head .count,
+.approval-top .company,
+.approval-top strong,
+.approval-top > span:last-child,
+.risk strong {
+  font-size: 12px !important;
+  line-height: 1.4;
+}
 .retention-actions {
   display: flex;
   flex-wrap: wrap;
