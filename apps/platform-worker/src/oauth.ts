@@ -113,9 +113,11 @@ export async function completeMicrosoftOAuth(env: Env, state: string, code: stri
       .bind(id, row.tenant_id, connectionId, profile.id, profile.mail ?? profile.userPrincipalName ?? null,
         profile.displayName ?? null, JSON.stringify(scopes), encrypted.ciphertext, encrypted.iv, tokenExpiresAt, row.actor_id),
     env.DB.prepare(`UPDATE connections SET status='healthy', secret_configured=1, scopes_json=?, access_mode=?,
-      last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`)
+      last_checked_at=CURRENT_TIMESTAMP, last_success_at=CURRENT_TIMESTAMP, health_message=?
+      WHERE id=? AND tenant_id=?`)
       .bind(JSON.stringify(scopes.filter((scope) => !BASE_SCOPES.includes(scope))),
         scopes.some((scope) => scope.toLowerCase() === "mail.send") ? "read_write" : "read",
+        `Microsoft profile verified during connection for ${profile.mail ?? profile.userPrincipalName ?? profile.displayName ?? "delegated account"}.`,
         connectionId, row.tenant_id),
     audit(env, row.tenant_id, row.actor_id, "connection.oauth_connected", connectionId, {
       provider: "microsoft", account: profile.mail ?? profile.userPrincipalName ?? null, scopes
@@ -153,8 +155,10 @@ export async function checkMicrosoftConnection(env: Env, tenantId: string, actor
         .bind(profile.mail ?? profile.userPrincipalName ?? row.account_email, profile.displayName ?? row.account_name,
           rotated?.ciphertext ?? null, rotated?.iv ?? null,
           new Date(Date.now() + Math.max(60, Number(token.expires_in ?? 3600)) * 1000).toISOString(), row.id, tenantId),
-      env.DB.prepare("UPDATE connections SET status='healthy', last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
-        .bind(row.connection_id, tenantId),
+      env.DB.prepare(`UPDATE connections SET status='healthy', last_checked_at=CURRENT_TIMESTAMP,
+        last_success_at=CURRENT_TIMESTAMP, health_message=? WHERE id=? AND tenant_id=?`)
+        .bind(`Microsoft profile check succeeded for ${profile.mail ?? profile.userPrincipalName ?? profile.displayName ?? "delegated account"}.`,
+          row.connection_id, tenantId),
       audit(env, tenantId, actorId, "connection.oauth_checked", row.connection_id, { provider: "microsoft", status: "healthy" })
     ]);
     return { id: row.connection_id, status: "healthy", detail: `Microsoft 365 connected as ${profile.mail ?? profile.userPrincipalName ?? profile.displayName ?? "delegated account"}` };
@@ -163,8 +167,8 @@ export async function checkMicrosoftConnection(env: Env, tenantId: string, actor
     await env.DB.batch([
       env.DB.prepare("UPDATE oauth_connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
         .bind(detail, row.id, tenantId),
-      env.DB.prepare("UPDATE connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
-        .bind(row.connection_id, tenantId)
+      env.DB.prepare(`UPDATE connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP,
+        health_message=? WHERE id=? AND tenant_id=?`).bind(detail, row.connection_id, tenantId)
     ]);
     throw new Error(detail);
   }
@@ -223,8 +227,8 @@ export async function getMicrosoftAccessToken(
     await env.DB.batch([
       env.DB.prepare(`UPDATE oauth_connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP,
         last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`).bind(detail, row.id, tenantId),
-      env.DB.prepare(`UPDATE connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP
-        WHERE id=? AND tenant_id=?`).bind(row.connection_id, tenantId),
+      env.DB.prepare(`UPDATE connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP,
+        health_message=? WHERE id=? AND tenant_id=?`).bind(detail, row.connection_id, tenantId),
     ]);
     throw new Error(detail);
   }
@@ -237,8 +241,9 @@ export async function disconnectMicrosoft(env: Env, tenantId: string, actorId: s
   await env.DB.batch([
     env.DB.prepare(`UPDATE oauth_connections SET status='disconnected', refresh_token_ciphertext='revoked',
       refresh_token_iv='revoked', last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`).bind(row.id, tenantId),
-    env.DB.prepare("UPDATE connections SET status='disconnected', secret_configured=0, last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
-      .bind(row.connection_id, tenantId),
+    env.DB.prepare(`UPDATE connections SET status='disconnected', secret_configured=0,
+      last_checked_at=CURRENT_TIMESTAMP, health_message='Microsoft 365 was disconnected by an administrator.'
+      WHERE id=? AND tenant_id=?`).bind(row.connection_id, tenantId),
     audit(env, tenantId, actorId, "connection.oauth_disconnected", row.connection_id, { provider: "microsoft" })
   ]);
   return { disconnected: true, connectionId: row.connection_id };

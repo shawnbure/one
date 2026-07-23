@@ -28,6 +28,8 @@ import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markTo
   processToolAction, retryToolAction } from "./tool-actions";
 import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
 import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
+import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
+  updateConnectionLifecycle } from "./connection-operations";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -1096,10 +1098,34 @@ app.post("/api/connections/:id/test", requireRoles("admin", "builder", "owner", 
     : configured
       ? "Credential metadata exists; a connector-specific live probe is still required."
       : "Connector credential is not configured.";
-  await c.env.DB.prepare("UPDATE connections SET status = ?, last_checked_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
-    .bind(status, connection.id, tenantId).run();
+  if (status === "healthy") {
+    await markConnectionSuccess(c.env, tenantId, String(connection.id), detail);
+  } else if (status === "attention") {
+    await markConnectionAttention(c.env, tenantId, String(connection.id), detail);
+  } else {
+    await c.env.DB.prepare(`UPDATE connections SET status='disconnected', last_checked_at=CURRENT_TIMESTAMP,
+      health_message=? WHERE id=? AND tenant_id=?`).bind(detail, connection.id, tenantId).run();
+  }
   await writeAudit(c.env, tenantId, c.get("actorId"), "connection.checked", "connection", String(connection.id), { status, detail });
   return c.json({ data: { id: connection.id, status, detail, checkedAt: new Date().toISOString() } });
+});
+
+app.patch("/api/connections/:id/lifecycle", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  try {
+    const connectionId = c.req.param("id");
+    if (!connectionId) return c.json({ error: "Connection id is required" }, 400);
+    const body = await c.req.json<{
+      credentialExpiresAt?: string | null;
+      rotationOwner?: string | null;
+      lastRotatedAt?: string | null;
+    }>();
+    return c.json({ data: await updateConnectionLifecycle(
+      c.env, c.get("tenantId"), c.get("actorId"), connectionId, body
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Connection lifecycle could not be updated";
+    return c.json({ error: message }, message === "Connection was not found" ? 404 : 400);
+  }
 });
 
 app.patch("/api/webhooks/:id/status", requireRoles("admin", "builder"), async (c) => {
@@ -1304,7 +1330,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       ]),
       dispatchDueSchedules(env, now),
       enqueueRecoverableToolActions(env),
-      expireKnowledgeSources(env, now)
+      expireKnowledgeSources(env, now),
+      emitConnectionExpiryAlerts(env, now)
     ]));
   }
 };

@@ -384,6 +384,7 @@ export function App() {
                   | "Evaluations"
                   | "Governance"
               }
+              session={session}
               onNotice={setNotice}
             />
           ) : (

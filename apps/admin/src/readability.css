@@ -466,6 +466,40 @@ a:focus-visible {
 .tool-builder fieldset label { display: flex; align-items: center; gap: 7px; margin: 5px 0; font-size: 12px; }
 .tool-builder fieldset input { width: auto; margin: 0; }
 .tool-builder > .primary { margin-top: 16px; }
+.connection-health-message {
+  margin: 12px 0 !important;
+  padding: 10px;
+  border-left: 3px solid #79a990;
+  border-radius: 5px;
+  background: #f4f8f6;
+  color: #354a41 !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  text-transform: none !important;
+}
+.connection-lifecycle-form {
+  display: grid !important;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #d6e1db;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+.connection-lifecycle-form label { color: #40534a; font-size: 12px; font-weight: 700; }
+.connection-lifecycle-form input,
+.connection-lifecycle-form select {
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px 9px;
+  border: 1px solid #cbd8d1;
+  border-radius: 6px;
+  background: white;
+  color: #24352d;
+  font-size: 13px;
+}
+.connection-lifecycle-form > div { display: flex !important; gap: 7px; }
+.connection-lifecycle-form button { flex: 1; padding: 8px; font-size: 12px; }
 
 @media (max-width: 1200px) {
   .tool-layout { grid-template-columns: 1fr; }

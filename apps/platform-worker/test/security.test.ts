@@ -100,6 +100,17 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("approval_messages"))).toBe(false);
   });
 
+  it("prevents viewers from changing connection credential lifecycle metadata", async () => {
+    const viewer = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/connections/connection-1/lifecycle", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ rotationOwner: "operator@example.com", credentialExpiresAt: "2027-01-01" })
+    }), viewer.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("UPDATE connections SET credential_expires_at"))).toBe(false);
+  });
+
   it("prevents viewers from creating smoke fixtures or machine identities", async () => {
     for (const path of ["/api/smoke-fixtures", "/api/service-principals"]) {
       const { env, queries } = environment("viewer");

@@ -46,6 +46,9 @@ export async function getGovernance(env: Env, tenantId: string) {
   const knowledgeRows = knowledge.results as Array<Record<string, unknown>>;
   const toolRows = tools.results as Array<Record<string, unknown>>;
   const requiredConnectionRows = connectionRows.filter((row) => row.kind !== "oauth" || row.status !== "disconnected");
+  const lifecycleConnectionRows = requiredConnectionRows.filter((row) => row.kind !== "model_provider");
+  const lifecycleReadyRows = lifecycleConnectionRows.filter((row) =>
+    Boolean(row.rotation_owner) && (row.kind === "oauth" || Boolean(row.credential_expires_at)));
   const models = [...new Set(processRows.map((row) => String(row.model_profile)))].map((profile) => ({
     profile,
     provider: "Cloudflare Workers AI",
@@ -72,6 +75,8 @@ export async function getGovernance(env: Env, tenantId: string) {
       { id: "members", label: "Organization membership and roles", ready: members.results.length > 0, detail: `${members.results.length} active membership records` },
       { id: "releases", label: "Published process releases", ready: processRows.every((row) => Boolean(row.active_release_id)), detail: `${processRows.filter((row) => row.active_release_id).length}/${processRows.length} processes pinned` },
       { id: "connections", label: "Connection secret readiness", ready: requiredConnectionRows.every((row) => Number(row.secret_configured) === 1), detail: `${requiredConnectionRows.filter((row) => Number(row.secret_configured) === 1).length}/${requiredConnectionRows.length} required connections configured` },
+      { id: "connection-lifecycle", label: "Credential rotation ownership", ready: lifecycleReadyRows.length === lifecycleConnectionRows.length,
+        detail: `${lifecycleReadyRows.length}/${lifecycleConnectionRows.length} external credentials have an owner and expiry strategy` },
       { id: "delivery", label: "Outbound delivery credentials", ready: credentialRows.every((row) => Number(row.configured) === 1), detail: `${credentialRows.filter((row) => Number(row.configured) === 1).length}/${credentialRows.length} Cloudflare secret references ready` },
       { id: "evaluations", label: "Evaluation release gates", ready: evaluationRows.length > 0 && evaluationRows.every((row) => row.status === "passing"), detail: `${evaluationRows.filter((row) => row.status === "passing").length}/${evaluationRows.length} scenarios passing` },
       { id: "retention", label: "Retention and deletion policy", ready: retention.results.length > 0, detail: `${retention.results.length} policies defined` },

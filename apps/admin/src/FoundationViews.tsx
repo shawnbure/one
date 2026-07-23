@@ -22,16 +22,17 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type ToolAdapterDefinition,
-  type ToolDefinition } from "./api";
+import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type SessionData,
+  type ToolAdapterDefinition, type ToolDefinition } from "./api";
 import "./governed-standards.css";
 
 interface Props {
   section: "Connections" | "Knowledge" | "Evaluations" | "Governance";
+  session: SessionData | null;
   onNotice: (message: string) => void;
 }
 
-export function FoundationView({ section, onNotice }: Props) {
+export function FoundationView({ section, session, onNotice }: Props) {
   const [data, setData] = useState<GovernanceData | null>(null);
   async function load() {
     try {
@@ -49,14 +50,18 @@ export function FoundationView({ section, onNotice }: Props) {
   }, []);
   if (!data)
     return <div className="loading-card">Loading {section.toLowerCase()}…</div>;
-  if (section === "Connections") return <Connections data={data} onReload={load} onNotice={onNotice} />;
+  if (section === "Connections") return <Connections data={data} session={session} onReload={load} onNotice={onNotice} />;
   if (section === "Knowledge") return <Knowledge data={data} onReload={load} onNotice={onNotice} />;
   if (section === "Evaluations") return <Evaluations data={data} onReload={load} onNotice={onNotice} />;
   return <Governance data={data} onReload={load} onNotice={onNotice} />;
 }
 
-function Connections({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
+function Connections({ data, session, onReload, onNotice }: { data: GovernanceData; session: SessionData | null;
+  onReload: () => Promise<void>; onNotice: (message: string) => void }) {
   const [checking, setChecking] = useState<string | null>(null);
+  const [editingConnection, setEditingConnection] = useState<string | null>(null);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycle, setLifecycle] = useState({ credentialExpiresAt: "", rotationOwner: "", lastRotatedAt: "" });
   const [oauthBusy, setOauthBusy] = useState(false);
   const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [toolAdapters, setToolAdapters] = useState<ToolAdapterDefinition[]>([]);
@@ -91,6 +96,29 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
     } finally {
       setChecking(null);
     }
+  }
+  function editLifecycle(item: Record<string, string | number | null>) {
+    setEditingConnection(String(item.id));
+    setLifecycle({
+      credentialExpiresAt: dateInput(item.credential_expires_at),
+      rotationOwner: String(item.rotation_owner ?? ""),
+      lastRotatedAt: dateInput(item.last_rotated_at)
+    });
+  }
+  async function saveLifecycle(id: string) {
+    setLifecycleBusy(true);
+    try {
+      await api.updateConnectionLifecycle(id, {
+        credentialExpiresAt: lifecycle.credentialExpiresAt || null,
+        rotationOwner: lifecycle.rotationOwner || null,
+        lastRotatedAt: lifecycle.lastRotatedAt || null
+      });
+      setEditingConnection(null);
+      await onReload();
+      onNotice("Credential lifecycle ownership and dates updated.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Connection lifecycle could not be updated");
+    } finally { setLifecycleBusy(false); }
   }
   async function connectMicrosoft() {
     setOauthBusy(true);
@@ -153,6 +181,9 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
   }
   const microsoft = data.connections.find((item) => item.name === "Microsoft 365");
   const microsoftConnected = microsoft && Number(microsoft.secret_configured) === 1;
+  const canManageLifecycle = Boolean(session && ["admin", "builder", "owner", "operator"].includes(session.user.role));
+  const rotationOwners = data.members.filter((member) =>
+    member.status === "active" && ["admin", "builder", "owner", "operator"].includes(String(member.role)));
   return (
     <section className="foundation-page">
       <Title
@@ -211,9 +242,14 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
               {item.oauth_account_email && <div><dt>Delegated account</dt><dd>{item.oauth_account_email}</dd></div>}
               <div>
                 <dt>Last health check</dt>
-                <dd>{item.last_checked_at || "Never"}</dd>
+                <dd>{formatTimestamp(item.last_checked_at)}</dd>
               </div>
+              <div><dt>Last successful use</dt><dd>{formatTimestamp(item.last_success_at)}</dd></div>
+              <div><dt>Credential expiry</dt><dd>{credentialExpiry(item)}</dd></div>
+              <div><dt>Rotation owner</dt><dd>{item.rotation_owner || "Unassigned"}</dd></div>
+              <div><dt>Last rotation</dt><dd>{formatTimestamp(item.last_rotated_at)}</dd></div>
             </dl>
+            {item.health_message && <p className="connection-health-message">{item.health_message}</p>}
             <div className="scope-row">
               {parseArray(String(item.scopes_json)).map((scope) => (
                 <span key={scope}>{scope}</span>
@@ -223,6 +259,25 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <RefreshCw size={14} />
               {checking === String(item.id) ? "Checking…" : "Test connection"}
             </button>
+            {canManageLifecycle && editingConnection !== String(item.id) && (
+              <button className="secondary" onClick={() => editLifecycle(item)}>Manage credential lifecycle</button>
+            )}
+            {editingConnection === String(item.id) && (
+              <div className="connection-lifecycle-form">
+                <label>Credential expiry<input type="date" value={lifecycle.credentialExpiresAt}
+                  onChange={(event) => setLifecycle({ ...lifecycle, credentialExpiresAt: event.target.value })}/></label>
+                <label>Rotation owner<select value={lifecycle.rotationOwner}
+                  onChange={(event) => setLifecycle({ ...lifecycle, rotationOwner: event.target.value })}>
+                  <option value="">Unassigned</option>
+                  {rotationOwners.map((member) => <option key={member.id} value={member.email}>{member.email}</option>)}
+                </select></label>
+                <label>Last rotated<input type="date" value={lifecycle.lastRotatedAt}
+                  onChange={(event) => setLifecycle({ ...lifecycle, lastRotatedAt: event.target.value })}/></label>
+                <div><button disabled={lifecycleBusy} onClick={() => void saveLifecycle(String(item.id))}>
+                  {lifecycleBusy ? "Saving…" : "Save lifecycle"}</button>
+                  <button disabled={lifecycleBusy} onClick={() => setEditingConnection(null)}>Cancel</button></div>
+              </div>
+            )}
           </article>
         ))}
       </div>
@@ -1240,6 +1295,29 @@ function parseArray(value: string): string[] {
   } catch {
     return [];
   }
+}
+function dateInput(value: unknown) {
+  if (!value) return "";
+  const parsed = connectionDate(value);
+  return Number.isNaN(parsed.valueOf()) ? "" : parsed.toISOString().slice(0, 10);
+}
+function formatTimestamp(value: unknown) {
+  if (!value) return "Never";
+  const parsed = connectionDate(value);
+  return Number.isNaN(parsed.valueOf()) ? String(value) : parsed.toLocaleString();
+}
+function credentialExpiry(item: Record<string, string | number | null>) {
+  if (item.kind === "model_provider" && item.name === "Cloudflare Workers AI") return "Cloudflare binding";
+  if (!item.credential_expires_at) return item.kind === "oauth" ? "Provider-managed / not recorded" : "Not recorded";
+  const expires = connectionDate(item.credential_expires_at);
+  const days = Math.ceil((expires.valueOf() - Date.now()) / 86_400_000);
+  if (days < 0) return `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`;
+  if (days === 0) return "Expires today";
+  return `Expires in ${days} day${days === 1 ? "" : "s"}`;
+}
+function connectionDate(value: unknown) {
+  const normalized = String(value).replace(" ", "T");
+  return new Date(/[zZ]$|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
 }
 function processOptionLabel(process: Record<string, string>, all: Array<Record<string, string>>) {
   const name = String(process.name);

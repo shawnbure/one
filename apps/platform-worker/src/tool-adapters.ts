@@ -2,6 +2,7 @@ import type { ToolPolicy } from "@workrr/contracts";
 import { applyDlp, DlpBlockedError } from "./dlp";
 import { getMicrosoftAccessToken } from "./oauth";
 import type { Env } from "./types";
+import { markConnectionSuccess } from "./connection-operations";
 
 export const boundAdapterCatalog = {
   "microsoft.profile.get": {
@@ -102,6 +103,8 @@ export async function invokeBoundAdapter(env: Env, tenantId: string, executionId
     direction: "output", stage: "tool_result", executionId
   });
   if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
+  await markConnectionSuccess(env, tenantId, token.connectionId,
+    `Microsoft Graph ${adapter.label} completed successfully.`);
   const base = {
     status: "completed",
     adapter: policy.handlerKey,
@@ -164,6 +167,8 @@ export async function invokeApprovedBoundAdapter(env: Env, tenantId: string, exe
     direction: "output", stage: "approved_tool_result", executionId
   });
   if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
+  await markConnectionSuccess(env, tenantId, token.connectionId,
+    "Microsoft Graph calendar event creation completed successfully.");
   return {
     providerResourceId: result.id,
     modelOutput: parseProtectedJson(protectedOutput.modelText),

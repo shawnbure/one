@@ -22,7 +22,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
 | Knowledge Center | Governed text/file intake, pre-storage DLP, R2 source/chunk storage, queued Workers AI embedding, tenant-filtered Vectorize retrieval, process bindings, review/expiry enforcement, execution citation evidence, diagnostics, test query, reindex, and removal |
-| Foundations | Connection health, typed tool catalog, evaluations, and model profile starting points |
+| Foundations | Truthful connection health, credential ownership/expiry, typed tool catalog, evaluations, and model profile starting points |
 | Customer setup | Idempotent launch manifest for profile, membership, paused first process, baseline, evaluation gate, draft release, readiness, and secret-free export |
 | Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook and delegated Microsoft 365 email delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
@@ -117,6 +117,8 @@ Role checks are attached at the route boundary and repository queries remain ten
 
 The customer-facing privacy and architecture report is a printable, self-contained HTML download with a machine-readable JSON option. It inventories configured processes and owners, Cloudflare services and storage, model profiles, knowledge and webhook inputs, retention/deletion rules, external destinations, connection scopes and credential readiness, typed tools, human oversight, release versions, logging/export behavior, subprocessors, readiness controls, and explicit limitations. The report selects no credential ciphertext or secret values, emits `no-store` and `nosniff`, uses a restrictive Content Security Policy, and HTML-escapes tenant-controlled content. The existing governance JSON remains available as lower-level evidence.
 
+Connection operations distinguish configuration from evidence: “credential configured” means secret metadata exists, “last health check” is the latest explicit or provider-backed check, and “last successful use” advances only after a real provider request succeeds. Operators can assign an eligible same-tenant rotation owner and record credential expiry/last rotation dates. The daily Cron emits an in-app warning for configured credentials within 30 days of expiry and marks expired connections for attention. Cloudflare Workers AI is shown as an account binding rather than a customer credential; Microsoft delegated OAuth is provider-rotated and can record an explicit organizational expiry when one applies. Generic connectors remain visibly metadata-only until a provider-specific live probe exists.
+
 ## Database migration order
 
 Migrations are additive and ordered in `apps/platform-worker/migrations`:
@@ -158,6 +160,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 35. `0035_bound_tool_adapters.sql`: registered implementation keys and fixed-endpoint Microsoft read tools.
 36. `0036_approved_tool_actions.sql`: approval-linked Queue dispatch lifecycle and the fixed-endpoint Microsoft calendar write tool.
 37. `0037_approval_collaboration.sql`: attributable review discussion, information-request state, escalation level, and activity evidence.
+38. `0038_connection_lifecycle.sql`: credential expiry, rotation ownership, last-success evidence, truthful health detail, and expiry notification policy.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

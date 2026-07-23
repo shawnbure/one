@@ -224,7 +224,7 @@ export interface ScheduleData {
 
 export interface GovernanceData {
   processes: Array<Record<string, string>>;
-  connections: Array<Record<string, string | number>>;
+  connections: Array<Record<string, string | number | null>>;
   knowledge: Array<Record<string, string>>;
   evaluations: Array<Record<string, string | number>>;
   retention: Array<Record<string, string | number>>;
@@ -762,6 +762,11 @@ export const api = {
     request<{ data: { id: string; caseResultId: string; score: number; verdict: string } }>(
       `/api/evaluation-results/${encodeURIComponent(id)}/review`, { method: "PUT", body: JSON.stringify(body) }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
+  updateConnectionLifecycle: (id: string, body: {
+    credentialExpiresAt: string | null; rotationOwner: string | null; lastRotatedAt: string | null;
+  }) => request<{ data: { id: string; name: string; credentialExpiresAt: string | null;
+    rotationOwner: string | null; lastRotatedAt: string | null } }>(
+    `/api/connections/${encodeURIComponent(id)}/lifecycle`, { method: "PATCH", body: JSON.stringify(body) }),
   tools: () => request<{ data: ToolDefinition[] }>("/api/tools"),
   toolAdapters: () => request<{ data: ToolAdapterDefinition[] }>("/api/tool-adapters"),
   createTool: (body: Record<string, unknown>) =>
