@@ -29,6 +29,9 @@ export interface Approval {
   decision_note: string | null;
   autonomy_level?: string | null;
   action_risk?: string | null;
+  review_state: "decision_pending" | "information_requested" | "escalated";
+  escalation_level: number;
+  last_activity_at: string | null;
 }
 
 export interface SessionData {
@@ -53,6 +56,20 @@ export interface AuditEvent {
   event_type: string;
   detail_json: string;
   created_at: string;
+}
+export interface ApprovalMessage {
+  id: string;
+  author_id: string;
+  author_email: string;
+  kind: "comment" | "information_request" | "information_response" | "escalation";
+  body: string;
+  created_at: string;
+}
+export interface ApprovalAssignee {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "admin" | "owner" | "operator" | "reviewer";
 }
 
 export interface ToolActionDispatch {
@@ -504,7 +521,7 @@ export const api = {
   overview: () => request<OverviewData>("/api/overview"),
   approvals: () => request<{ data: Approval[] }>("/api/approvals"),
   approval: (id: string) =>
-    request<{ data: ApprovalDetail; audit: AuditEvent[]; actions: ToolActionDispatch[] }>(
+    request<{ data: ApprovalDetail; audit: AuditEvent[]; actions: ToolActionDispatch[]; messages: ApprovalMessage[] }>(
       `/api/approvals/${encodeURIComponent(id)}`,
     ),
   execute: (body: ExecutionRequest) =>
@@ -532,9 +549,16 @@ export const api = {
       { method: "POST", body: JSON.stringify({ note }) },
     ),
   assignApproval: (id: string, assignedTo: string) =>
-    request<{ updated: boolean }>(
+    request<{ updated: boolean; assignedTo: string; displayName: string }>(
       `/api/approvals/${encodeURIComponent(id)}/assign`,
       { method: "POST", body: JSON.stringify({ assignedTo }) },
+    ),
+  approvalAssignees: () =>
+    request<{ data: ApprovalAssignee[] }>("/api/approval-assignees"),
+  addApprovalMessage: (id: string, kind: ApprovalMessage["kind"], body: string) =>
+    request<{ data: { message: ApprovalMessage; reviewState: Approval["review_state"]; escalationLevel: number } }>(
+      `/api/approvals/${encodeURIComponent(id)}/messages`,
+      { method: "POST", body: JSON.stringify({ kind, body }) },
     ),
   executions: () => request<{ data: Execution[] }>("/api/executions"),
   queueOperations: () => request<{ data: QueueOperationsData }>("/api/queue-operations"),

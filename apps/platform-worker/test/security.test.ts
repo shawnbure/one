@@ -82,6 +82,24 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies"))).toBe(false);
   });
 
+  it("keeps approval evidence out of consumer sessions and collaboration mutations away from viewers", async () => {
+    const consumer = environment("consumer");
+    const listResponse = await app.fetch(new Request("http://localhost/api/approvals", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), consumer.env as never, executionCtx as never);
+    expect(listResponse.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("FROM approvals WHERE"))).toBe(false);
+
+    const viewer = environment("viewer");
+    const messageResponse = await app.fetch(new Request("http://localhost/api/approvals/approval-1/messages", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ kind: "comment", body: "Unauthorized" })
+    }), viewer.env as never, executionCtx as never);
+    expect(messageResponse.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("approval_messages"))).toBe(false);
+  });
+
   it("prevents viewers from creating smoke fixtures or machine identities", async () => {
     for (const path of ["/api/smoke-fixtures", "/api/service-principals"]) {
       const { env, queries } = environment("viewer");

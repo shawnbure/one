@@ -27,6 +27,7 @@ import { listBoundAdapters } from "./tool-adapters";
 import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markToolActionFailure,
   processToolAction, retryToolAction } from "./tool-actions";
 import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
+import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -633,16 +634,19 @@ app.post("/api/queue-jobs/:id/replay", requireRoles("admin", "owner", "operator"
   }
 });
 
-app.get("/api/approvals", async (c) => {
+app.get("/api/approvals", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const status = c.req.query("status");
   const filter = status && ["pending", "approved", "rejected", "expired"].includes(status) ? " AND status = ?" : "";
-  const statement = c.env.DB.prepare(`SELECT * FROM approvals WHERE tenant_id = ?${filter} ORDER BY requested_at DESC LIMIT 100`);
+  const statement = c.env.DB.prepare(`SELECT * FROM approvals WHERE tenant_id = ?${filter}
+    ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END,
+      CASE WHEN status='pending' THEN COALESCE(due_at, '9999-12-31') END,
+      COALESCE(last_activity_at, requested_at) DESC LIMIT 100`);
   const { results } = await (filter ? statement.bind(c.get("tenantId"), status) : statement.bind(c.get("tenantId"))).all();
   return c.json({ data: results });
 });
 
-app.get("/api/approvals/:id", async (c) => {
-  const [approval, audit, actions] = await Promise.all([
+app.get("/api/approvals/:id", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  const [approval, audit, actions, messages] = await Promise.all([
     c.env.DB.prepare(`SELECT a.*, e.blueprint_id, e.input_preview, e.output_preview, e.model
       FROM approvals a JOIN executions e ON e.id = a.execution_id
       WHERE a.id = ? AND a.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first(),
@@ -654,21 +658,47 @@ app.get("/api/approvals/:id", async (c) => {
     c.env.DB.prepare(`SELECT d.*, i.tool_name, i.handler_key, i.input_json, i.output_json
       FROM tool_action_dispatches d JOIN tool_invocations i ON i.id=d.invocation_id AND i.tenant_id=d.tenant_id
       WHERE d.tenant_id=? AND d.approval_id=? ORDER BY d.created_at`)
+      .bind(c.get("tenantId"), c.req.param("id")).all(),
+    c.env.DB.prepare(`SELECT id, author_id, author_email, kind, body, created_at
+      FROM approval_messages WHERE tenant_id=? AND approval_id=? ORDER BY created_at`)
       .bind(c.get("tenantId"), c.req.param("id")).all()
   ]);
   if (!approval) return c.json({ error: "Review item not found" }, 404);
-  return c.json({ data: approval, audit: audit.results, actions: actions.results });
+  return c.json({ data: approval, audit: audit.results, actions: actions.results, messages: messages.results });
 });
 
 app.post("/api/approvals/:id/assign", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
   const approvalId = c.req.param("id");
   const body = await c.req.json<{ assignedTo?: string }>();
   if (!approvalId || !body.assignedTo) return c.json({ error: "assignedTo is required" }, 400);
-  const result = await c.env.DB.prepare("UPDATE approvals SET assigned_to = ? WHERE id = ? AND tenant_id = ? AND status = 'pending'")
-    .bind(body.assignedTo, approvalId, c.get("tenantId")).run();
-  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "approval.assigned", "approval", approvalId, { assignedTo: body.assignedTo });
-  return c.json({ updated: result.meta.changes === 1 });
+  try {
+    return c.json(await assignApproval(c.env, c.get("tenantId"), c.get("actorId"), approvalId, body.assignedTo));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Review assignment failed" }, 409);
+  }
 });
+
+app.get("/api/approval-assignees", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role FROM tenant_members
+    WHERE tenant_id=? AND status='active' AND role IN ('admin','owner','operator','reviewer')
+    ORDER BY display_name`).bind(c.get("tenantId")).all();
+  return c.json({ data: results });
+});
+
+app.post("/api/approvals/:id/messages",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer"), async (c) => {
+    const approvalId = c.req.param("id");
+    const body = await c.req.json<{ kind?: ApprovalMessageKind; body?: string }>();
+    if (!approvalId || !body.kind ||
+      !["comment", "information_request", "information_response", "escalation"].includes(body.kind) ||
+      typeof body.body !== "string") return c.json({ error: "A valid message kind and body are required" }, 400);
+    try {
+      return c.json({ data: await addApprovalMessage(c.env, c.get("tenantId"), c.get("actorId"),
+        c.get("actorEmail"), c.get("role"), approvalId, body.kind, body.body) }, 201);
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Approval collaboration update failed" }, 409);
+    }
+  });
 
 app.post("/api/tool-actions/:id/retry", requireRoles("admin", "owner", "operator"), async (c) => {
   const dispatchId = c.req.param("id");

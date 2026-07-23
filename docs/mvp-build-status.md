@@ -15,7 +15,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Overview | Live process, review, execution, health, and value indicators |
 | Discover | Intake wizard, process templates, baseline capture, and opportunity scoring |
 | Process Studio | Visual topology, explicit execution profile, enforced five-level autonomy, immutable prompt/model/input-output contract releases, publish/rollback, and recurring process schedules with dispatch history |
-| Work Inbox | Evidence and rationale review, assignment, approval/decline, and audit trail |
+| Work Inbox | Evidence and rationale review, validated assignment, comments, information request/response, escalation, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, approved external-action queue, inputs/outputs, failures, and safe replay/recovery |
 | Queue operations | Tenant-scoped process and approved-action enqueue/processing/retry/dead-letter evidence, bounded retention, and operator-authorized safe replay |
 | Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, JSON evidence export, and printable privacy/architecture summary |
@@ -104,7 +104,7 @@ The Worker currently exposes these route groups:
 - Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode, `/api/process-schedules`, create/pause/restore/run-now
 - Portability: `/api/processes/:id/package`, `/api/process-packages/import`
 - Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry, `/api/queue-operations`, `/api/tool-actions`, failed Queue-job replay, and approved-action retry/cancel
-- Human review: `/api/approvals`, assignment, approve/decline
+- Human review: `/api/approvals`, validated assignee directory/assignment, collaboration messages, information request/response, escalation, approve/decline
 - Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`, `/api/governance/privacy-report`
 - Integration intake: `/webhooks/:endpointId`, `/api/webhooks`
 - Operational delivery: `/api/notifications`, policy configuration, and signed delivery tests
@@ -157,6 +157,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 34. `0034_tool_invocations.sql`: idempotent model tool-call evidence and explicit simulation/proposal/bound execution modes.
 35. `0035_bound_tool_adapters.sql`: registered implementation keys and fixed-endpoint Microsoft read tools.
 36. `0036_approved_tool_actions.sql`: approval-linked Queue dispatch lifecycle and the fixed-endpoint Microsoft calendar write tool.
+37. `0037_approval_collaboration.sql`: attributable review discussion, information-request state, escalation level, and activity evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -193,6 +194,8 @@ npm run build
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
 The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy, tool definitions, containment, or customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, paused inputs are recorded as deferred, observe mode consumes zero model tokens, read-only and approval-only controls cap release autonomy, governed model tools are autonomy- and count-bounded, only ready low-risk mock reads simulate, consequential/unimplemented adapters remain proposal-only, fixed Microsoft reads cannot vary their Graph endpoints, an approved calendar write uses a fixed endpoint and provider idempotency without attendees, guarded tool policy evaluates typed risk/access/readiness, unavailable autonomous tools fall back to review, tenant drain/emergency stop blocks synchronous and queued admission, incident recovery requires containment evidence, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, recurring schedules atomically claim before Queue handoff, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
+
+Approval collaboration never broadens execution authority. Assignments resolve only to active, eligible members in the same tenant and persist a canonical email. Comments, information requests/responses, and escalations are attributable messages plus audit events. An outstanding information request disables and server-blocks approval until an authorized response returns the review to decision-pending; rejection remains available as the safe terminal choice. Escalation is capped at three levels, and none of these collaboration events creates a tool-action dispatch.
 
 Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs load up to 100 cases and fan them into parallel, independently retriable Cloudflare Workflow steps before one deterministic aggregation step. They survive browser disconnection and persist their lifecycle separately from case evidence. DLP rules and model pricing are loaded once into prepared Workflow state rather than reread from D1 for every case. Each case can assign a case weight plus assertion weight and quality dimension (groundedness, completeness, safety, clarity, or format); the release evidence includes both the overall gate score and per-dimension scores. Model trials execute the immutable release prompt and identical cases once with the release baseline profile and once with a candidate Cloudflare profile; both arms are costed and scored without changing the live process or release-gate state. Every model call participates in the tenant hard budget.
 
