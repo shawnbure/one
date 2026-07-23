@@ -342,7 +342,9 @@ function Knowledge({ data, onReload, onNotice }: {
               {item.status}
             </span>
             <span className="knowledge-actions">
-              <button type="button" disabled={busy === item.id} onClick={() => void reindex(String(item.id))}><RefreshCw size={14} /> Reindex</button>
+              {item.object_key
+                ? <button type="button" disabled={busy === item.id} onClick={() => void reindex(String(item.id))}><RefreshCw size={14} /> Reindex</button>
+                : <small className="legacy-source">Legacy catalog entry</small>}
               <button type="button" disabled={busy === item.id} onClick={() => void remove(String(item.id), String(item.name))}><XCircle size={14} /> Remove</button>
             </span>
           </article>
