@@ -37,7 +37,8 @@ export async function requireIdentity(c: AppContext, next: Next): Promise<Respon
 }
 
 async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
-  if (c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD) {
+  const localDevelopment = c.env.ENVIRONMENT === "development" && c.env.LOCAL_DEV === "true";
+  if (c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD && !localDevelopment) {
     const token = c.req.header("cf-access-jwt-assertion");
     if (!token) return null;
     try {

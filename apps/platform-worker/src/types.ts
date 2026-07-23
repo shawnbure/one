@@ -10,6 +10,8 @@ export interface Env {
   ENVIRONMENT: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
+  WEBHOOK_INBOX_SECRET?: string;
+  LOCAL_DEV?: string;
 }
 
 export interface BlueprintRow {

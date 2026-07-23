@@ -61,6 +61,7 @@ export interface ExecutionResult {
 export interface QueueJob extends ExecutionRequest {
   executionId: string;
   attempt: number;
+  tenantId?: string;
 }
 
 export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequest): string | null {

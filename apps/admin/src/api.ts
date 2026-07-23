@@ -84,10 +84,14 @@ export interface GovernanceData {
   members: Array<Record<string, string>>;
   audit: Array<Record<string, string>>;
   incidents: Array<Record<string, string>>;
+  webhooks: WebhookEndpoint[];
   models: Array<{ profile: string; provider: string; processes: number; boundary: string }>;
   readiness: Array<{ id: string; label: string; ready: boolean; detail: string }>;
   dataFlow: string[];
 }
+
+export interface ApiLog { id: string; trace_id: string; direction: string; method: string; path: string; status: number; duration_ms: number; target: string | null; actor_id: string | null; created_at: string; }
+export interface WebhookEndpoint { id: string; name: string; blueprint_id: string; status: string; accepted_events_json: string; created_at: string; last_received_at: string | null; secret_configured: number; }
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -125,4 +129,7 @@ export const api = {
   publishRelease: (processId: string, releaseId: string) => request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/publish`, { method: "POST" })
   ,governance: () => request<{ data: GovernanceData }>("/api/governance"),
   setProcessMode: (processId: string, mode: string, reason: string) => request<{ updated: boolean; mode: string }>(`/api/processes/${encodeURIComponent(processId)}/mode`, { method: "PATCH", body: JSON.stringify({ mode, reason }) })
+  ,logs: () => request<{ data: ApiLog[] }>("/api/logs"),
+  webhooks: () => request<{ data: WebhookEndpoint[] }>("/api/webhooks"),
+  setWebhookStatus: (id: string, status: "active" | "disabled") => request<{ updated: boolean; status: string }>(`/api/webhooks/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify({ status }) })
 };

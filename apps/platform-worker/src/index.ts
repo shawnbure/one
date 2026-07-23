@@ -6,14 +6,26 @@ import { listBlueprints } from "./repository";
 import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease } from "./studio";
 import { getGovernance } from "./governance";
+import { receiveWebhook } from "./webhook";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
 
 const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
+app.post("/webhooks/:endpointId", receiveWebhook);
 app.use("/api/*", requireIdentity);
 app.use("/api/*", requireSameOrigin);
+app.use("/api/*", async (c, next) => {
+  const started = performance.now();
+  const traceId = c.req.header("cf-ray") ?? crypto.randomUUID();
+  c.header("x-workrr-trace-id", traceId);
+  await next();
+  c.executionCtx.waitUntil(c.env.DB.prepare(`INSERT INTO api_logs
+    (id, tenant_id, actor_id, trace_id, direction, method, path, status, duration_ms)
+    VALUES (?, ?, ?, ?, 'inbound', ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), c.get("tenantId"), c.get("actorId"), traceId, c.req.method, new URL(c.req.url).pathname, c.res.status, Math.round(performance.now() - started)).run());
+});
 
 app.get("/health", (c) => c.json({ ok: true, service: "workrr-platform", environment: c.env.ENVIRONMENT }));
 
@@ -127,7 +139,7 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
 app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
   const request = await c.req.json<ExecutionRequest>();
   const executionId = crypto.randomUUID();
-  const job: QueueJob = { ...request, executionId, attempt: 0 };
+  const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: c.get("tenantId") };
   await c.env.PROCESS_QUEUE.send(job, { contentType: "json" });
   return c.json({ executionId, status: "queued" }, 202);
 });
@@ -173,6 +185,30 @@ app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "rev
 app.get("/api/governance", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getGovernance(c.env, c.get("tenantId")) }));
 
+app.get("/api/logs", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, trace_id, direction, method, path, status, duration_ms, target, actor_id, created_at
+    FROM api_logs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`).bind(c.get("tenantId")).all();
+  return c.json({ data: results });
+});
+
+app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, name, blueprint_id, status, accepted_events_json, created_at, last_received_at,
+    CASE WHEN secret_binding = 'WEBHOOK_INBOX_SECRET' THEN ? ELSE 0 END secret_configured
+    FROM webhook_endpoints WHERE tenant_id = ? ORDER BY name`).bind(c.env.WEBHOOK_INBOX_SECRET ? 1 : 0, c.get("tenantId")).all();
+  return c.json({ data: results });
+});
+
+app.patch("/api/webhooks/:id/status", requireRoles("admin", "builder"), async (c) => {
+  const webhookId = c.req.param("id");
+  const body = await c.req.json<{ status?: "active" | "disabled" }>();
+  if (!webhookId || !body.status || !["active", "disabled"].includes(body.status)) return c.json({ error: "Valid status is required" }, 400);
+  if (body.status === "active" && !c.env.WEBHOOK_INBOX_SECRET) return c.json({ error: "Configure WEBHOOK_INBOX_SECRET before activating this endpoint" }, 409);
+  const result = await c.env.DB.prepare("UPDATE webhook_endpoints SET status = ? WHERE id = ? AND tenant_id = ?")
+    .bind(body.status, webhookId, c.get("tenantId")).run();
+  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "webhook.status_changed", "webhook", webhookId, body);
+  return c.json({ updated: result.meta.changes === 1, status: body.status });
+});
+
 app.patch("/api/processes/:id/mode", requireRoles("admin", "owner"), async (c) => {
   const processId = c.req.param("id");
   const body = await c.req.json<{ mode?: string; reason?: string }>();
@@ -211,7 +247,7 @@ const handler: ExportedHandler<Env, QueueJob> = {
   async queue(batch, env) {
     for (const message of batch.messages) {
       try {
-        await executeRequest(env, "demo", message.body, message.body.executionId);
+        await executeRequest(env, message.body.tenantId ?? "demo", message.body, message.body.executionId);
         message.ack();
       } catch (error) {
         console.error(JSON.stringify({ event: "queue_job_failed", executionId: message.body.executionId, error: String(error) }));

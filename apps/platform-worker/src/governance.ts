@@ -1,7 +1,7 @@
 import type { Env } from "./types";
 
 export async function getGovernance(env: Env, tenantId: string) {
-  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents] = await Promise.all([
+  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks] = await Promise.all([
     env.DB.prepare(`SELECT id, name, model_profile, prompt_release_id, active_release_id, autonomy, operating_mode,
       risk_level, business_owner, department FROM agent_blueprints WHERE tenant_id = ? ORDER BY name`).bind(tenantId).all(),
     env.DB.prepare("SELECT * FROM connections WHERE tenant_id = ? ORDER BY name").bind(tenantId).all(),
@@ -11,7 +11,10 @@ export async function getGovernance(env: Env, tenantId: string) {
     env.DB.prepare("SELECT * FROM retention_policies WHERE tenant_id = ? ORDER BY data_class").bind(tenantId).all(),
     env.DB.prepare("SELECT id, email, display_name, role, status, last_seen_at FROM tenant_members WHERE tenant_id = ? ORDER BY display_name").bind(tenantId).all(),
     env.DB.prepare("SELECT id, actor_id, event_type, target_type, target_id, created_at FROM audit_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 30").bind(tenantId).all(),
-    env.DB.prepare("SELECT * FROM incidents WHERE tenant_id = ? ORDER BY opened_at DESC LIMIT 20").bind(tenantId).all()
+    env.DB.prepare("SELECT * FROM incidents WHERE tenant_id = ? ORDER BY opened_at DESC LIMIT 20").bind(tenantId).all(),
+    env.DB.prepare(`SELECT id, name, blueprint_id, status, accepted_events_json, created_at, last_received_at,
+      CASE WHEN secret_binding = 'WEBHOOK_INBOX_SECRET' THEN ? ELSE 0 END secret_configured
+      FROM webhook_endpoints WHERE tenant_id = ? ORDER BY name`).bind(env.WEBHOOK_INBOX_SECRET ? 1 : 0, tenantId).all()
   ]);
   const processRows = processes.results as Array<Record<string, unknown>>;
   const connectionRows = connections.results as Array<Record<string, unknown>>;
@@ -31,6 +34,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     members: members.results,
     audit: audit.results,
     incidents: incidents.results,
+    webhooks: webhooks.results,
     models,
     readiness: [
       { id: "identity", label: "Cloudflare Access trust boundary", ready: Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), detail: env.ACCESS_TEAM_DOMAIN ? "JWT verification configured" : "Access application configuration required" },
