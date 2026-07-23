@@ -7,6 +7,8 @@ import type { Env } from "./types";
 import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
 import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 import { augmentWithKnowledge } from "./knowledge";
+import { isContractViolation, outputContractInstruction, parseContracts,
+  validateContractInput, validateContractOutput } from "./contracts";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
@@ -24,13 +26,34 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     direction: "input", stage: "execution", executionId, blueprintId: blueprint.id
   });
   if (inputDlp.blocked) throw new DlpBlockedError(inputDlp.blockedDetectors);
+  const contracts = parseContracts(blueprint.inputSchemaJson, blueprint.outputSchemaJson);
   const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
   const startedAt = new Date().toISOString();
+  let contractedInput;
+  try {
+    contractedInput = validateContractInput(inputDlp.modelText, contracts.inputSchema);
+  } catch (error) {
+    if (isContractViolation(error)) {
+      await env.DB.prepare(`INSERT OR IGNORE INTO executions
+        (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview,
+         idempotency_key, started_at, completed_at, process_release_id, input_contract_status,
+         output_contract_status, contract_error, error)
+        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?)`)
+        .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
+          inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null, startedAt, startedAt,
+          blueprint.activeReleaseId ?? null, contracts.outputSchema ? "pending" : "not_configured",
+          error.message.slice(0, 1000), error.message.slice(0, 1000)).run();
+    }
+    throw error;
+  }
   await env.DB.prepare(`INSERT OR IGNORE INTO executions
-    (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key, started_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
+     started_at, process_release_id, input_contract_status, output_contract_status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
-      admission.deferred ? "deferred" : "running", inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null, startedAt).run();
+      admission.deferred ? "deferred" : "running", inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null,
+      startedAt, blueprint.activeReleaseId ?? null, contractedInput.status,
+      contracts.outputSchema ? "pending" : "not_configured").run();
 
   if (admission.deferred) {
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };
@@ -39,15 +62,16 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
 
   if (blueprint.executionProfile === "workflow") {
     await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`,
-      params: { tenantId, request: { ...request, input: inputDlp.modelText } } });
+      params: { tenantId, request: { ...request, input: contractedInput.value } } });
     await markStatus(env, executionId, "queued");
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "queued", startedAt };
   }
 
-  const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, inputDlp.modelText, executionId);
+  const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, contractedInput.value, executionId);
+  const modelInput = outputContractInstruction(grounded.input, contracts.outputSchema);
   if (blueprint.executionProfile === "instant") {
     const prompt = await requiredPrompt(env, promptReleaseId);
-    const result = await runModel(env, blueprint.modelProfile, prompt, grounded.input);
+    const result = await runModel(env, blueprint.modelProfile, prompt, modelInput);
     const outputDlp = await applyDlp(env, tenantId, result.output, {
       direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
     });
@@ -55,8 +79,12 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       await failBlockedOutput(env, executionId, outputDlp.blockedDetectors);
       throw new DlpBlockedError(outputDlp.blockedDetectors);
     }
-    const safeResult = { ...result, output: outputDlp.modelText };
-    await complete(env, executionId, safeResult, outputDlp.safeText);
+    let contractedOutput;
+    try { contractedOutput = validateContractOutput(outputDlp.modelText, contracts.outputSchema); }
+    catch (error) { await failContractOutput(env, executionId, error); throw error; }
+    const safeResult = { ...result, output: contractedOutput.value };
+    await markOutputContract(env, executionId, contractedOutput.status);
+    await complete(env, executionId, safeResult, contractedOutput.value);
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", ...safeResult, startedAt };
   }
 
@@ -67,12 +95,14 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   }
   let result;
   try {
-    result = await agent.execute(grounded.input, inputDlp.safeText, blueprint.modelProfile, executionId);
+    result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId, contracts.outputSchema);
   } catch (error) {
     if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
       error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
+    if (isContractViolation(error)) await failContractOutput(env, executionId, error);
     throw error;
   }
+  await markOutputContract(env, executionId, contracts.outputSchema ? "passed" : "not_configured");
   await complete(env, executionId, result, result.outputPreview);
   return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output: result.output, model: result.model, startedAt };
 }
@@ -82,7 +112,11 @@ export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, re
     direction: "input", stage: "queue_admission", executionId, blueprintId: request.blueprintId
   });
   if (result.blocked) throw new DlpBlockedError(result.blockedDetectors);
-  return { ...request, input: result.modelText };
+  const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
+  if (!blueprint) throw new Error("Process not found");
+  const contracted = validateContractInput(result.modelText,
+    parseContracts(blueprint.inputSchemaJson, blueprint.outputSchemaJson).inputSchema);
+  return { ...request, input: contracted.value };
 }
 
 export async function assertAsyncExecutionAdmission(env: Env, tenantId: string, blueprintId: string) {
@@ -124,4 +158,14 @@ async function complete(env: Env, id: string, result: { output: string; model: s
 async function failBlockedOutput(env: Env, id: string, detectors: string[]) {
   await env.DB.prepare("UPDATE executions SET status='blocked', output_preview=NULL, error=?, completed_at=? WHERE id=?")
     .bind(`DLP blocked model output containing: ${detectors.join(", ")}`, new Date().toISOString(), id).run();
+}
+
+async function markOutputContract(env: Env, id: string, status: "passed" | "not_configured") {
+  await env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=?").bind(status, id).run();
+}
+async function failContractOutput(env: Env, id: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  await env.DB.prepare(`UPDATE executions SET status='failed', output_preview=NULL, output_contract_status='failed',
+    contract_error=?, error=?, completed_at=? WHERE id=?`)
+    .bind(message.slice(0, 1000), message.slice(0, 1000), new Date().toISOString(), id).run();
 }

@@ -152,6 +152,8 @@ function Studio({
   const [modelProfile, setModelProfile] = useState("balanced");
   const [autonomy, setAutonomy] = useState("approve");
   const [notes, setNotes] = useState("");
+  const [inputSchema, setInputSchema] = useState("");
+  const [outputSchema, setOutputSchema] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -167,6 +169,9 @@ function Studio({
       setGuardrails(parseList(result.prompt.guardrails_json).join("\n"));
       setModelProfile(result.blueprint.model_profile ?? "balanced");
       setAutonomy(result.blueprint.autonomy ?? "approve");
+      const active = result.releases.find((release) => release.status === "published");
+      setInputSchema(prettySchema(active?.input_schema_json));
+      setOutputSchema(prettySchema(active?.output_schema_json));
     } catch (error) {
       onNotice(
         error instanceof Error
@@ -186,6 +191,8 @@ function Studio({
   async function saveDraft() {
     setBusy(true);
     try {
+      const parsedInputSchema = parseSchemaEditor(inputSchema, "Input");
+      const parsedOutputSchema = parseSchemaEditor(outputSchema, "Output");
       const result = await api.createRelease(processId, {
         systemPrompt,
         instructions: lines(instructions),
@@ -193,6 +200,8 @@ function Studio({
         modelProfile,
         autonomy,
         releaseNotes: notes,
+        inputSchema: parsedInputSchema,
+        outputSchema: parsedOutputSchema,
       });
       onNotice(`Draft release v${result.version} created.`);
       setNotes("");
@@ -409,6 +418,37 @@ function Studio({
                 </select>
               </label>
             </div>
+            <div className="contract-editor">
+              <div className="section-head">
+                <div>
+                  <h3>Process contracts</h3>
+                  <p>
+                    Optional JSON Schema contracts reject invalid input before model spend
+                    and verify structured output before delivery.
+                  </p>
+                </div>
+                <button type="button" className="quiet" onClick={() => {
+                  setInputSchema(JSON.stringify(exampleInputSchema, null, 2));
+                  setOutputSchema(JSON.stringify(exampleOutputSchema, null, 2));
+                }}>
+                  <FileCode2 size={14} /> Load example
+                </button>
+              </div>
+              <div className="two-fields">
+                <label>
+                  Input JSON Schema <small>Root type must be object</small>
+                  <textarea className="schema-editor" value={inputSchema}
+                    onChange={(event) => setInputSchema(event.target.value)}
+                    placeholder={'{\n  "type": "object",\n  "properties": { ... }\n}'} />
+                </label>
+                <label>
+                  Output JSON Schema <small>Model returns one matching JSON object</small>
+                  <textarea className="schema-editor" value={outputSchema}
+                    onChange={(event) => setOutputSchema(event.target.value)}
+                    placeholder={'{\n  "type": "object",\n  "properties": { ... }\n}'} />
+                </label>
+              </div>
+            </div>
             <label>
               Release notes
               <input
@@ -473,6 +513,10 @@ function Studio({
                 <small>
                   {release.model_profile} model · {release.autonomy} autonomy ·{" "}
                   {release.checksum.slice(0, 10)}
+                </small>
+                <small>
+                  {release.input_schema_json ? "Input contract" : "Free-text input"} ·{" "}
+                  {release.output_schema_json ? "Structured output" : "Text output"}
                 </small>
                 <em>
                   Created {release.created_at} by {release.created_by}
@@ -616,3 +660,38 @@ function lines(value: string): string[] {
     .map((line) => line.trim())
     .filter(Boolean);
 }
+function prettySchema(value: string | null | undefined) {
+  if (!value) return "";
+  try { return JSON.stringify(JSON.parse(value), null, 2); }
+  catch { return value; }
+}
+function parseSchemaEditor(value: string, label: string): Record<string, unknown> | null {
+  if (!value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error(`${label} contract must be a valid JSON object`);
+  }
+}
+const exampleInputSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["requestId", "summary"],
+  properties: {
+    requestId: { type: "string", minLength: 1, maxLength: 100 },
+    summary: { type: "string", minLength: 1, maxLength: 4000 },
+    priority: { type: "string", enum: ["low", "normal", "high"] }
+  }
+};
+const exampleOutputSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["decision", "rationale"],
+  properties: {
+    decision: { type: "string", enum: ["accept", "review", "reject"] },
+    rationale: { type: "string", minLength: 1, maxLength: 2000 },
+    confidence: { type: "number", minimum: 0, maximum: 1 }
+  }
+};

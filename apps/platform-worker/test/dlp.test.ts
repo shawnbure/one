@@ -10,6 +10,15 @@ function dlpEnvironment(rules: Array<{ detector: string; action: string; directi
       const statement = {
         sql,
         bind(...values: unknown[]) { bindings = values; return statement; },
+        async first() {
+          if (sql.includes("FROM agent_blueprints")) return {
+            id: "process-1", tenant_id: "tenant-1", name: "Process", description: "",
+            execution_profile: "instant", model_profile: "fast", prompt_release_id: "prompt-1",
+            autonomy: "suggest", status: "active", tools_json: "[]", updated_at: "now",
+            input_schema_json: null, output_schema_json: null
+          };
+          return null;
+        },
         async all() { return { results: rules.map((rule) => ({ direction: "both", enabled: 1, ...rule })) }; },
         async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; }
       };

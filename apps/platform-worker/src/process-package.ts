@@ -9,14 +9,15 @@ export interface PortableProcessPackage {
     name: string; description: string; executionProfile: string; modelProfile: string; autonomy: string;
     tools: string[]; businessOwner: string; department: string; riskLevel: string;
   };
-  behavior: { systemPrompt: string; instructions: string[]; guardrails: string[]; releaseNotes?: string };
+  behavior: { systemPrompt: string; instructions: string[]; guardrails: string[]; releaseNotes?: string;
+    inputSchema?: Record<string, unknown> | null; outputSchema?: Record<string, unknown> | null };
   provenance?: { sourceProcessId?: string; sourceReleaseId?: string; checksum?: string };
   secrets?: "excluded";
 }
 
 export async function exportProcessPackage(env: Env, tenantId: string, blueprintId: string): Promise<PortableProcessPackage | null> {
   const row = await env.DB.prepare(`SELECT b.*, p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum,
-    r.id source_release_id, r.release_notes FROM agent_blueprints b
+    r.id source_release_id, r.release_notes, r.input_schema_json, r.output_schema_json FROM agent_blueprints b
     JOIN prompt_releases p ON p.id = b.prompt_release_id
     LEFT JOIN process_releases r ON r.id = b.active_release_id
     WHERE b.tenant_id = ? AND b.id = ?`).bind(tenantId, blueprintId).first<Record<string, string | null>>();
@@ -27,7 +28,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
       autonomy: row.autonomy!, tools: parseStringArray(row.tools_json), businessOwner: row.business_owner || "Operations",
       department: row.department || "Operations", riskLevel: row.risk_level || "medium" },
     behavior: { systemPrompt: row.system_prompt!, instructions: parseStringArray(row.instructions_json),
-      guardrails: parseStringArray(row.guardrails_json), releaseNotes: row.release_notes || "Imported process package" },
+      guardrails: parseStringArray(row.guardrails_json), releaseNotes: row.release_notes || "Imported process package",
+      inputSchema: parseOptionalObject(row.input_schema_json), outputSchema: parseOptionalObject(row.output_schema_json) },
     provenance: { sourceProcessId: blueprintId, sourceReleaseId: row.source_release_id || undefined, checksum: row.checksum || undefined },
     secrets: "excluded"
   };
@@ -55,7 +57,8 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
             { type: "not_contains_any", value: ["I looked up", "I accessed your system"] }])).run();
     const release = await createDraftRelease(env, tenantId, id, actorId, { systemPrompt: pkg.behavior.systemPrompt,
       instructions: pkg.behavior.instructions, guardrails: pkg.behavior.guardrails, modelProfile: pkg.process.modelProfile,
-      autonomy: pkg.process.autonomy, releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
+      autonomy: pkg.process.autonomy, inputSchema: pkg.behavior.inputSchema, outputSchema: pkg.behavior.outputSchema,
+      releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
     return { id, status: "draft", release, source: pkg.provenance ?? null };
   } catch (error) {
     await env.DB.prepare(`DELETE FROM evaluation_cases WHERE tenant_id = ? AND scenario_id IN
@@ -85,4 +88,9 @@ function validatePackage(value: unknown): PortableProcessPackage {
 }
 
 function parseStringArray(value: string | null | undefined): string[] { try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []; } catch { return []; } }
+function parseOptionalObject(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value) return null;
+  try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null; }
+  catch { return null; }
+}
 function slug(value: string): string { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "process"; }

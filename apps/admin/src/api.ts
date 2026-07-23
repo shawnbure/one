@@ -72,6 +72,10 @@ export interface Execution {
   autonomy?: string;
   prompt_release_id?: string;
   retry_of?: string | null;
+  process_release_id?: string | null;
+  input_contract_status?: "not_configured" | "pending" | "passed" | "failed";
+  output_contract_status?: "not_configured" | "pending" | "passed" | "failed";
+  contract_error?: string | null;
 }
 export interface QueueOperation {
   id: string;
@@ -109,6 +113,8 @@ export interface ProcessRelease {
   checksum: string;
   evaluation_status: "not_run" | "passing" | "failing";
   evaluated_at: string | null;
+  input_schema_json: string | null;
+  output_schema_json: string | null;
 }
 
 export interface StudioData {
@@ -481,6 +487,8 @@ export const api = {
       modelProfile: string;
       autonomy: string;
       releaseNotes: string;
+      inputSchema?: Record<string, unknown> | null;
+      outputSchema?: Record<string, unknown> | null;
     },
   ) =>
     request<{ releaseId: string; version: number; status: string }>(

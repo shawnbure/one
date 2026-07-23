@@ -7,6 +7,7 @@ import { emitNotification } from "./notifications";
 import { pricedCompletionSql } from "./usage";
 import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 import { augmentWithKnowledge } from "./knowledge";
+import { isContractViolation, outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
 
 interface ProcessWorkflowParams { tenantId: string; request: ExecutionRequest }
 
@@ -27,10 +28,14 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
         direction: "input", stage: "workflow", executionId: event.instanceId, blueprintId: request.blueprintId
       });
       if (result.blocked) throw new DlpBlockedError(result.blockedDetectors);
-      return result.modelText;
+      const contracts = parseContracts(context.blueprint.inputSchemaJson, context.blueprint.outputSchemaJson);
+      return validateContractInput(result.modelText, contracts.inputSchema).value;
     });
-    const groundedInput = await step.do("retrieve approved knowledge", async () =>
-      (await augmentWithKnowledge(this.env, tenantId, request.blueprintId, protectedInput, event.instanceId)).input);
+    const groundedInput = await step.do("retrieve approved knowledge", async () => {
+      const grounded = await augmentWithKnowledge(this.env, tenantId, request.blueprintId, protectedInput, event.instanceId);
+      const contracts = parseContracts(context.blueprint.inputSchemaJson, context.blueprint.outputSchemaJson);
+      return outputContractInstruction(grounded.input, contracts.outputSchema);
+    });
     const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
       runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput));
     const result = await step.do("enforce output DLP policy", async () => {
@@ -38,7 +43,10 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
         direction: "output", stage: "workflow", executionId: event.instanceId, blueprintId: request.blueprintId
       });
       if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
-      return { ...rawResult, output: protectedOutput.modelText, outputPreview: protectedOutput.safeText };
+      const contracts = parseContracts(context.blueprint.inputSchemaJson, context.blueprint.outputSchemaJson);
+      const contracted = validateContractOutput(protectedOutput.modelText, contracts.outputSchema);
+      return { ...rawResult, output: contracted.value, outputPreview: contracted.value,
+        outputContractStatus: contracts.outputSchema ? "passed" : "not_configured" };
     });
     await step.do("record durable result", async () => {
       const completedAt = new Date().toISOString();
@@ -46,6 +54,8 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
         this.env.DB.prepare(`${pricedCompletionSql()} AND tenant_id = ?`)
           .bind(result.outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
             result.inputTokens, result.model, result.outputTokens, result.model, completedAt, event.instanceId, tenantId),
+        this.env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=? AND tenant_id=?")
+          .bind(result.outputContractStatus, event.instanceId, tenantId),
         this.env.DB.prepare(`UPDATE schedule_dispatches SET status = 'completed', completed_at = ?, error = NULL
           WHERE execution_id = ? AND tenant_id = ?`).bind(completedAt, event.instanceId, tenantId)
       ]);
@@ -56,9 +66,12 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       await step.do("record terminal failure", async () => {
         const completedAt = new Date().toISOString();
         await this.env.DB.batch([
-          this.env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
+          this.env.DB.prepare(`UPDATE executions SET status = ?, error = ?, completed_at = ?,
+            output_contract_status=CASE WHEN ?=1 THEN 'failed' ELSE output_contract_status END,
+            contract_error=CASE WHEN ?=1 THEN ? ELSE contract_error END WHERE id = ? AND tenant_id = ?`)
             .bind(isDlpBlocked(error) ? "blocked" : "failed", message.slice(0, 1000),
-              completedAt, event.instanceId, tenantId),
+              completedAt, Number(isContractViolation(error)), Number(isContractViolation(error)), message.slice(0, 1000),
+              event.instanceId, tenantId),
           this.env.DB.prepare(`UPDATE schedule_dispatches SET status = 'failed', error = ?, completed_at = ?
             WHERE execution_id = ? AND tenant_id = ?`).bind(message.slice(0, 500), completedAt, event.instanceId, tenantId)
         ]);

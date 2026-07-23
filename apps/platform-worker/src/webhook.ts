@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "./types";
 import { assertAsyncExecutionAdmission, sanitizeAsyncExecutionInput } from "./execution";
 import { isDlpBlocked } from "./dlp";
+import { isContractViolation } from "./contracts";
 import { enqueueProcessJob } from "./queue-operations";
 
 interface EndpointRow { id: string; tenant_id: string; blueprint_id: string; secret_binding: string; status: string; accepted_events_json: string; }
@@ -35,7 +36,8 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   let protectedRequest: ExecutionRequest;
   try { protectedRequest = await sanitizeAsyncExecutionInput(c.env, endpoint.tenant_id, request, executionId); }
   catch (error) {
-    if (!isDlpBlocked(error)) return c.json({ error: "DLP inspection failed" }, 400);
+    if (isContractViolation(error)) return c.json({ error: error.message }, 422);
+    if (!isDlpBlocked(error)) return c.json({ error: "Execution admission inspection failed" }, 400);
     await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
       (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id) VALUES (?, ?, ?, ?, ?, NULL)`)
       .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null).run();

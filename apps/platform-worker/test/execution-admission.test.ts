@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assertAsyncExecutionAdmission, executeRequest } from "../src/execution";
 
-function executionEnvironment(tenantMode: string, processMode: string, processStatus = "active") {
+function executionEnvironment(tenantMode: string, processMode: string, processStatus = "active", inputSchemaJson: string | null = null) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const DB = {
     prepare(sql: string) {
@@ -12,7 +12,8 @@ function executionEnvironment(tenantMode: string, processMode: string, processSt
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "tenant-1", name: "Intake", description: "Test", execution_profile: "instant",
             model_profile: "fast", prompt_release_id: "prompt-1", autonomy: "suggest", status: processStatus,
-            tools_json: "[]", updated_at: "now", operating_mode: processMode
+            tools_json: "[]", updated_at: "now", operating_mode: processMode,
+            active_release_id: "release-1", input_schema_json: inputSchemaJson, output_schema_json: null
           };
           if (sql.includes("tenant_operating_controls")) return { mode: tenantMode };
           if (sql.includes("tenant_budgets")) return null;
@@ -43,6 +44,19 @@ describe("execution admission controls", () => {
     const result = await executeRequest(env, "tenant-1", { blueprintId: "process-1", input: "Preserve this request" }, "execution-1");
     expect(result.status).toBe("deferred");
     expect(writes.some(({ sql, values }) => sql.includes("INSERT OR IGNORE INTO executions") && values.includes("deferred"))).toBe(true);
+    expect(writes.some(({ sql }) => sql.includes("prompt_releases"))).toBe(false);
+  });
+
+  it("records schema-invalid synchronous input as blocked before model spend", async () => {
+    const contract = JSON.stringify({ type: "object", additionalProperties: false, required: ["caseId"],
+      properties: { caseId: { type: "string", minLength: 1 } } });
+    const { env, writes } = executionEnvironment("active", "active", "active", contract);
+    await expect(executeRequest(env, "tenant-1", { blueprintId: "process-1", input: '{"wrong":"value"}' }, "execution-contract"))
+      .rejects.toThrow("Input contract rejected");
+    const record = writes.find(({ sql }) => sql.includes("INSERT OR IGNORE INTO executions"));
+    expect(record?.sql).toContain("'blocked'");
+    expect(record?.sql).toContain("'failed'");
+    expect(record?.values).toContain("release-1");
     expect(writes.some(({ sql }) => sql.includes("prompt_releases"))).toBe(false);
   });
 });

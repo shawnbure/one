@@ -37,6 +37,9 @@ export interface BlueprintRow {
   tools_json: string;
   updated_at: string;
   operating_mode?: string;
+  active_release_id?: string | null;
+  input_schema_json?: string | null;
+  output_schema_json?: string | null;
 }
 
 export interface PromptRow {

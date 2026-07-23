@@ -3,6 +3,7 @@ import { runModel } from "./model";
 import type { Env } from "./types";
 import { assertBudgetAvailable } from "./usage";
 import { applyDlp, DlpBlockedError, loadDlpRules, scanSensitiveText, type DlpRule } from "./dlp";
+import { outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
 
 type RubricDimension = "groundedness" | "completeness" | "safety" | "clarity" | "format";
 type AssertionMetadata = { dimension?: RubricDimension; weight?: number };
@@ -32,6 +33,8 @@ interface ReleaseRow {
   guardrails_json: string;
   checksum: string;
   published_at: string;
+  input_schema_json: string | null;
+  output_schema_json: string | null;
 }
 
 export interface PreparedEvaluation {
@@ -44,6 +47,7 @@ export interface PreparedEvaluation {
   dlpRules: DlpRule[];
   modelRate: { model: string; input: number; output: number } | null;
   judgeRate: { model: string; input: number; output: number } | null;
+  contracts: { inputSchemaJson: string | null; outputSchemaJson: string | null };
 }
 
 export interface EvaluationCaseResult {
@@ -86,7 +90,8 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
   if (!scenario) throw new Error("Evaluation scenario not found");
   const releaseId = requestedReleaseId || String(scenario.active_release_id || "");
   const release = releaseId ? await env.DB.prepare(`SELECT r.id, r.prompt_release_id, r.model_profile, p.version,
-    p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum, p.published_at
+    p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum, p.published_at,
+    r.input_schema_json, r.output_schema_json
     FROM process_releases r JOIN prompt_releases p ON p.id = r.prompt_release_id
     WHERE r.id = ? AND r.tenant_id = ? AND r.blueprint_id = ?`).bind(releaseId, tenantId, String(scenario.blueprint_id)).first<ReleaseRow>() : null;
   const boundedMaxCases = Math.max(1, Math.min(100, Math.round(maxCases)));
@@ -94,6 +99,11 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1 ORDER BY created_at, id LIMIT ?`)
     .bind(tenantId, scenarioId, boundedMaxCases).all<EvaluationCase>();
   const guardrails = release ? parseList(release.guardrails_json) : [];
+  const parsedContracts = parseContracts(release?.input_schema_json, release?.output_schema_json);
+  const contracts = {
+    inputSchemaJson: parsedContracts.inputSchema ? JSON.stringify(parsedContracts.inputSchema) : null,
+    outputSchemaJson: parsedContracts.outputSchema ? JSON.stringify(parsedContracts.outputSchema) : null
+  };
   const modelProfile = requestedModelProfile && requestedModelProfile in modelProfiles ? requestedModelProfile : release?.model_profile;
   const modelGradedCases = cases.results.filter((item) =>
     parseAssertions(item.assertions_json).some((assertion) => assertion.type === "model_rubric")).length;
@@ -103,7 +113,8 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     { check: "system_prompt_defined", passed: Boolean(release?.system_prompt?.trim()) },
     { check: "guardrails_defined", passed: guardrails.length > 0 },
     { check: "golden_cases_defined", passed: cases.results.length > 0 },
-    { check: "model_grading_bounded", passed: modelGradedCases <= 25 }
+    { check: "model_grading_bounded", passed: modelGradedCases <= 25 },
+    { check: "process_contracts_loaded", passed: true }
   ];
   const prompt: PromptBundle | null = release ? {
     releaseId: release.prompt_release_id,
@@ -136,7 +147,7 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     input: Number(judgeRateRow?.input_usd_per_million ?? 0),
     output: Number(judgeRateRow?.output_usd_per_million ?? 0)
   };
-  return { scenario, releaseId, modelProfile, controls, prompt, cases: cases.results, dlpRules, modelRate, judgeRate };
+  return { scenario, releaseId, modelProfile, controls, prompt, cases: cases.results, dlpRules, modelRate, judgeRate, contracts };
 }
 
 export async function evaluatePreparedCase(env: Env, tenantId: string, runId: string, prepared: PreparedEvaluation,
@@ -145,19 +156,23 @@ export async function evaluatePreparedCase(env: Env, tenantId: string, runId: st
   const assertions = parseAssertions(item.assertions_json);
   try {
     if (!prepared.prompt || !prepared.modelProfile) throw new Error("Evaluation release is unavailable");
+    const contracts = parseContracts(prepared.contracts.inputSchemaJson, prepared.contracts.outputSchemaJson);
     const protectedInput = await applyDlp(env, tenantId, item.input_text, {
       direction: "input", stage: "evaluation", executionId: `${runId}:${item.id}`,
       blueprintId: String(prepared.scenario.blueprint_id)
     }, prepared.dlpRules);
     if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
-    const rawResult = await runModel(env, prepared.modelProfile, prepared.prompt, protectedInput.modelText,
+    const contractedInput = validateContractInput(protectedInput.modelText, contracts.inputSchema);
+    const modelInput = outputContractInstruction(contractedInput.value, contracts.outputSchema);
+    const rawResult = await runModel(env, prepared.modelProfile, prepared.prompt, modelInput,
       `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`);
     const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
       direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`,
       blueprintId: String(prepared.scenario.blueprint_id)
     }, prepared.dlpRules);
     if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
-    const result = { ...rawResult, output: protectedOutput.modelText };
+    const contractedOutput = validateContractOutput(protectedOutput.modelText, contracts.outputSchema);
+    const result = { ...rawResult, output: contractedOutput.value };
     const deterministic = assertions.filter((assertion) => assertion.type !== "model_rubric");
     const modelRubrics = assertions.filter((assertion): assertion is Extract<Assertion, { type: "model_rubric" }> =>
       assertion.type === "model_rubric");
@@ -182,7 +197,7 @@ export async function evaluatePreparedCase(env: Env, tenantId: string, runId: st
       id: `${runId}:${item.id}`, caseId: item.id, name: item.name,
       status: assertions.length > 0 && evidence.every((check) => check.passed) ? "passing" : "failing",
       passed, total: assertions.length, score,
-      output: protectedOutput.safeText.slice(0, 2000), model: result.model,
+      output: contractedOutput.value.slice(0, 2000), model: result.model,
       inputTokens: result.inputTokens + judgeUsage.inputTokens,
       outputTokens: result.outputTokens + judgeUsage.outputTokens,
       totalTokens: result.totalTokens + judgeUsage.totalTokens,

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   Filter,
+  FileCode2,
   GitBranch,
   ListRestart,
   RefreshCw,
@@ -193,6 +194,16 @@ export function ActivityView({ processes, onNotice }: Props) {
                     "No output has been recorded yet."}
                 </p>
               </div>
+              {(detail.input_contract_status !== "not_configured" || detail.output_contract_status !== "not_configured") && (
+                <div className={`contract-evidence ${detail.contract_error ? "failed" : ""}`}>
+                  <FileCode2 size={17} />
+                  <span>
+                    <strong>Process contract</strong>
+                    <small>Input {detail.input_contract_status?.replaceAll("_", " ")} · Output {detail.output_contract_status?.replaceAll("_", " ")}</small>
+                    {detail.contract_error && <em>{detail.contract_error}</em>}
+                  </span>
+                </div>
+              )}
               {citations.length > 0 && (
                 <div className="execution-citations">
                   <div>
@@ -242,6 +253,12 @@ export function ActivityView({ processes, onNotice }: Props) {
                   <TraceItem title="Governed knowledge retrieved"
                     detail={`${citations.length} cited chunks from ${new Set(citations.map((item) => item.source_id)).size} sources`}
                     state="done" />
+                )}
+                {detail.input_contract_status === "passed" && (
+                  <TraceItem title="Input contract passed" detail={detail.process_release_id ?? "Active release"} state="done" />
+                )}
+                {detail.output_contract_status === "passed" && (
+                  <TraceItem title="Output contract passed" detail="Structured result verified before delivery" state="done" />
                 )}
                 {approvals.map((approval) => (
                   <TraceItem

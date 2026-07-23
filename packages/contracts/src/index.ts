@@ -24,6 +24,9 @@ export interface AgentBlueprint {
   tools: string[];
   updatedAt: string;
   operatingMode?: "active" | "read_only" | "approval_only" | "paused" | "drain" | "emergency_stop";
+  activeReleaseId?: string | null;
+  inputSchemaJson?: string | null;
+  outputSchemaJson?: string | null;
 }
 
 export interface PromptBundle {

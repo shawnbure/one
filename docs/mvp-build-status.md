@@ -14,7 +14,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | --- | --- |
 | Overview | Live process, review, execution, health, and value indicators |
 | Discover | Intake wizard, process templates, baseline capture, and opportunity scoring |
-| Process Studio | Visual topology, explicit execution profile, immutable draft releases, publish/rollback, and recurring process schedules with dispatch history |
+| Process Studio | Visual topology, explicit execution profile, immutable prompt/model/input-output contract releases, publish/rollback, and recurring process schedules with dispatch history |
 | Work Inbox | Evidence and rationale review, assignment, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, inputs/outputs, failures, and safe replay |
 | Queue operations | Tenant-scoped enqueue/processing/retry/dead-letter evidence, bounded retention, and operator-authorized safe replay |
@@ -123,6 +123,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 28. `0028_microsoft_email_notifications.sql`: disabled-by-default operational email routes for Microsoft Graph delivery.
 29. `0029_knowledge_center.sql`: R2/Vectorize source lifecycle, chunk provenance, retrieval diagnostics, and index evidence.
 30. `0030_knowledge_evidence.sql`: immutable execution-to-source citation evidence for grounded run inspection.
+31. `0031_process_contracts.sql`: immutable release input/output schemas and per-execution validation evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -169,6 +170,8 @@ Model grading is optional and additive to deterministic assertions. A case may d
 Microsoft email notification policies are disabled by default. An owner must connect a delegated operating account with the explicit `Mail.Send` capability, configure exactly one validated recipient per policy, and then enable or test the route. Queue workers obtain short-lived access tokens from the encrypted rotating refresh token and call Microsoft Graph `/me/sendMail`; refresh tokens and access tokens are never returned to the browser, logged, or stored as notification evidence. Graph HTTP 202 is recorded as provider acceptance, not proof of final mailbox delivery.
 
 Knowledge source bytes never use D1 as a content cache. Workrr applies the tenant input-DLP policy before storing the approved representation in R2, records only lifecycle/provenance metadata in D1, and hands embedding work to Queue. Vectorize stores embeddings in a tenant namespace and requires both tenant metadata filtering and a tenant-scoped D1 chunk join before an R2 chunk is returned. Process bindings are enforced during retrieval. Durable actors, instant execution, and Workflows all call the same bounded retrieval path; retrieved text is delimited as untrusted reference material and does not become conversation memory. Each successful retrieval stores at most five safe citation excerpts, match scores, and source provenance against the tenant execution so Activity can prove grounding without rereading R2. Cron marks expired reviews stale and stale sources are excluded from retrieval until an owner, administrator, or builder reviews them. Removing a source deletes its D1 catalog, R2 original/chunks, and Vectorize records while previously captured execution citation evidence remains attributable.
+
+Process releases may carry optional, bounded JSON Schema input and output contracts. They are normalized into the immutable compiled release, included in its checksum and portable package, and become active only through the existing evaluation-gated publish path. Input validation occurs after DLP transformation but before Workers AI, including API, signed webhook, recurring schedule, Queue, replay, instant, durable actor, and Workflow entry paths. Output contracts add an explicit JSON-only model instruction, then validate the post-DLP response before it is persisted to durable conversation memory or exposed as a business result. Activity records the exact release and input/output contract status. Contract-free releases preserve the simpler text behavior.
 
 Organizations may maintain up to 20 tenant-scoped rubric templates, each containing one to three weighted quality criteria. New tenants receive actionable operations, safe communication, and structured handoff templates. Builders can create, archive, and restore templates in the Evaluation Lab; viewers can inspect them. Applying a template copies its criteria into the golden case rather than retaining a live reference. That preserves historical evidence, prevents later template edits from silently changing an existing release gate, and avoids a template lookup on every evaluation case execution. Case creation uses one consolidated scenario/count query, an additional D1 read only when a template is selected, and a batched case/scenario write.
 

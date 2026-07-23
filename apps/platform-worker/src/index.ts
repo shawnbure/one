@@ -20,6 +20,7 @@ import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedule
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
   queryKnowledge, queueKnowledgeReindex, reviewKnowledgeSource, expireKnowledgeSources } from "./knowledge";
+import { ContractViolationError, isContractViolation } from "./contracts";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -536,7 +537,8 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
   try {
     return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Execution failed" }, isDlpBlocked(error) ? 422 : 400);
+    return c.json({ error: error instanceof Error ? error.message : "Execution failed" },
+      isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
   }
 });
 
@@ -553,7 +555,8 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
   let protectedRequest: ExecutionRequest;
   try { protectedRequest = await sanitizeAsyncExecutionInput(c.env, c.get("tenantId"), request, executionId); }
   catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "DLP admission failed" }, isDlpBlocked(error) ? 422 : 400);
+    return c.json({ error: error instanceof Error ? error.message : "Execution admission failed" },
+      isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
   }
   const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
   await enqueueProcessJob(c.env, job, "api");
@@ -1091,7 +1094,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
         message.ack();
       } catch (error) {
         console.error(JSON.stringify({ event: "queue_job_failed", executionId: job.executionId, error: String(error) }));
-        const terminal = message.attempts >= 5;
+        const terminal = (error instanceof ContractViolationError && error.direction === "input") || message.attempts >= 5;
         await markQueueFailure(env, job, message.attempts, error, terminal);
         await env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
           .bind(terminal ? "failed" : "queued", error instanceof Error ? error.message : String(error), terminal ? new Date().toISOString() : null,
@@ -1105,7 +1108,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
             detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: job.executionId
           });
         }
-        message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
+        if (terminal) message.ack();
+        else message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
       }
     }
   },

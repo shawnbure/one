@@ -695,9 +695,19 @@ export function App() {
               ))}
             </div>
             <h3 className="test-label">Test this process</h3>
+            {selected.inputSchemaJson && (
+              <div className="drawer-contract">
+                <Code2 size={15} />
+                <span>
+                  <strong>Structured input required</strong>
+                  <small>This release validates JSON before invoking the model.</small>
+                </span>
+                <button onClick={() => setRunInput(exampleFromSchema(selected.inputSchemaJson!))}>Use example</button>
+              </div>
+            )}
             <textarea
               className="run-input"
-              placeholder="Describe the work you want this process to handle…"
+              placeholder={selected.inputSchemaJson ? '{\n  "field": "value"\n}' : "Describe the work you want this process to handle…"}
               value={runInput}
               onChange={(event) => setRunInput(event.target.value)}
             />
@@ -734,4 +744,20 @@ export function App() {
       )}
     </div>
   );
+}
+
+function exampleFromSchema(schemaJson: string) {
+  try {
+    const schema = JSON.parse(schemaJson) as { properties?: Record<string, Record<string, unknown>> };
+    const result: Record<string, unknown> = {};
+    for (const [name, property] of Object.entries(schema.properties ?? {})) {
+      if (Array.isArray(property.enum) && property.enum.length) result[name] = property.enum[0];
+      else if (property.type === "number" || property.type === "integer") result[name] = Number(property.minimum ?? 0);
+      else if (property.type === "boolean") result[name] = false;
+      else if (property.type === "array") result[name] = [];
+      else if (property.type === "object") result[name] = {};
+      else result[name] = "";
+    }
+    return JSON.stringify(result, null, 2);
+  } catch { return "{}"; }
 }

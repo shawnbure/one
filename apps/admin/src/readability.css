@@ -138,6 +138,9 @@ aside {
 .trace h2,
 .trace-line strong { color: #26372f; }
 .trace-line small { color: #65756d !important; }
+.release-safety h2 { color: #2d4539; font-size: 15px !important; }
+.release-safety p,
+.release-safety li { color: #5f6f67; font-size: 13px !important; line-height: 1.5; }
 .model-rates,
 .event-list { padding: 0; }
 .empty-approval strong,
@@ -253,6 +256,66 @@ a:focus-visible {
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+.contract-editor {
+  margin: 15px 0;
+  padding: 14px;
+  border: 1px solid #d4e2db;
+  border-radius: 9px;
+  background: #f7faf8;
+}
+.contract-editor .section-head { padding: 0 0 10px; }
+.contract-editor h3 { margin: 0 0 4px; font-size: 15px; }
+.contract-editor .section-head p { max-width: 680px; font-size: 13px !important; }
+.contract-editor .quiet { width: auto; min-width: max-content; }
+.behavior-form .schema-editor {
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px !important;
+  line-height: 1.55;
+  tab-size: 2;
+}
+.contract-evidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 11px;
+  padding: 12px 14px;
+  border: 1px solid #cfe2d8;
+  border-radius: 9px;
+  background: #f2f8f5;
+  color: #2f7056;
+}
+.contract-evidence span { flex: 1; }
+.contract-evidence strong,
+.contract-evidence small,
+.contract-evidence em { display: block; font-size: 13px; line-height: 1.5; }
+.contract-evidence small { margin-top: 2px; color: #607168; }
+.contract-evidence em { margin-top: 6px; color: #8b5145; font-style: normal; }
+.contract-evidence.failed { border-color: #ead2cc; background: #fff5f2; color: #995746; }
+.drawer-contract {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid #d4e2db;
+  border-radius: 8px;
+  background: #f3f8f5;
+  color: #347159;
+}
+.drawer-contract strong,
+.drawer-contract small { display: block; font-size: 12px; line-height: 1.4; }
+.drawer-contract small { color: #68776f; }
+.drawer-contract button {
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid #cedbd4;
+  border-radius: 7px;
+  background: white;
+  color: #347159;
+  font-size: 12px;
 }
 
 @media (max-width: 1200px) {

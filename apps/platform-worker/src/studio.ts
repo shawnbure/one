@@ -1,5 +1,6 @@
 import type { Env } from "./types";
 import { evaluateReleaseGate } from "./evaluation";
+import { normalizeProcessSchema } from "./contracts";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -8,6 +9,8 @@ interface ReleaseInput {
   modelProfile: string;
   autonomy: string;
   releaseNotes?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
 }
 
 export async function getStudio(env: Env, tenantId: string, blueprintId: string) {
@@ -17,7 +20,8 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
       p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, autonomy, status, release_notes,
-      created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at FROM process_releases
+      created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at,
+      input_schema_json, output_schema_json FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND blueprint_id = ?
       AND started_at >= datetime('now','-7 days') GROUP BY status`).bind(tenantId, blueprintId).all()
@@ -35,6 +39,8 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
 
 export async function createDraftRelease(env: Env, tenantId: string, blueprintId: string, actorId: string, input: ReleaseInput) {
   if (!input.systemPrompt.trim()) throw new Error("System prompt is required");
+  const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
+  const outputSchema = normalizeProcessSchema(input.outputSchema, "output");
   const blueprint = await env.DB.prepare("SELECT execution_profile FROM agent_blueprints WHERE tenant_id = ? AND id = ?")
     .bind(tenantId, blueprintId).first<{ execution_profile: string }>();
   if (!blueprint) throw new Error("Process not found");
@@ -43,17 +49,21 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   const version = versionRow?.version ?? 1;
   const releaseId = `release-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const promptReleaseId = `prompt-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
-  const compiled = { promptReleaseId, modelProfile: input.modelProfile, autonomy: input.autonomy, executionProfile: blueprint.execution_profile };
-  const checksum = await sha256(JSON.stringify({ input, compiled }));
+  const compiled = { promptReleaseId, modelProfile: input.modelProfile, autonomy: input.autonomy,
+    executionProfile: blueprint.execution_profile, inputSchema, outputSchema };
+  const checksum = await sha256(JSON.stringify({ ...input, inputSchema, outputSchema, compiled }));
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO prompt_releases
       (id, blueprint_id, version, system_prompt, instructions_json, guardrails_json, checksum, status, release_notes, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`)
       .bind(promptReleaseId, blueprintId, version, input.systemPrompt.trim(), JSON.stringify(input.instructions), JSON.stringify(input.guardrails), checksum, input.releaseNotes ?? "", actorId),
     env.DB.prepare(`INSERT INTO process_releases
-      (id, tenant_id, blueprint_id, version, prompt_release_id, model_profile, autonomy, compiled_json, checksum, status, release_notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`)
-      .bind(releaseId, tenantId, blueprintId, version, promptReleaseId, input.modelProfile, input.autonomy, JSON.stringify(compiled), checksum, input.releaseNotes ?? "", actorId)
+      (id, tenant_id, blueprint_id, version, prompt_release_id, model_profile, autonomy, compiled_json,
+       checksum, status, release_notes, created_by, input_schema_json, output_schema_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`)
+      .bind(releaseId, tenantId, blueprintId, version, promptReleaseId, input.modelProfile, input.autonomy,
+        JSON.stringify(compiled), checksum, input.releaseNotes ?? "", actorId,
+        inputSchema ? JSON.stringify(inputSchema) : null, outputSchema ? JSON.stringify(outputSchema) : null)
   ]);
   return { releaseId, promptReleaseId, version, checksum, status: "draft" as const };
 }

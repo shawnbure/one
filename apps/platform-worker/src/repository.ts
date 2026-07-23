@@ -2,7 +2,9 @@ import type { AgentBlueprint, PromptBundle } from "@workrr/contracts";
 import type { BlueprintRow, Env, PromptRow } from "./types";
 
 export async function getBlueprint(env: Env, tenantId: string, id: string): Promise<AgentBlueprint | null> {
-  const row = await env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, id).first<BlueprintRow>();
+  const row = await env.DB.prepare(`SELECT b.*, r.input_schema_json, r.output_schema_json
+    FROM agent_blueprints b LEFT JOIN process_releases r ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
+    WHERE b.tenant_id = ? AND b.id = ?`).bind(tenantId, id).first<BlueprintRow>();
   if (!row) return null;
   return {
     id: row.id,
@@ -15,7 +17,10 @@ export async function getBlueprint(env: Env, tenantId: string, id: string): Prom
     status: row.status as AgentBlueprint["status"],
     tools: JSON.parse(row.tools_json) as string[],
     updatedAt: row.updated_at
-    ,operatingMode: (row.operating_mode ?? "active") as AgentBlueprint["operatingMode"]
+    ,operatingMode: (row.operating_mode ?? "active") as AgentBlueprint["operatingMode"],
+    activeReleaseId: row.active_release_id,
+    inputSchemaJson: row.input_schema_json,
+    outputSchemaJson: row.output_schema_json
   };
 }
 

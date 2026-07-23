@@ -11,7 +11,8 @@ const scenario = {
 const release = {
   id: "release-live", prompt_release_id: "prompt-1", model_profile: "balanced", version: 1,
   system_prompt: "Be concise", instructions_json: "[]", guardrails_json: '["Never invent access"]',
-  checksum: "checksum", published_at: "2026-07-22T00:00:00Z"
+  checksum: "checksum", published_at: "2026-07-22T00:00:00Z",
+  input_schema_json: null as string | null, output_schema_json: null as string | null
 };
 const goldenCase = {
   id: "case-1", name: "Grounded answer", input_text: "What is this record?",
@@ -104,6 +105,23 @@ describe("release-specific evaluation evidence", () => {
     expect(result.status).toBe("failing");
     expect(result.score).toBeLessThan(1);
     expect(result.evidence.cases[0]).toMatchObject({ status: "failing", passed: 2, total: 3 });
+  });
+
+  it("blocks publication evidence before inference when a golden case violates the release input contract", async () => {
+    const contractedRelease = {
+      ...release,
+      input_schema_json: JSON.stringify({
+        type: "object", required: ["caseId"],
+        properties: { caseId: { type: "string" } },
+        additionalProperties: false
+      })
+    };
+    const { env } = evaluationEnvironment({ release: contractedRelease });
+    const result = await runEvaluation(env, "tenant-1", "actor-1", "scenario-1", "release-live");
+    expect(result.status).toBe("failing");
+    expect(result.evidence.cases[0]).toMatchObject({ status: "error" });
+    expect(result.evidence.cases[0]?.error).toContain("Input contract rejected");
+    expect(runModel).not.toHaveBeenCalled();
   });
 
   it("redacts common sensitive values before a case is persisted", () => {

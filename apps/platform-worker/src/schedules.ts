@@ -51,6 +51,7 @@ export async function createSchedule(env: Env, tenantId: string, actorId: string
   const identityKey = typeof input.identityKey === "string" ? input.identityKey.trim().slice(0, 200) : "";
   const request = scheduledRequest(blueprintId, blueprint.execution_profile, inputText, identityKey, "validation");
   instanceKeyFor(blueprint.execution_profile as ExecutionProfile, request);
+  const validatedRequest = await sanitizeAsyncExecutionInput(env, tenantId, request, `schedule-validation-${crypto.randomUUID()}`);
   const count = await env.DB.prepare("SELECT COUNT(*) count FROM process_schedules WHERE tenant_id = ?")
     .bind(tenantId).first<{ count: number }>();
   if (Number(count?.count) >= 50) throw new Error("Organizations support up to 50 recurring schedules");
@@ -59,7 +60,7 @@ export async function createSchedule(env: Env, tenantId: string, actorId: string
   await env.DB.prepare(`INSERT INTO process_schedules
     (id, tenant_id, blueprint_id, name, cadence, time_utc, weekday_utc, input_text, identity_key,
      status, next_run_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-    .bind(id, tenantId, blueprintId, name, cadence, timeUtc, weekdayUtc, inputText, identityKey || null,
+    .bind(id, tenantId, blueprintId, name, cadence, timeUtc, weekdayUtc, validatedRequest.input, identityKey || null,
       nextRunAt, actorId).run();
   return { id, status: "active", nextRunAt };
 }
