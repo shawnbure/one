@@ -4,6 +4,7 @@ import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } 
 import { executeRequest } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
+import { createDraftRelease, getStudio, publishRelease } from "./studio";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -21,6 +22,32 @@ app.get("/api/session", (c) => c.json({
 }));
 
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
+
+app.get("/api/processes/:id/studio", async (c) => {
+  const studio = await getStudio(c.env, c.get("tenantId"), c.req.param("id"));
+  return studio ? c.json({ data: studio }) : c.json({ error: "Process not found" }, 404);
+});
+
+app.post("/api/processes/:id/releases", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    const result = await createDraftRelease(c.env, c.get("tenantId"), processId, c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_release.created", "process", processId, result);
+    return c.json(result, 201);
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Release creation failed" }, 400); }
+});
+
+app.post("/api/processes/:id/releases/:releaseId/publish", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    const releaseId = c.req.param("releaseId");
+    if (!processId || !releaseId) return c.json({ error: "Process and release IDs are required" }, 400);
+    const result = await publishRelease(c.env, c.get("tenantId"), processId, releaseId, c.get("actorId"));
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_release.published", "process", processId, result);
+    return c.json(result);
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Release publication failed" }, 400); }
+});
 
 app.get("/api/overview", async (c) => {
   const tenantId = c.get("tenantId");

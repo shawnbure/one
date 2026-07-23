@@ -9,6 +9,7 @@ import { api, ApiError, type Approval, type OverviewData, type SessionData } fro
 import "./live.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
+import { ProcessStudioView } from "./ProcessStudioView";
 
 const previewProcesses: AgentBlueprint[] = [
   { id: "customer-ops", name: "Customer Operations", description: "Maintains customer conversations and prepares approved business actions.", executionProfile: "conversation", modelProfile: "balanced", promptReleaseId: "prompt-customer-v1", autonomy: "approve", status: "active", tools: ["Lookup customer", "Draft reply", "Update CRM"], updatedAt: "2 min ago" },
@@ -37,6 +38,7 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [runInput, setRunInput] = useState("");
   const [runOutput, setRunOutput] = useState<string | null>(null);
+  const [studioProcessId, setStudioProcessId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const filtered = useMemo(() => processes.filter((p) => `${p.name} ${p.description}`.toLowerCase().includes(search.toLowerCase())), [processes, search]);
   const pending = approvals.find((item) => item.status === "pending");
@@ -92,7 +94,7 @@ export function App() {
     <aside>
       <div className="brand"><span className="brandmark"><Command size={18} /></span><div><strong>workrr</strong><small>PRIVATE AI OPERATIONS</small></div></div>
       <div className="workspace"><span className="avatar">A</span><div><strong>Acme Operations</strong><small>Dedicated environment</small></div><ChevronDown size={15} /></div>
-      <nav>{nav.map(([label, Icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}><Icon size={18} />{label}{label === "Work inbox" && (overview?.pendingApprovals ?? 0) > 0 && <em>{overview?.pendingApprovals}</em>}</button>)}</nav>
+      <nav>{nav.map(([label, Icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => { setActive(label); if (label === "Processes") setStudioProcessId(null); }}><Icon size={18} />{label}{label === "Work inbox" && (overview?.pendingApprovals ?? 0) > 0 && <em>{overview?.pendingApprovals}</em>}</button>)}</nav>
       <div className="aside-bottom"><div className="private"><LockKeyhole size={16}/><div><strong>Private by design</strong><small>Cloudflare dedicated</small></div></div><button><Settings2 size={17}/>Settings</button><button><Users size={17}/>Team & roles</button></div>
     </aside>
 
@@ -101,7 +103,7 @@ export function App() {
       <div className="content">
         {previewMode && <div className="environment-banner"><LockKeyhole size={15}/><span><strong>Secure preview</strong> Live operations unlock after identity is connected.</span></div>}
         {notice && <button className="notice" onClick={() => setNotice(null)}>{notice}<X size={14}/></button>}
-        {active === "Work inbox" ? <WorkInbox items={approvals} session={session} onRefresh={refresh} onNotice={setNotice}/> : active === "Activity" ? <ActivityView processes={processes} onNotice={setNotice}/> : <>
+        {active === "Work inbox" ? <WorkInbox items={approvals} session={session} onRefresh={refresh} onNotice={setNotice}/> : active === "Activity" ? <ActivityView processes={processes} onNotice={setNotice}/> : active === "Processes" ? <ProcessStudioView processId={studioProcessId} processes={processes} onSelect={setStudioProcessId} onNotice={setNotice}/> : <>
         <section className="hero"><div><div className="eyebrow"><Sparkles size={14}/> YOUR AI OPERATIONS</div><h1>Good morning, {session?.user.name.split(" ")[0] ?? "Shawn"}.</h1><p>{processes.length} processes are configured across your organization. {overview?.pendingApprovals ?? 1} item needs review.</p></div><button className="primary"><Plus size={17}/>Create process</button></section>
 
         <section className="metrics">
@@ -131,6 +133,6 @@ export function App() {
       </div>
     </main>
 
-    {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="drawer" onClick={(e) => e.stopPropagation()}><button className="close" onClick={() => setSelected(null)}><X/></button><span className={`process-icon large ${selected.executionProfile}`}><Workflow/></span><Status value={selected.status}/><h2>{selected.name}</h2><p>{selected.description}</p><div className="detail-grid"><span><small>EXECUTION</small><strong>{selected.executionProfile}</strong></span><span><small>AUTONOMY</small><strong>{selected.autonomy}</strong></span><span><small>MODEL PROFILE</small><strong>{selected.modelProfile}</strong></span><span><small>PROMPT RELEASE</small><strong>{selected.promptReleaseId}</strong></span></div><h3>Authorized capabilities</h3><div className="tool-list">{selected.tools.map((tool) => <span key={tool}><Check size={15}/>{tool.replaceAll("_", " ")}</span>)}</div><h3 className="test-label">Test this process</h3><textarea className="run-input" placeholder="Describe the work you want this process to handle…" value={runInput} onChange={(event) => setRunInput(event.target.value)}/>{runOutput && <div className="run-output"><Sparkles size={15}/><span>{runOutput}</span></div>}<button disabled={previewMode || busy === selected.id || !runInput.trim()} className="primary run" onClick={() => void runSelected()}><Play size={17}/>{busy === selected.id ? "Running…" : previewMode ? "Identity required" : "Run in test mode"}</button><button className="secondary">Open Process Studio</button></aside></div>}
+    {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="drawer" onClick={(e) => e.stopPropagation()}><button className="close" onClick={() => setSelected(null)}><X/></button><span className={`process-icon large ${selected.executionProfile}`}><Workflow/></span><Status value={selected.status}/><h2>{selected.name}</h2><p>{selected.description}</p><div className="detail-grid"><span><small>EXECUTION</small><strong>{selected.executionProfile}</strong></span><span><small>AUTONOMY</small><strong>{selected.autonomy}</strong></span><span><small>MODEL PROFILE</small><strong>{selected.modelProfile}</strong></span><span><small>PROMPT RELEASE</small><strong>{selected.promptReleaseId}</strong></span></div><h3>Authorized capabilities</h3><div className="tool-list">{selected.tools.map((tool) => <span key={tool}><Check size={15}/>{tool.replaceAll("_", " ")}</span>)}</div><h3 className="test-label">Test this process</h3><textarea className="run-input" placeholder="Describe the work you want this process to handle…" value={runInput} onChange={(event) => setRunInput(event.target.value)}/>{runOutput && <div className="run-output"><Sparkles size={15}/><span>{runOutput}</span></div>}<button disabled={previewMode || busy === selected.id || !runInput.trim()} className="primary run" onClick={() => void runSelected()}><Play size={17}/>{busy === selected.id ? "Running…" : previewMode ? "Identity required" : "Run in test mode"}</button><button className="secondary" onClick={() => { setStudioProcessId(selected.id); setActive("Processes"); setSelected(null); }}>Open Process Studio</button></aside></div>}
   </div>;
 }

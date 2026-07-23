@@ -61,6 +61,20 @@ export interface Execution {
   retry_of?: string | null;
 }
 
+export interface ProcessRelease {
+  id: string; version: number; prompt_release_id: string; model_profile: string; autonomy: string;
+  status: "draft" | "published" | "retired"; release_notes: string; created_by: string;
+  created_at: string; published_at: string | null; published_by: string | null; checksum: string;
+}
+
+export interface StudioData {
+  blueprint: Record<string, string>;
+  prompt: { system_prompt: string; instructions_json: string; guardrails_json: string; version: number; checksum: string };
+  releases: ProcessRelease[];
+  runStats: Array<{ status: string; count: number }>;
+  topology: { nodes: Array<{ id: string; type: string; label: string }>; edges: Array<{ from: string; to: string }> };
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -91,4 +105,8 @@ export const api = {
   executions: () => request<{ data: Execution[] }>("/api/executions"),
   execution: (id: string) => request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[] }>(`/api/executions/${encodeURIComponent(id)}`),
   retryExecution: (id: string) => request<{ executionId: string; status: string }>(`/api/executions/${encodeURIComponent(id)}/retry`, { method: "POST" })
+  ,studio: (id: string) => request<{ data: StudioData }>(`/api/processes/${encodeURIComponent(id)}/studio`),
+  createRelease: (id: string, body: { systemPrompt: string; instructions: string[]; guardrails: string[]; modelProfile: string; autonomy: string; releaseNotes: string }) =>
+    request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(id)}/releases`, { method: "POST", body: JSON.stringify(body) }),
+  publishRelease: (processId: string, releaseId: string) => request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/publish`, { method: "POST" })
 };
