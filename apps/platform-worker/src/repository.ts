@@ -15,6 +15,7 @@ export async function getBlueprint(env: Env, tenantId: string, id: string): Prom
     status: row.status as AgentBlueprint["status"],
     tools: JSON.parse(row.tools_json) as string[],
     updatedAt: row.updated_at
+    ,operatingMode: (row.operating_mode ?? "active") as AgentBlueprint["operatingMode"]
   };
 }
 

@@ -24,6 +24,7 @@ export interface BlueprintRow {
   status: string;
   tools_json: string;
   updated_at: string;
+  operating_mode?: string;
 }
 
 export interface PromptRow {

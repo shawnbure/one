@@ -23,6 +23,7 @@ export interface AgentBlueprint {
   status: ProcessStatus;
   tools: string[];
   updatedAt: string;
+  operatingMode?: "active" | "read_only" | "approval_only" | "paused" | "drain" | "emergency_stop";
 }
 
 export interface PromptBundle {

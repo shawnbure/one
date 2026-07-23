@@ -5,6 +5,7 @@ import { executeRequest } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease } from "./studio";
+import { getGovernance } from "./governance";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -167,6 +168,20 @@ app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "rev
     FROM audit_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`)
     .bind(c.get("tenantId")).all();
   return c.json({ data: results });
+});
+
+app.get("/api/governance", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
+  c.json({ data: await getGovernance(c.env, c.get("tenantId")) }));
+
+app.patch("/api/processes/:id/mode", requireRoles("admin", "owner"), async (c) => {
+  const processId = c.req.param("id");
+  const body = await c.req.json<{ mode?: string; reason?: string }>();
+  const modes = ["active", "read_only", "approval_only", "paused", "drain", "emergency_stop"];
+  if (!processId || !body.mode || !modes.includes(body.mode)) return c.json({ error: "A valid operating mode is required" }, 400);
+  const result = await c.env.DB.prepare("UPDATE agent_blueprints SET operating_mode = ?, updated_at = ? WHERE tenant_id = ? AND id = ?")
+    .bind(body.mode, new Date().toISOString(), c.get("tenantId"), processId).run();
+  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process.mode_changed", "process", processId, { mode: body.mode, reason: body.reason });
+  return c.json({ updated: result.meta.changes === 1, mode: body.mode });
 });
 
 app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewer"), async (c) => {

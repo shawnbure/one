@@ -75,6 +75,20 @@ export interface StudioData {
   topology: { nodes: Array<{ id: string; type: string; label: string }>; edges: Array<{ from: string; to: string }> };
 }
 
+export interface GovernanceData {
+  processes: Array<Record<string, string>>;
+  connections: Array<Record<string, string | number>>;
+  knowledge: Array<Record<string, string>>;
+  evaluations: Array<Record<string, string | number>>;
+  retention: Array<Record<string, string | number>>;
+  members: Array<Record<string, string>>;
+  audit: Array<Record<string, string>>;
+  incidents: Array<Record<string, string>>;
+  models: Array<{ profile: string; provider: string; processes: number; boundary: string }>;
+  readiness: Array<{ id: string; label: string; ready: boolean; detail: string }>;
+  dataFlow: string[];
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -109,4 +123,6 @@ export const api = {
   createRelease: (id: string, body: { systemPrompt: string; instructions: string[]; guardrails: string[]; modelProfile: string; autonomy: string; releaseNotes: string }) =>
     request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(id)}/releases`, { method: "POST", body: JSON.stringify(body) }),
   publishRelease: (processId: string, releaseId: string) => request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/publish`, { method: "POST" })
+  ,governance: () => request<{ data: GovernanceData }>("/api/governance"),
+  setProcessMode: (processId: string, mode: string, reason: string) => request<{ updated: boolean; mode: string }>(`/api/processes/${encodeURIComponent(processId)}/mode`, { method: "PATCH", body: JSON.stringify({ mode, reason }) })
 };

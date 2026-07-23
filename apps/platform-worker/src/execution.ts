@@ -9,6 +9,9 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
   if (!blueprint) throw new Error("Process not found");
   if (blueprint.status === "paused" || blueprint.status === "draft") throw new Error(`Process is ${blueprint.status}`);
+  if (["paused", "drain", "emergency_stop"].includes(blueprint.operatingMode ?? "active")) {
+    throw new Error(`Process operating mode is ${blueprint.operatingMode}`);
+  }
 
   const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
   const startedAt = new Date().toISOString();

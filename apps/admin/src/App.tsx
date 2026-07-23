@@ -10,6 +10,7 @@ import "./live.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";
+import { FoundationView } from "./FoundationViews";
 
 const previewProcesses: AgentBlueprint[] = [
   { id: "customer-ops", name: "Customer Operations", description: "Maintains customer conversations and prepares approved business actions.", executionProfile: "conversation", modelProfile: "balanced", promptReleaseId: "prompt-customer-v1", autonomy: "approve", status: "active", tools: ["Lookup customer", "Draft reply", "Update CRM"], updatedAt: "2 min ago" },
@@ -103,7 +104,7 @@ export function App() {
       <div className="content">
         {previewMode && <div className="environment-banner"><LockKeyhole size={15}/><span><strong>Secure preview</strong> Live operations unlock after identity is connected.</span></div>}
         {notice && <button className="notice" onClick={() => setNotice(null)}>{notice}<X size={14}/></button>}
-        {active === "Work inbox" ? <WorkInbox items={approvals} session={session} onRefresh={refresh} onNotice={setNotice}/> : active === "Activity" ? <ActivityView processes={processes} onNotice={setNotice}/> : active === "Processes" ? <ProcessStudioView processId={studioProcessId} processes={processes} onSelect={setStudioProcessId} onNotice={setNotice}/> : <>
+        {active === "Work inbox" ? <WorkInbox items={approvals} session={session} onRefresh={refresh} onNotice={setNotice}/> : active === "Activity" ? <ActivityView processes={processes} onNotice={setNotice}/> : active === "Processes" ? <ProcessStudioView processId={studioProcessId} processes={processes} onSelect={setStudioProcessId} onNotice={setNotice}/> : ["Connections", "Knowledge", "Evaluations", "Governance"].includes(active) ? <FoundationView section={active as "Connections" | "Knowledge" | "Evaluations" | "Governance"} onNotice={setNotice}/> : <>
         <section className="hero"><div><div className="eyebrow"><Sparkles size={14}/> YOUR AI OPERATIONS</div><h1>Good morning, {session?.user.name.split(" ")[0] ?? "Shawn"}.</h1><p>{processes.length} processes are configured across your organization. {overview?.pendingApprovals ?? 1} item needs review.</p></div><button className="primary"><Plus size={17}/>Create process</button></section>
 
         <section className="metrics">
