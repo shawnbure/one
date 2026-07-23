@@ -18,7 +18,7 @@ export interface AgentBlueprint {
   description: string;
   executionProfile: ExecutionProfile;
   modelProfile: string;
-  promptReleaseId: string;
+  promptReleaseId: string | null;
   autonomy: AutonomyLevel;
   status: ProcessStatus;
   tools: string[];

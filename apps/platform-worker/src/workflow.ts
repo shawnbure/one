@@ -12,6 +12,7 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
     const context = await step.do("load immutable process release", async () => {
       const blueprint = await getBlueprint(this.env, tenantId, request.blueprintId);
       if (!blueprint) throw new Error("Process not found");
+      if (!blueprint.promptReleaseId) throw new Error("Process has no published release");
       const prompt = await getPromptBundle(this.env, blueprint.promptReleaseId);
       if (!prompt) throw new Error("Prompt release not found");
       return { blueprint, prompt };

@@ -7,6 +7,7 @@ import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease } from "./studio";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
+import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -35,6 +36,23 @@ app.get("/api/session", (c) => c.json({
 }));
 
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
+
+app.get("/api/process-templates", requireRoles("admin", "builder", "owner"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, name, description, execution_profile, model_profile, autonomy,
+    tools_json, category FROM process_templates ORDER BY category, name`).all();
+  return c.json({ data: results });
+});
+
+app.post("/api/processes", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const result = await createProcessFromTemplate(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process.created", "process", result.id, result);
+    return c.json(result, 201);
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Process creation failed" }, 400); }
+});
+
+app.get("/api/value", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await getValueDashboard(c.env, c.get("tenantId")) }));
 
 app.get("/api/processes/:id/studio", async (c) => {
   const studio = await getStudio(c.env, c.get("tenantId"), c.req.param("id"));

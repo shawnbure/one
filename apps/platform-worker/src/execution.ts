@@ -12,6 +12,8 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   if (["paused", "drain", "emergency_stop"].includes(blueprint.operatingMode ?? "active")) {
     throw new Error(`Process operating mode is ${blueprint.operatingMode}`);
   }
+  const promptReleaseId = blueprint.promptReleaseId;
+  if (!promptReleaseId) throw new Error("Process has no published release");
 
   const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
   const startedAt = new Date().toISOString();
@@ -27,15 +29,15 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   }
 
   if (blueprint.executionProfile === "instant") {
-    const prompt = await requiredPrompt(env, blueprint.promptReleaseId);
+    const prompt = await requiredPrompt(env, promptReleaseId);
     const result = await runModel(env, blueprint.modelProfile, prompt, request.input);
     await complete(env, executionId, result.output, result.model);
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", ...result, startedAt };
   }
 
   const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey!);
-  if (!await agent.hasPromptRelease(blueprint.promptReleaseId)) {
-    agent.installPromptBundle(await requiredPrompt(env, blueprint.promptReleaseId));
+  if (!await agent.hasPromptRelease(promptReleaseId)) {
+    agent.installPromptBundle(await requiredPrompt(env, promptReleaseId));
   }
   const result = await agent.execute(request.input, blueprint.modelProfile);
   await complete(env, executionId, result.output, result.model);

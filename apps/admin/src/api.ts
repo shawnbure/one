@@ -1,4 +1,8 @@
-import type { AgentBlueprint, ExecutionRequest, ExecutionResult } from "@workrr/contracts";
+import type {
+  AgentBlueprint,
+  ExecutionRequest,
+  ExecutionResult,
+} from "@workrr/contracts";
 
 export interface OverviewData {
   activeProcesses: number;
@@ -62,17 +66,35 @@ export interface Execution {
 }
 
 export interface ProcessRelease {
-  id: string; version: number; prompt_release_id: string; model_profile: string; autonomy: string;
-  status: "draft" | "published" | "retired"; release_notes: string; created_by: string;
-  created_at: string; published_at: string | null; published_by: string | null; checksum: string;
+  id: string;
+  version: number;
+  prompt_release_id: string;
+  model_profile: string;
+  autonomy: string;
+  status: "draft" | "published" | "retired";
+  release_notes: string;
+  created_by: string;
+  created_at: string;
+  published_at: string | null;
+  published_by: string | null;
+  checksum: string;
 }
 
 export interface StudioData {
   blueprint: Record<string, string>;
-  prompt: { system_prompt: string; instructions_json: string; guardrails_json: string; version: number; checksum: string };
+  prompt: {
+    system_prompt: string;
+    instructions_json: string;
+    guardrails_json: string;
+    version: number;
+    checksum: string;
+  };
   releases: ProcessRelease[];
   runStats: Array<{ status: string; count: number }>;
-  topology: { nodes: Array<{ id: string; type: string; label: string }>; edges: Array<{ from: string; to: string }> };
+  topology: {
+    nodes: Array<{ id: string; type: string; label: string }>;
+    edges: Array<{ from: string; to: string }>;
+  };
 }
 
 export interface GovernanceData {
@@ -85,16 +107,59 @@ export interface GovernanceData {
   audit: Array<Record<string, string>>;
   incidents: Array<Record<string, string>>;
   webhooks: WebhookEndpoint[];
-  models: Array<{ profile: string; provider: string; processes: number; boundary: string }>;
-  readiness: Array<{ id: string; label: string; ready: boolean; detail: string }>;
+  models: Array<{
+    profile: string;
+    provider: string;
+    processes: number;
+    boundary: string;
+  }>;
+  readiness: Array<{
+    id: string;
+    label: string;
+    ready: boolean;
+    detail: string;
+  }>;
   dataFlow: string[];
 }
 
-export interface ApiLog { id: string; trace_id: string; direction: string; method: string; path: string; status: number; duration_ms: number; target: string | null; actor_id: string | null; created_at: string; }
-export interface WebhookEndpoint { id: string; name: string; blueprint_id: string; status: string; accepted_events_json: string; created_at: string; last_received_at: string | null; secret_configured: number; }
+export interface ApiLog {
+  id: string;
+  trace_id: string;
+  direction: string;
+  method: string;
+  path: string;
+  status: number;
+  duration_ms: number;
+  target: string | null;
+  actor_id: string | null;
+  created_at: string;
+}
+export interface WebhookEndpoint {
+  id: string;
+  name: string;
+  blueprint_id: string;
+  status: string;
+  accepted_events_json: string;
+  created_at: string;
+  last_received_at: string | null;
+  secret_configured: number;
+}
+export interface ProcessTemplate {
+  id: string;
+  name: string;
+  description: string;
+  execution_profile: string;
+  model_profile: string;
+  autonomy: string;
+  tools_json: string;
+  category: string;
+}
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
   }
 }
@@ -102,10 +167,16 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: { "content-type": "application/json", ...init?.headers }
+    headers: { "content-type": "application/json", ...init?.headers },
   });
-  const payload = await response.json().catch(() => ({})) as { error?: string };
-  if (!response.ok) throw new ApiError(payload.error ?? `Request failed (${response.status})`, response.status);
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  };
+  if (!response.ok)
+    throw new ApiError(
+      payload.error ?? `Request failed (${response.status})`,
+      response.status,
+    );
   return payload as T;
 }
 
@@ -114,22 +185,94 @@ export const api = {
   processes: () => request<{ data: AgentBlueprint[] }>("/api/processes"),
   overview: () => request<OverviewData>("/api/overview"),
   approvals: () => request<{ data: Approval[] }>("/api/approvals"),
-  approval: (id: string) => request<{ data: ApprovalDetail; audit: AuditEvent[] }>(`/api/approvals/${encodeURIComponent(id)}`),
-  execute: (body: ExecutionRequest) => request<ExecutionResult>("/api/execute", { method: "POST", body: JSON.stringify(body) }),
-  decideApproval: (id: string, decision: "approved" | "rejected", note?: string) =>
-    request<{ updated: boolean }>(`/api/approvals/${encodeURIComponent(id)}/${decision}`, { method: "POST", body: JSON.stringify({ note }) }),
+  approval: (id: string) =>
+    request<{ data: ApprovalDetail; audit: AuditEvent[] }>(
+      `/api/approvals/${encodeURIComponent(id)}`,
+    ),
+  execute: (body: ExecutionRequest) =>
+    request<ExecutionResult>("/api/execute", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  decideApproval: (
+    id: string,
+    decision: "approved" | "rejected",
+    note?: string,
+  ) =>
+    request<{ updated: boolean }>(
+      `/api/approvals/${encodeURIComponent(id)}/${decision}`,
+      { method: "POST", body: JSON.stringify({ note }) },
+    ),
   assignApproval: (id: string, assignedTo: string) =>
-    request<{ updated: boolean }>(`/api/approvals/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ assignedTo }) }),
+    request<{ updated: boolean }>(
+      `/api/approvals/${encodeURIComponent(id)}/assign`,
+      { method: "POST", body: JSON.stringify({ assignedTo }) },
+    ),
   executions: () => request<{ data: Execution[] }>("/api/executions"),
-  execution: (id: string) => request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[] }>(`/api/executions/${encodeURIComponent(id)}`),
-  retryExecution: (id: string) => request<{ executionId: string; status: string }>(`/api/executions/${encodeURIComponent(id)}/retry`, { method: "POST" })
-  ,studio: (id: string) => request<{ data: StudioData }>(`/api/processes/${encodeURIComponent(id)}/studio`),
-  createRelease: (id: string, body: { systemPrompt: string; instructions: string[]; guardrails: string[]; modelProfile: string; autonomy: string; releaseNotes: string }) =>
-    request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(id)}/releases`, { method: "POST", body: JSON.stringify(body) }),
-  publishRelease: (processId: string, releaseId: string) => request<{ releaseId: string; version: number; status: string }>(`/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/publish`, { method: "POST" })
-  ,governance: () => request<{ data: GovernanceData }>("/api/governance"),
-  setProcessMode: (processId: string, mode: string, reason: string) => request<{ updated: boolean; mode: string }>(`/api/processes/${encodeURIComponent(processId)}/mode`, { method: "PATCH", body: JSON.stringify({ mode, reason }) })
-  ,logs: () => request<{ data: ApiLog[] }>("/api/logs"),
+  execution: (id: string) =>
+    request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[] }>(
+      `/api/executions/${encodeURIComponent(id)}`,
+    ),
+  retryExecution: (id: string) =>
+    request<{ executionId: string; status: string }>(
+      `/api/executions/${encodeURIComponent(id)}/retry`,
+      { method: "POST" },
+    ),
+  studio: (id: string) =>
+    request<{ data: StudioData }>(
+      `/api/processes/${encodeURIComponent(id)}/studio`,
+    ),
+  createRelease: (
+    id: string,
+    body: {
+      systemPrompt: string;
+      instructions: string[];
+      guardrails: string[];
+      modelProfile: string;
+      autonomy: string;
+      releaseNotes: string;
+    },
+  ) =>
+    request<{ releaseId: string; version: number; status: string }>(
+      `/api/processes/${encodeURIComponent(id)}/releases`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  publishRelease: (processId: string, releaseId: string) =>
+    request<{ releaseId: string; version: number; status: string }>(
+      `/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/publish`,
+      { method: "POST" },
+    ),
+  governance: () => request<{ data: GovernanceData }>("/api/governance"),
+  setProcessMode: (processId: string, mode: string, reason: string) =>
+    request<{ updated: boolean; mode: string }>(
+      `/api/processes/${encodeURIComponent(processId)}/mode`,
+      { method: "PATCH", body: JSON.stringify({ mode, reason }) },
+    ),
+  logs: () => request<{ data: ApiLog[] }>("/api/logs"),
   webhooks: () => request<{ data: WebhookEndpoint[] }>("/api/webhooks"),
-  setWebhookStatus: (id: string, status: "active" | "disabled") => request<{ updated: boolean; status: string }>(`/api/webhooks/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify({ status }) })
+  setWebhookStatus: (id: string, status: "active" | "disabled") =>
+    request<{ updated: boolean; status: string }>(
+      `/api/webhooks/${encodeURIComponent(id)}/status`,
+      { method: "PATCH", body: JSON.stringify({ status }) },
+    ),
+  processTemplates: () =>
+    request<{ data: ProcessTemplate[] }>("/api/process-templates"),
+  createProcess: (body: {
+    templateId: string;
+    name: string;
+    purpose: string;
+    businessOwner: string;
+    department: string;
+    riskLevel: string;
+    baseline: {
+      volumePerMonth: number;
+      minutesPerItem: number;
+      hourlyCost: number;
+      errorRate: number;
+    };
+  }) =>
+    request<{ id: string; status: string; opportunityScore: number }>(
+      "/api/processes",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 };

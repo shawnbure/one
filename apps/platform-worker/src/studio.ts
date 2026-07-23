@@ -12,8 +12,9 @@ interface ReleaseInput {
 export async function getStudio(env: Env, tenantId: string, blueprintId: string) {
   const [blueprint, prompt, releases, runStats] = await Promise.all([
     env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, blueprintId).first(),
-    env.DB.prepare(`SELECT p.* FROM prompt_releases p JOIN agent_blueprints b ON b.prompt_release_id = p.id
-      WHERE b.tenant_id = ? AND b.id = ?`).bind(tenantId, blueprintId).first(),
+    env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
+      CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
+      p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, autonomy, status, release_notes,
       created_by, created_at, published_at, published_by, checksum FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
@@ -65,8 +66,9 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
     env.DB.prepare("UPDATE process_releases SET status = 'retired' WHERE tenant_id = ? AND blueprint_id = ? AND status = 'published'").bind(tenantId, blueprintId),
     env.DB.prepare("UPDATE process_releases SET status = 'published', published_at = ?, published_by = ? WHERE id = ?").bind(now, actorId, releaseId),
     env.DB.prepare("UPDATE prompt_releases SET status = 'published', published_at = ? WHERE id = ?").bind(now, release.prompt_release_id),
-    env.DB.prepare(`UPDATE agent_blueprints SET prompt_release_id = ?, model_profile = ?, autonomy = ?, active_release_id = ?, updated_at = ?
-      WHERE tenant_id = ? AND id = ?`).bind(release.prompt_release_id, release.model_profile, release.autonomy, releaseId, now, tenantId, blueprintId)
+    env.DB.prepare(`UPDATE agent_blueprints SET prompt_release_id = ?, model_profile = ?, autonomy = ?, active_release_id = ?,
+      status = CASE WHEN status = 'draft' THEN 'testing' ELSE status END, updated_at = ? WHERE tenant_id = ? AND id = ?`)
+      .bind(release.prompt_release_id, release.model_profile, release.autonomy, releaseId, now, tenantId, blueprintId)
   ]);
   return { releaseId, version: Number(release.version), status: "published" as const, publishedAt: now };
 }
