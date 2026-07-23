@@ -33,6 +33,7 @@ import {
 import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
 import "./schedule-studio.css";
 import "./autonomy-safety.css";
+import "./launch-readiness.css";
 
 interface Props {
   processId: string | null;
@@ -685,6 +686,39 @@ function Studio({
       )}
       {tab === "releases" && (
         <div className="release-operations">
+        <section className={`launch-readiness panel ${data.launchReadiness.ready ? "ready" : "blocked"}`}>
+          <header>
+            <span className="launch-readiness-icon">
+              {data.launchReadiness.ready ? <ShieldCheck size={20}/> : <AlertTriangle size={20}/>}
+            </span>
+            <div>
+              <span className="eyebrow">LAUNCH EVIDENCE</span>
+              <h2>{data.launchReadiness.ready ? "Ready for governed publication" : "Publication is blocked"}</h2>
+              <p>{data.launchReadiness.ready
+                ? "This process has both an operating baseline and a current owner-approved value target."
+                : "Complete the business evidence below before activating another release."}</p>
+            </div>
+          </header>
+          <div className="launch-readiness-checks">
+            <span className={data.launchReadiness.baselineConfigured ? "complete" : "missing"}>
+              {data.launchReadiness.baselineConfigured ? <Check size={15}/> : <AlertTriangle size={15}/>}
+              <strong>Discovery baseline</strong>
+              <small>{data.launchReadiness.baselineConfigured ? "Recorded" : "Required"}</small>
+            </span>
+            <span className={data.launchReadiness.targetConfigured && data.launchReadiness.targetCurrent ? "complete" : "missing"}>
+              {data.launchReadiness.targetConfigured && data.launchReadiness.targetCurrent
+                ? <Check size={15}/> : <AlertTriangle size={15}/>}
+              <strong>30-day value target</strong>
+              <small>{!data.launchReadiness.targetConfigured ? "Owner approval required"
+                : data.launchReadiness.targetCurrent
+                  ? `Review ${formatDate(data.launchReadiness.targetReviewDueAt ?? "")}`
+                  : "Review expired"}</small>
+            </span>
+          </div>
+          {!data.launchReadiness.ready && <footer>
+            Open <strong>Value &amp; Decisions</strong> to approve or renew the target. Publication remains server-blocked.
+          </footer>}
+        </section>
         {data.actorAdoption.supported && <section className="actor-adoption panel">
           <div className="section-head"><div><span className="eyebrow"><Boxes size={14}/> DURABLE ACTOR FLEET</span>
             <h2>Release adoption</h2>
@@ -789,7 +823,10 @@ function Studio({
               </span>
               {release.status !== "published" && canActivate &&
                 (release.status === "draft" || release.evaluation_status === "passing") ? (
-                <button disabled={busy} onClick={() => release.status === "draft"
+                <button disabled={busy || (release.status === "draft" && !data.launchReadiness.ready)}
+                  title={release.status === "draft" && !data.launchReadiness.ready
+                    ? data.launchReadiness.blockers.join("; ") : undefined}
+                  onClick={() => release.status === "draft"
                   ? void publish(release) : (setRollbackTarget(release), setRollbackReason(""), setRollbackVersion(""))}>
                   {release.status === "draft" ? <Rocket size={14} /> : <History size={14} />}{" "}
                   {release.status === "draft" ? "Publish" : "Restore"}

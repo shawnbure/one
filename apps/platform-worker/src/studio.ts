@@ -36,7 +36,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       LEFT JOIN latest_migration lm ON lm.instance_key=le.instance_key AND lm.rank=1
       WHERE le.rank=1
     )`;
-  const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors] = await Promise.all([
+  const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors, launchReadiness] = await Promise.all([
     env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
@@ -67,7 +67,8 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       FROM actor_release ar
       LEFT JOIN process_releases pr ON pr.id=ar.effective_release_id AND pr.tenant_id=?
       ORDER BY julianday(COALESCE(ar.migrated_at, ar.last_active_at)) DESC LIMIT 50`)
-      .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all()
+      .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all(),
+    getProcessLaunchReadiness(env, tenantId, blueprintId)
   ]);
   if (!blueprint) return null;
   const autonomySafety = await getAutonomySafety(env, tenantId, blueprintId);
@@ -105,6 +106,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
         .reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
       cohorts, actors
     },
+    launchReadiness,
     autonomySafety,
     activeTools,
     topology: topologyFor(String(row.execution_profile), String(row.autonomy), activeTools)
@@ -160,6 +162,8 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
     .bind(releaseId, tenantId, blueprintId).first<Record<string, string | number>>();
   if (!release) throw new Error("Process release not found");
   if (release.status !== "draft") throw new Error("Only a draft release can be published; use governed rollback for retired releases");
+  const readiness = await getProcessLaunchReadiness(env, tenantId, blueprintId);
+  if (!readiness.ready) throw new ProcessLaunchReadinessError(readiness);
   await evaluateReleaseGate(env, tenantId, actorId, blueprintId, releaseId);
   const now = new Date().toISOString();
   const active = await env.DB.prepare("SELECT active_release_id FROM agent_blueprints WHERE tenant_id=? AND id=?")
@@ -178,6 +182,48 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
         `Published release v${release.version} after its evaluation gate passed.`, actorId, now)
   ]);
   return { releaseId, version: Number(release.version), status: "published" as const, publishedAt: now };
+}
+
+export interface ProcessLaunchReadiness {
+  ready: boolean;
+  baselineConfigured: boolean;
+  targetConfigured: boolean;
+  targetCurrent: boolean;
+  targetReviewDueAt: string | null;
+  blockers: string[];
+}
+
+export class ProcessLaunchReadinessError extends Error {
+  constructor(public readonly readiness: ProcessLaunchReadiness) {
+    super(`Process is not ready to publish: ${readiness.blockers.join("; ")}`);
+  }
+}
+
+export async function getProcessLaunchReadiness(
+  env: Env, tenantId: string, blueprintId: string
+): Promise<ProcessLaunchReadiness> {
+  const row = await env.DB.prepare(`SELECT b.id,
+      CASE WHEN d.blueprint_id IS NULL THEN 0 ELSE 1 END baseline_configured,
+      CASE WHEN t.blueprint_id IS NULL THEN 0 ELSE 1 END target_configured,
+      t.review_due_at target_review_due_at
+    FROM agent_blueprints b
+    LEFT JOIN process_discovery d ON d.blueprint_id=b.id AND d.tenant_id=b.tenant_id
+    LEFT JOIN process_value_targets t ON t.blueprint_id=b.id AND t.tenant_id=b.tenant_id
+    WHERE b.id=? AND b.tenant_id=? LIMIT 1`)
+    .bind(blueprintId, tenantId).first<Record<string, unknown>>();
+  if (!row) throw new Error("Process not found");
+  const baselineConfigured = Number(row.baseline_configured) === 1;
+  const targetConfigured = Number(row.target_configured) === 1;
+  const targetReviewDueAt = targetConfigured ? String(row.target_review_due_at ?? "") || null : null;
+  const targetCurrent = Boolean(targetReviewDueAt && new Date(targetReviewDueAt).getTime() > Date.now());
+  const blockers: string[] = [];
+  if (!baselineConfigured) blockers.push("complete the discovery baseline");
+  if (!targetConfigured) blockers.push("have an owner approve a 30-day value target");
+  else if (!targetCurrent) blockers.push("renew the expired value target review");
+  return {
+    ready: blockers.length === 0, baselineConfigured, targetConfigured, targetCurrent,
+    targetReviewDueAt, blockers
+  };
 }
 
 export async function rollbackRelease(env: Env, tenantId: string, blueprintId: string,

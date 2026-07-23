@@ -367,6 +367,8 @@ Real customer outcome evidence can now enter that portfolio without a database s
 
 Every process can now pair its discovery baseline with an owner-approved 30-day target. Owners and administrators set volume, effort-returned, and modeled-value goals plus maximum override and adverse-run percentages, a review date, rationale, and approval evidence reference. Workrr applies tenant DLP, validates the process through its same-tenant discovery record, uses optimistic revisions, and audits each change. The portfolio displays item, effort, and value progress separately, flags exception-threshold breaches and overdue reviews, and refuses to recommend expansion when no target exists. Target achievement remains reporting evidence only: it cannot publish a release, raise autonomy, unpause a process, or bypass evaluation and approval controls.
 
+Process Studio now makes the baseline-and-target requirement an activation invariant instead of dashboard guidance. Release publication performs a same-tenant server check before running the release evaluation gate and requires both a discovery baseline and a current owner-approved value target. An expired target review blocks a new publication until the target is renewed. The Releases workspace presents these two checks in a readable launch-evidence panel and disables publication with the exact missing evidence, while the API remains authoritative if a client bypasses the interface. Governed rollback remains available because it restores a previously evaluated release during an incident rather than introducing a new deployment.
+
 ## Remaining aggressive-MVP work
 
 The foundation is usable, but these are the highest-value next slices:

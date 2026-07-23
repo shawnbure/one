@@ -23,6 +23,10 @@ function environment() {
           if (sql.includes("SELECT p.* FROM prompt_releases")) return {
             id: "prompt-v3", system_prompt: "Current", instructions_json: "[]", guardrails_json: "[]"
           };
+          if (sql.includes("baseline_configured")) return {
+            id: "process-1", baseline_configured: 1, target_configured: 1,
+            target_review_due_at: "2027-01-01T00:00:00.000Z"
+          };
           return null;
         },
         async all() {
@@ -59,5 +63,8 @@ describe("Process Studio durable actor adoption", () => {
       expect.objectContaining({ instance_key: "process-1:thread:one", state: "current" }),
       expect.objectContaining({ instance_key: "process-1:thread:two", state: "pinned_previous" })
     ]));
+    expect(studio?.launchReadiness).toMatchObject({
+      ready: true, baselineConfigured: true, targetConfigured: true, targetCurrent: true
+    });
   });
 });

@@ -368,6 +368,14 @@ export interface StudioData {
     from_version: number | null; to_version: number;
   }>;
   runStats: Array<{ status: string; count: number }>;
+  launchReadiness: {
+    ready: boolean;
+    baselineConfigured: boolean;
+    targetConfigured: boolean;
+    targetCurrent: boolean;
+    targetReviewDueAt: string | null;
+    blockers: string[];
+  };
   autonomySafety: AutonomySafetyData;
   actorAdoption: {
     supported: boolean;
