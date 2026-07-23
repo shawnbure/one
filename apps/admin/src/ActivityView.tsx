@@ -20,12 +20,14 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  UserRoundCheck,
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
   type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
-  type QueueOperationsData, type SessionData, type ToolActionDispatch, type ToolActionOperationsData,
+  type QueueOperationsData, type RecoveryOperations, type RecoveryTask, type SessionData,
+  type ToolActionDispatch, type ToolActionOperationsData,
   type ToolInvocation } from "./api";
 import "./queue-operations.css";
 
@@ -38,6 +40,10 @@ interface Props {
 export function ActivityView({ processes, session, onNotice }: Props) {
   const [runs, setRuns] = useState<Execution[]>([]);
   const [queue, setQueue] = useState<QueueOperationsData>({ summary: [], jobs: [] });
+  const [recovery, setRecovery] = useState<RecoveryOperations>({
+    summary: { open: 0, investigating: 0, overdue: 0, resolved: 0, acceptedRisk: 0 },
+    tasks: [], eligibleOwners: []
+  });
   const [actionQueue, setActionQueue] = useState<ToolActionOperationsData>({ summary: [], actions: [] });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Execution | null>(null);
@@ -53,12 +59,13 @@ export function ActivityView({ processes, session, onNotice }: Props) {
 
   async function load() {
     try {
-      const [executions, queueOperations, actionOperations] = await Promise.all([
-        api.executions(), api.queueOperations(), api.toolActions()
+      const [executions, queueOperations, actionOperations, recoveryOperations] = await Promise.all([
+        api.executions(), api.queueOperations(), api.toolActions(), api.recovery()
       ]);
       setRuns(executions.data);
       setQueue(queueOperations.data);
       setActionQueue(actionOperations.data);
+      setRecovery(recoveryOperations.data);
     } catch (error) {
       onNotice(
         error instanceof Error ? error.message : "Could not load activity",
@@ -110,7 +117,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
       active: runs.filter((run) => ["running", "queued"].includes(run.status))
         .length,
       attention: runs.filter((run) =>
-        ["failed", "waiting_approval"].includes(run.status),
+        ["failed", "blocked", "deferred", "waiting_approval"].includes(run.status),
       ).length,
     }),
     [runs],
@@ -464,6 +471,9 @@ export function ActivityView({ processes, session, onNotice }: Props) {
           </div>
         </article>
       </div>
+      <RecoveryQueue data={recovery} runs={runs} canManage={canOperate(session)}
+        canAcceptRisk={Boolean(session && ["admin", "owner"].includes(session.user.role))}
+        busy={busy} setBusy={setBusy} onReload={load} onOpenExecution={setSelectedId} onNotice={onNotice}/>
       <article className="queue-operations panel">
         <div className="section-head"><div><span className="eyebrow"><ListRestart size={14}/> ASYNC DELIVERY</span>
           <h2>Queue operations</h2><p>Application-level evidence for Cloudflare Queue acceptance, retries, and dead-letter handoff.</p></div>
@@ -578,6 +588,81 @@ export function ActivityView({ processes, session, onNotice }: Props) {
       </div>
     </section>
   );
+}
+
+function RecoveryQueue({ data, runs, canManage, canAcceptRisk, busy, setBusy, onReload,
+  onOpenExecution, onNotice }: {
+  data: RecoveryOperations; runs: Execution[]; canManage: boolean; canAcceptRisk: boolean;
+  busy: boolean; setBusy: (value: boolean) => void; onReload: () => Promise<void>;
+  onOpenExecution: (id: string) => void; onNotice: (message: string) => void;
+}) {
+  const [pending, setPending] = useState<{ task: RecoveryTask;
+    action: "investigate" | "resolve" | "accept_risk" | "reopen" } | null>(null);
+  const [note, setNote] = useState("");
+  const [verification, setVerification] = useState("");
+  async function change(task: RecoveryTask, action: "assign" | "investigate" | "resolve" | "accept_risk" | "reopen",
+    assignedTo?: string) {
+    setBusy(true);
+    try {
+      await api.updateRecovery(task.id, {
+        action, expectedRevision: task.revision, assignedTo,
+        note: action === "assign" ? undefined : note.trim(),
+        resolutionExecutionId: action === "resolve" ? verification : undefined
+      });
+      setPending(null); setNote(""); setVerification(""); await onReload();
+      onNotice(action === "assign" ? "Recovery owner assigned." : `Recovery task moved to ${action.replaceAll("_", " ")}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Recovery task could not change"); }
+    finally { setBusy(false); }
+  }
+  return <article className="recovery-queue panel">
+    <div className="section-head"><div><span className="eyebrow"><UserRoundCheck size={14}/> ACCOUNTABLE RECOVERY</span>
+      <h2>Failures have owners and closure evidence</h2>
+      <p>Blocked, deferred, and failed executions remain here until a completed verification run proves the repair or an owner accepts the risk.</p></div>
+      <div className="queue-badges"><span>{data.summary.open} open</span>
+        <span className={data.summary.investigating ? "attention" : ""}>{data.summary.investigating} investigating</span>
+        <span className={data.summary.overdue ? "danger" : ""}>{data.summary.overdue} overdue</span></div></div>
+    <div className="recovery-list">{data.tasks.slice(0, 12).map((task) => {
+      const completed = runs.filter((run) => run.blueprint_id === task.blueprint_id &&
+        run.status === "completed" && run.id !== task.execution_id);
+      return <section className={`${task.status} ${task.overdue ? "overdue" : ""}`} key={task.id}>
+        <button className="recovery-run" onClick={() => onOpenExecution(task.execution_id)}>
+          <span><strong>{task.process_name}</strong><small>{task.category.replaceAll("_", " ")} · run {task.execution_id.slice(0, 8)}</small></span>
+          <em className={task.execution_status}>{task.execution_status}</em></button>
+        <div className="recovery-accountability"><span><small>OWNER</small>
+          {canManage && !["resolved", "accepted_risk"].includes(task.status)
+            ? <select value={task.assigned_to ?? ""} onChange={(event) => {
+              if (event.target.value) void change(task, "assign", event.target.value);
+            }}><option value="">Unassigned</option>{data.eligibleOwners.map((owner) =>
+              <option value={owner.id} key={owner.id}>{owner.display_name} · {owner.role}</option>)}</select>
+            : <strong>{task.assignee_name ?? "Unassigned"}</strong>}</span>
+          <span><small>DUE</small><strong>{formatDate(task.due_at)}{task.overdue ? " · overdue" : ""}</strong></span>
+          <span><small>STATE</small><strong>{task.status.replaceAll("_", " ")}</strong></span></div>
+        <p>{task.nextAction}</p>
+        {task.resolution && <aside><strong>Closure evidence</strong>{task.resolution}
+          {task.resolution_execution_id && <button onClick={() => onOpenExecution(task.resolution_execution_id!)}>
+            Verification run {task.resolution_execution_id.slice(0, 8)}</button>}</aside>}
+        {canManage && <footer>{["resolved", "accepted_risk"].includes(task.status)
+          ? <button onClick={() => { setPending({ task, action: "reopen" }); setNote(""); }}>Reopen</button>
+          : <><button onClick={() => { setPending({ task, action: "investigate" }); setNote(""); }}>Investigate</button>
+            <button onClick={() => { setPending({ task, action: "resolve" }); setNote(""); setVerification(""); }}>Resolve with proof</button>
+            {canAcceptRisk && <button className="risk" onClick={() => {
+              setPending({ task, action: "accept_risk" }); setNote("");
+            }}>Accept risk</button>}</>}</footer>}
+        {pending?.task.id === task.id && <div className="recovery-editor"><header><strong>
+          {pending.action.replaceAll("_", " ")} recovery task</strong><button onClick={() => setPending(null)}>Cancel</button></header>
+          {pending.action === "resolve" && <label>Completed verification run<select value={verification}
+            onChange={(event) => setVerification(event.target.value)}><option value="">Select proof</option>
+            {completed.map((run) => <option value={run.id} key={run.id}>{run.id.slice(0, 8)} · {formatDate(run.completed_at!)}</option>)}
+          </select>{!completed.length && <small>No completed same-process run is available yet. Replay after correcting the cause.</small>}</label>}
+          <label>{pending.action === "accept_risk" ? "Risk acceptance rationale" : "Recovery evidence"}
+            <textarea maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)}
+              placeholder="Record what was investigated, changed, or intentionally accepted."/></label>
+          <button disabled={busy || note.trim().length < 5 || (pending.action === "resolve" && !verification)}
+            onClick={() => void change(task, pending.action)}>Apply accountable change</button></div>}
+      </section>;
+    })}</div>
+    {!data.tasks.length && <div className="queue-empty">No failed, blocked, or deferred execution requires recovery.</div>}
+  </article>;
 }
 
 function MemoryGovernance({ executionId, onNotice }: {

@@ -70,4 +70,15 @@ describe("execution admission controls", () => {
       values.includes("execution-observe"))).toBe(true);
     expect(writes.some(({ sql }) => sql.includes("FROM prompt_releases"))).toBe(false);
   });
+
+  it("settles unexpected synchronous failures instead of leaving a run permanently active", async () => {
+    const { env, writes } = executionEnvironment("active", "active");
+    await expect(executeRequest(env, "tenant-1",
+      { blueprintId: "process-1", input: "Run with a missing prompt fixture" }, "execution-unexpected"))
+      .rejects.toThrow("Published prompt release not found");
+    const failure = writes.find(({ sql, values }) => sql.includes("status='failed'") &&
+      values.includes("execution-unexpected"));
+    expect(failure?.sql).toContain("status IN ('running','queued','completed')");
+    expect(failure?.values).toContain("tenant-1");
+  });
 });

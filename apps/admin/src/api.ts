@@ -187,6 +187,32 @@ export interface ExecutionMemory {
   durableFactPromotion: "disabled";
   turns: GovernedMemoryTurn[];
 }
+export interface RecoveryTask {
+  id: string;
+  execution_id: string;
+  blueprint_id: string;
+  process_name: string;
+  execution_status: "failed" | "blocked" | "deferred";
+  assigned_to: string | null;
+  assignee_name: string | null;
+  status: "open" | "investigating" | "resolved" | "accepted_risk";
+  due_at: string;
+  revision: number;
+  resolution: string | null;
+  resolution_execution_id: string | null;
+  resolved_by_name: string | null;
+  resolved_at: string | null;
+  category: "process_contract" | "safety_control" | "operating_control" | "execution_failure";
+  nextAction: string;
+  overdue: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export interface RecoveryOperations {
+  summary: { open: number; investigating: number; overdue: number; resolved: number; acceptedRisk: number };
+  tasks: RecoveryTask[];
+  eligibleOwners: Array<{ id: string; display_name: string; role: string }>;
+}
 export interface QueueOperation {
   id: string;
   execution_id: string;
@@ -794,6 +820,12 @@ export const api = {
       { method: "POST", body: JSON.stringify({ kind, body }) },
     ),
   executions: () => request<{ data: Execution[] }>("/api/executions"),
+  recovery: () => request<{ data: RecoveryOperations }>("/api/recovery"),
+  updateRecovery: (id: string, body: {
+    action: "assign" | "investigate" | "resolve" | "accept_risk" | "reopen";
+    expectedRevision: number; assignedTo?: string; note?: string; resolutionExecutionId?: string;
+  }) => request<{ data: { id: string; executionId: string; status: string; revision: number } }>(
+    `/api/recovery/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   queueOperations: () => request<{ data: QueueOperationsData }>("/api/queue-operations"),
   toolActions: () => request<{ data: ToolActionOperationsData }>("/api/tool-actions"),
   replayQueueJob: (id: string) =>

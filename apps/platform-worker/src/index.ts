@@ -47,6 +47,7 @@ import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperatio
 import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConflict, updateHelpRequest } from "./help-center";
 import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence } from "./execution-evidence";
 import { governExecutionMemory, listExecutionMemory } from "./memory-governance";
+import { getRecoveryOperations, RecoveryConflict, updateRecoveryTask } from "./recovery";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -864,6 +865,28 @@ app.get("/api/executions", requireRoles("admin", "builder", "owner", "operator",
     autonomy_level, autonomy_disposition, approval_id
     FROM executions WHERE ${filters.join(" AND ")} ORDER BY started_at DESC LIMIT 100`).bind(...bindings).all();
   return c.json({ data: results });
+});
+
+app.get("/api/recovery", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
+  c.json({ data: await getRecoveryOperations(c.env, c.get("tenantId")) }));
+
+app.patch("/api/recovery/:id", requireRoles("admin", "owner", "operator"), async (c) => {
+  try {
+    const taskId = c.req.param("id");
+    if (!taskId) return c.json({ error: "Recovery task ID is required" }, 400);
+    const result = await updateRecoveryTask(c.env, c.get("tenantId"), c.get("actorId"), c.get("role"),
+      taskId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `recovery.${result.action}`,
+      "execution_recovery", taskId, {
+        executionId: result.executionId, status: result.status, assignedTo: result.assignedTo,
+        resolutionExecutionId: result.resolutionExecutionId, note: result.note, revision: result.revision
+      });
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Recovery task could not be updated";
+    return c.json({ error: message }, error instanceof RecoveryConflict ? 409 :
+      message.includes("not found") ? 404 : 400);
+  }
 });
 
 app.get("/api/executions/:id", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {

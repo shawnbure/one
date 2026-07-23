@@ -60,77 +60,82 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       contracts.outputSchema ? "pending" : "not_configured", autonomy.effective,
       admission.deferred ? "deferred" : autonomy.disposition, JSON.stringify(blueprint.toolPolicies ?? [])).run();
 
-  if (admission.deferred) {
-    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };
-  }
-  if (!autonomy.runModel) {
-    const output = "Input observed. This autonomy level does not generate an AI recommendation.";
-    await env.DB.prepare(`UPDATE executions SET status='completed', output_preview=?, input_tokens=0,
-      output_tokens=0, total_tokens=0, estimated_cost_usd=0, output_contract_status='not_configured',
-      completed_at=? WHERE id=? AND tenant_id=?`)
-      .bind(output, new Date().toISOString(), executionId, tenantId).run();
-    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output, startedAt };
-  }
-  await assertBudgetAvailable(env, tenantId);
-
-  if (blueprint.executionProfile === "workflow") {
-    await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`,
-      params: { tenantId, request: { ...request, input: contractedInput.value } } });
-    await markStatus(env, executionId, "queued");
-    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "queued", startedAt };
-  }
-
-  const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, contractedInput.value, executionId);
-  const modelInput = outputContractInstruction(grounded.input, contracts.outputSchema);
-  if (blueprint.executionProfile === "instant") {
-    const prompt = await requiredPrompt(env, promptReleaseId);
-    const result = await runModel(env, blueprint.modelProfile, prompt, modelInput, undefined, {
-      tenantId, executionId, autonomy: autonomy.effective, policies: blueprint.toolPolicies ?? []
-    });
-    const outputDlp = await applyDlp(env, tenantId, result.output, {
-      direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
-    });
-    if (outputDlp.blocked) {
-      await failBlockedOutput(env, executionId, outputDlp.blockedDetectors);
-      throw new DlpBlockedError(outputDlp.blockedDetectors);
+  try {
+    if (admission.deferred) {
+      return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };
     }
-    let contractedOutput;
-    try { contractedOutput = validateContractOutput(outputDlp.modelText, contracts.outputSchema); }
-    catch (error) { await failContractOutput(env, executionId, error); throw error; }
-    const safeResult = { ...result, output: contractedOutput.value };
-    await markOutputContract(env, executionId, contractedOutput.status);
-    await complete(env, executionId, safeResult, contractedOutput.value);
+    if (!autonomy.runModel) {
+      const output = "Input observed. This autonomy level does not generate an AI recommendation.";
+      await env.DB.prepare(`UPDATE executions SET status='completed', output_preview=?, input_tokens=0,
+        output_tokens=0, total_tokens=0, estimated_cost_usd=0, output_contract_status='not_configured',
+        completed_at=? WHERE id=? AND tenant_id=?`)
+        .bind(output, new Date().toISOString(), executionId, tenantId).run();
+      return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output, startedAt };
+    }
+    await assertBudgetAvailable(env, tenantId);
+
+    if (blueprint.executionProfile === "workflow") {
+      await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`,
+        params: { tenantId, request: { ...request, input: contractedInput.value } } });
+      await markStatus(env, executionId, "queued");
+      return { executionId, instanceKey, profile: blueprint.executionProfile, status: "queued", startedAt };
+    }
+
+    const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, contractedInput.value, executionId);
+    const modelInput = outputContractInstruction(grounded.input, contracts.outputSchema);
+    if (blueprint.executionProfile === "instant") {
+      const prompt = await requiredPrompt(env, promptReleaseId);
+      const result = await runModel(env, blueprint.modelProfile, prompt, modelInput, undefined, {
+        tenantId, executionId, autonomy: autonomy.effective, policies: blueprint.toolPolicies ?? []
+      });
+      const outputDlp = await applyDlp(env, tenantId, result.output, {
+        direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
+      });
+      if (outputDlp.blocked) {
+        await failBlockedOutput(env, executionId, outputDlp.blockedDetectors);
+        throw new DlpBlockedError(outputDlp.blockedDetectors);
+      }
+      let contractedOutput;
+      try { contractedOutput = validateContractOutput(outputDlp.modelText, contracts.outputSchema); }
+      catch (error) { await failContractOutput(env, executionId, error); throw error; }
+      const safeResult = { ...result, output: contractedOutput.value };
+      await markOutputContract(env, executionId, contractedOutput.status);
+      await complete(env, executionId, safeResult, contractedOutput.value);
+      const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
+        approvalPlan(autonomy, result.toolApprovalRequired), contractedOutput.value);
+      if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
+      return { executionId, instanceKey, profile: blueprint.executionProfile,
+        status: approvalId ? "waiting_approval" : "completed",
+        ...(approvalId ? {} : safeResult), startedAt };
+    }
+
+    const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey!);
+    await agent.bindTenant(tenantId, blueprint.id);
+    if (!await agent.hasPromptRelease(promptReleaseId)) {
+      agent.installPromptBundle(await requiredPrompt(env, promptReleaseId), tenantId);
+    }
+    let result;
+    try {
+      result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId,
+        contracts.outputSchema, !autonomy.requiresApproval, autonomy.effective, blueprint.toolPolicies ?? []);
+    } catch (error) {
+      if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
+        error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
+      if (isContractViolation(error)) await failContractOutput(env, executionId, error);
+      throw error;
+    }
+    await markOutputContract(env, executionId, contracts.outputSchema ? "passed" : "not_configured");
+    await complete(env, executionId, result, result.outputPreview);
     const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
-      approvalPlan(autonomy, result.toolApprovalRequired), contractedOutput.value);
+      approvalPlan(autonomy, result.toolApprovalRequired), result.outputPreview);
     if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
     return { executionId, instanceKey, profile: blueprint.executionProfile,
       status: approvalId ? "waiting_approval" : "completed",
-      ...(approvalId ? {} : safeResult), startedAt };
-  }
-
-  const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey!);
-  await agent.bindTenant(tenantId, blueprint.id);
-  if (!await agent.hasPromptRelease(promptReleaseId)) {
-    agent.installPromptBundle(await requiredPrompt(env, promptReleaseId), tenantId);
-  }
-  let result;
-  try {
-    result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId,
-      contracts.outputSchema, !autonomy.requiresApproval, autonomy.effective, blueprint.toolPolicies ?? []);
+      ...(approvalId ? {} : { output: result.output, model: result.model }), startedAt };
   } catch (error) {
-    if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
-      error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
-    if (isContractViolation(error)) await failContractOutput(env, executionId, error);
+    await failUnexpectedExecution(env, tenantId, executionId, error);
     throw error;
   }
-  await markOutputContract(env, executionId, contracts.outputSchema ? "passed" : "not_configured");
-  await complete(env, executionId, result, result.outputPreview);
-  const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
-    approvalPlan(autonomy, result.toolApprovalRequired), result.outputPreview);
-  if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
-  return { executionId, instanceKey, profile: blueprint.executionProfile,
-    status: approvalId ? "waiting_approval" : "completed",
-    ...(approvalId ? {} : { output: result.output, model: result.model }), startedAt };
 }
 
 export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, request: ExecutionRequest, executionId: string) {
@@ -197,6 +202,13 @@ async function failContractOutput(env: Env, id: string, error: unknown) {
   await env.DB.prepare(`UPDATE executions SET status='failed', output_preview=NULL, output_contract_status='failed',
     contract_error=?, error=?, completed_at=? WHERE id=?`)
     .bind(message.slice(0, 1000), message.slice(0, 1000), new Date().toISOString(), id).run();
+}
+
+async function failUnexpectedExecution(env: Env, tenantId: string, id: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  await env.DB.prepare(`UPDATE executions SET status='failed', output_preview=NULL, error=?, completed_at=?
+    WHERE id=? AND tenant_id=? AND status IN ('running','queued','completed')`)
+    .bind(message.slice(0, 1000), new Date().toISOString(), id, tenantId).run();
 }
 
 function approvalPlan(plan: ReturnType<typeof autonomyPlan>, toolApprovalRequired: boolean) {

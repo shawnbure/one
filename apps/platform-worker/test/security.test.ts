@@ -173,6 +173,24 @@ describe("control-plane security boundary", () => {
     }
   });
 
+  it("keeps recovery evidence out of consumer sessions and mutations away from viewers", async () => {
+    const consumer = environment("consumer");
+    const read = await app.fetch(new Request("http://localhost/api/recovery", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), consumer.env as never, executionCtx as never);
+    expect(read.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("execution_recovery_tasks"))).toBe(false);
+
+    const viewer = environment("viewer");
+    const change = await app.fetch(new Request("http://localhost/api/recovery/recovery-1", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ action: "investigate", expectedRevision: 1, note: "Unauthorized change" })
+    }), viewer.env as never, executionCtx as never);
+    expect(change.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("UPDATE execution_recovery_tasks"))).toBe(false);
+  });
+
   it("prevents viewers from changing connection credential lifecycle metadata", async () => {
     const viewer = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/connections/connection-1/lifecycle", {
