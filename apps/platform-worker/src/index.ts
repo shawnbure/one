@@ -82,7 +82,7 @@ import { emitGovernanceReviewAlerts } from "./governance-review-alerts";
 import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
 import { createEmailRoute, listEmailReceipts, listEmailRoutes, receiveProcessEmail,
   setEmailRouteStatus, updateEmailRoute, verifyEmailRouting } from "./email-channel";
-import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector,
+import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector, disconnectMcpConnector,
   discoverMcpTools, governMcpTool, listMcpConnectors } from "./mcp-connectors";
 
 export { ProcessAgent } from "./agent";
@@ -2126,6 +2126,19 @@ app.post("/api/mcp-connectors/:id/connect", requireRoles("admin", "owner"), asyn
     return c.json({ data: result });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "MCP connection failed" }, 400);
+  }
+});
+
+app.post("/api/mcp-connectors/:id/disconnect", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const connectorId = c.req.param("id");
+    if (!connectorId) return c.json({ error: "MCP connector ID is required" }, 400);
+    const result = await disconnectMcpConnector(c.env, c.get("tenantId"), connectorId);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "mcp_connector.disconnected",
+      "mcp_connector", connectorId, { toolsDisabled: true });
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "MCP disconnect failed" }, 400);
   }
 });
 

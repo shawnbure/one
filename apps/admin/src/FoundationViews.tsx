@@ -142,6 +142,16 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
     } catch (error) { onNotice(error instanceof Error ? error.message : "MCP discovery failed"); }
     finally { setMcpBusy(null); }
   }
+  async function disconnectMcp(id: string) {
+    if (!window.confirm("Disconnect this MCP service and disable every discovered capability?")) return;
+    setMcpBusy(id);
+    try {
+      await api.disconnectMcpConnector(id);
+      await loadMcpCatalog();
+      onNotice("MCP service disconnected. Its durable OAuth session was removed and all capabilities were disabled.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "MCP connector could not disconnect"); }
+    finally { setMcpBusy(null); }
+  }
   async function governMcp(tool: McpConnectorTool, enabled: boolean, processIds?: string[]) {
     setMcpBusy(tool.id);
     try {
@@ -602,6 +612,8 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
             {connector.last_error && <p>{connector.last_error}</p>}
             {session && ["admin", "owner"].includes(session.user.role) && <button disabled={mcpBusy === connector.id}
               onClick={() => void connectMcp(connector.id)}>{connector.status === "ready" ? "Reconnect" : "Connect / authorize"}</button>}
+            {session && ["admin", "owner"].includes(session.user.role) && connector.status !== "disabled" &&
+              <button disabled={mcpBusy === connector.id} onClick={() => void disconnectMcp(connector.id)}>Disconnect</button>}
             {session && ["admin", "owner", "operator"].includes(session.user.role) && connector.status === "ready" &&
               <button disabled={mcpBusy === connector.id} onClick={() => void discoverMcp(connector.id)}>Refresh discovery</button>}
           </article>)}
@@ -610,7 +622,8 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
         {mcpCatalog.tools.length > 0 && <div className="mcp-tools">
           <div className="section-head"><div><h3>Discovered capabilities</h3>
             <p>Writes and medium/high-risk tools remain proposal-only even when enabled.</p></div></div>
-          {mcpCatalog.tools.map((tool) => <article key={tool.id} className={!tool.enabled ? "disabled" : ""}>
+          {mcpCatalog.tools.map((tool) => <article key={tool.id}
+            className={!tool.enabled || !tool.available ? "disabled" : ""}>
             <span className={`tool-access ${tool.access_mode}`}>{tool.access_mode}</span>
             <span><strong>{tool.title}</strong><small>{tool.description}</small>
               <em>{tool.risk_level} risk · {tool.data_classification} · {tool.rate_limit_per_minute}/min · Owner {tool.owner}</em>
@@ -638,9 +651,12 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
                     bound ? ids.filter((id) => id !== String(process.id)) : [...ids, String(process.id)])}>
                   {bound ? "✓ " : "+ "}{processOptionLabel(process, data.processes)}</button>;
               })}</span></span>
-            <span className={`connection-state ${tool.enabled ? "healthy" : "attention"}`}><i/>{tool.enabled ? "governed" : "disabled"}</span>
-            {session && ["admin", "owner"].includes(session.user.role) && <button disabled={mcpBusy === tool.id}
-              onClick={() => void governMcp(tool, true)}>{tool.enabled ? "Save governance" : "Save & enable"}</button>}
+            <span className={`connection-state ${tool.enabled && tool.available ? "healthy" : "attention"}`}><i/>
+              {!tool.available ? "removed upstream" : tool.enabled ? "governed" : "disabled"}</span>
+            {session && ["admin", "owner"].includes(session.user.role) && <button
+              disabled={mcpBusy === tool.id || !Boolean(tool.available)}
+              onClick={() => void governMcp(tool, true)}>
+              {tool.enabled ? "Save governance" : "Save & enable"}</button>}
             {session && ["admin", "owner"].includes(session.user.role) && Boolean(tool.enabled) && <button
               disabled={mcpBusy === tool.id} onClick={() => void governMcp(tool, false)}>Disable</button>}
           </article>)}

@@ -16,6 +16,7 @@ This is intentionally separate from process agents. A tenant may have many durab
 - Admins, owners, and operators may refresh capability discovery.
 - Discovery is capped at 50 tools and schemas are normalized to Workrr's bounded JSON Schema contract.
 - Every newly discovered capability starts disabled, medium risk, confidential, and unbound.
+- A refresh marks capabilities removed by the provider unavailable and disables them before restoring the currently advertised set. A stale provider tool can therefore never remain executable.
 
 ## Runtime policy
 
@@ -30,6 +31,8 @@ A published process release receives an immutable snapshot of enabled bindings. 
 - input schema, DLP, and invocation rate controls pass.
 
 Writes and medium/high-risk calls remain proposal-only. Tool inputs are capped at 32 KB, calls time out after 15 seconds, results are capped at 64 KB, and output DLP runs before model consumption or evidence persistence. Every attempt uses the normal idempotent `tool_invocations` ledger.
+
+Disconnect removes the SDK-managed session from the connector actor, clears pending OAuth state, changes the connector to disabled, and disables all of its tools. Workrr retains bounded discovery and governance metadata for audit and controlled reconnection.
 
 ## Portability
 

@@ -654,6 +654,7 @@ export interface McpConnectorTool {
   access_mode: "read" | "write"; risk_level: "low" | "medium" | "high";
   data_classification: "public" | "internal" | "confidential" | "restricted";
   owner: string; rate_limit_per_minute: number; enabled: number; revision: number;
+  available: number;
   process_ids: string; process_names: string;
 }
 export interface McpCatalogData {
@@ -1676,6 +1677,9 @@ export const api = {
   connectMcpConnector: (id: string) =>
     request<{ data: { id: string; status: string; authUrl: string | null } }>(
       `/api/mcp-connectors/${encodeURIComponent(id)}/connect`, { method: "POST" }),
+  disconnectMcpConnector: (id: string) =>
+    request<{ data: { id: string; disconnected: boolean } }>(
+      `/api/mcp-connectors/${encodeURIComponent(id)}/disconnect`, { method: "POST" }),
   discoverMcpConnector: (id: string) =>
     request<{ data: { id: string; status: string; toolCount: number } }>(
       `/api/mcp-connectors/${encodeURIComponent(id)}/discover`, { method: "POST" }),

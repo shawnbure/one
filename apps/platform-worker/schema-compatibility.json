@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 86,
-  "requiredMigrationName": "0086_mcp_connectors.sql"
+  "requiredMigrationId": 87,
+  "requiredMigrationName": "0087_mcp_connector_lifecycle.sql"
 }

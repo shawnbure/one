@@ -132,7 +132,7 @@ export async function releaseToolPolicies(env: Env, tenantId: string, blueprintI
     FROM process_tool_bindings pt
     JOIN tool_definitions t ON t.id=pt.tool_id AND t.tenant_id=pt.tenant_id
     LEFT JOIN connections c ON c.id=t.connection_id AND c.tenant_id=t.tenant_id
-    WHERE pt.tenant_id=? AND pt.blueprint_id=? AND pt.enabled=1 AND t.enabled=1
+    WHERE pt.tenant_id=? AND pt.blueprint_id=? AND pt.enabled=1 AND t.enabled=1 AND t.available=1
     ORDER BY t.name`).bind(tenantId, blueprintId).all<Record<string, unknown>>(),
   env.DB.prepare(`SELECT t.id, t.ai_tool_name name, t.revision version, 'mcp' adapter_kind,
     'mcp.' || t.connector_id || '.' || t.ai_tool_name handler_key, t.access_mode, t.risk_level,

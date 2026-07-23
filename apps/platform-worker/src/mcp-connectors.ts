@@ -16,7 +16,7 @@ export async function listMcpConnectors(env: Env, tenantId: string) {
       FROM mcp_connectors WHERE tenant_id=? ORDER BY name`).bind(tenantId).all(),
     env.DB.prepare(`SELECT t.id, t.connector_id, t.server_tool_name, t.ai_tool_name, t.title,
       t.description, t.input_schema_json, t.access_mode, t.risk_level, t.data_classification,
-      t.owner, t.rate_limit_per_minute, t.enabled, t.revision,
+      t.owner, t.rate_limit_per_minute, t.enabled, t.available, t.revision,
       COALESCE(group_concat(DISTINCT b.id), '') process_ids,
       COALESCE(group_concat(DISTINCT b.name), '') process_names
       FROM mcp_connector_tools t
@@ -73,6 +73,21 @@ export async function connectMcpConnector(env: Env, tenantId: string, connectorI
   }
 }
 
+export async function disconnectMcpConnector(env: Env, tenantId: string, connectorId: string) {
+  await connectorRow(env, tenantId, connectorId);
+  const actor = await connectorActor(env, tenantId, connectorId);
+  await actor.disconnectConnector(tenantId, connectorId);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE mcp_connectors SET status='disabled', oauth_state_hash=NULL,
+      last_error=NULL, revision=revision+1, updated_at=CURRENT_TIMESTAMP
+      WHERE id=? AND tenant_id=?`).bind(connectorId, tenantId),
+    env.DB.prepare(`UPDATE mcp_connector_tools SET enabled=0, revision=revision+1,
+      updated_at=CURRENT_TIMESTAMP WHERE connector_id=? AND tenant_id=? AND enabled=1`)
+      .bind(connectorId, tenantId)
+  ]);
+  return { id: connectorId, disconnected: true };
+}
+
 export async function completeMcpOAuthCallback(env: Env, request: Request) {
   const state = new URL(request.url).searchParams.get("state");
   if (!state) throw new Error("MCP OAuth state is required");
@@ -118,13 +133,24 @@ export async function discoverMcpTools(env: Env, tenantId: string, connectorId: 
   const toolRows = await Promise.all(tools.map(async (tool) => ({
     ...tool, id: `mcp-tool-${await sha256(`${connectorId}:${tool.name}`)}`
   })));
+  const unavailable = toolRows.length
+    ? env.DB.prepare(`UPDATE mcp_connector_tools SET available=0, enabled=0,
+        revision=revision+1, updated_at=CURRENT_TIMESTAMP
+        WHERE connector_id=? AND tenant_id=? AND available=1
+        AND server_tool_name NOT IN (${toolRows.map(() => "?").join(",")})`)
+      .bind(connectorId, tenantId, ...toolRows.map((tool) => tool.name))
+    : env.DB.prepare(`UPDATE mcp_connector_tools SET available=0, enabled=0,
+        revision=revision+1, updated_at=CURRENT_TIMESTAMP
+        WHERE connector_id=? AND tenant_id=? AND available=1`).bind(connectorId, tenantId);
   await env.DB.batch([
+    unavailable,
     ...toolRows.map((tool) => env.DB.prepare(`INSERT INTO mcp_connector_tools
-      (id, tenant_id, connector_id, server_tool_name, ai_tool_name, title, description, input_schema_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (id, tenant_id, connector_id, server_tool_name, ai_tool_name, title, description,
+       input_schema_json, available)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
       ON CONFLICT(tenant_id, connector_id, server_tool_name) DO UPDATE SET
         ai_tool_name=excluded.ai_tool_name, title=excluded.title, description=excluded.description,
-        input_schema_json=excluded.input_schema_json, discovered_at=CURRENT_TIMESTAMP,
+        input_schema_json=excluded.input_schema_json, available=1, discovered_at=CURRENT_TIMESTAMP,
         revision=mcp_connector_tools.revision+1, updated_at=CURRENT_TIMESTAMP`)
       .bind(tool.id, tenantId, connectorId,
         tool.name, tool.aiToolName, tool.title, tool.description, JSON.stringify(tool.inputSchema))),
