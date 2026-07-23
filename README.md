@@ -118,17 +118,31 @@ The command derives D1, R2, Vectorize, primary Queue, and DLQ names from `wrangl
 npm run provision:plan -- --env dev --apply --confirm "PROVISION DEV"
 ```
 
-Production requires the separate exact confirmation `PROVISION PRODUCTION`. Resource creation does not deploy code, apply D1 migrations, configure secrets, or alter Cloudflare Access. Wrangler can automatically provision draft D1 and R2 bindings during deployment, but the explicit plan remains the framework path because Queues and Vectorize still require named customer resources and GitHub deployments cannot write newly assigned resource IDs back to the repository.
+Production requires the separate exact confirmation `PROVISION PRODUCTION`. When the exact D1 database exists or is created, the apply command resolves its account-assigned UUID from a fresh exact-name inventory and writes it only to the selected environment's `DB` binding. It refuses ambiguous names, an existing different UUID, and a stale temporary file. The Wrangler change is owner-only and should be reviewed and committed before deployment. Resource creation still does not deploy code, apply D1 migrations, configure secrets, or alter Cloudflare Access.
 
-Copy the returned D1 ID into `apps/platform-worker/wrangler.jsonc`, then run:
+Review the complete deployment plan:
 
 ```bash
-npm run db:migrate:remote -w @workrr/platform-worker
-npm run deploy -w @workrr/platform-worker
-npm run build -w @workrr/admin
+npm run customer:deploy -- --env dev
 ```
 
-The admin build is served by the same Worker through Workers Static Assets. API and health paths run through the Worker first; browser routes use the SPA fallback.
+After the D1 binding diff is committed and an expiring Access operator service principal is available in the local shell, run the confirmed lifecycle:
+
+```bash
+export WORKRR_BASE_URL="https://one-dev.acme.example"
+export CF_ACCESS_CLIENT_ID="..."
+export CF_ACCESS_CLIENT_SECRET="..."
+
+npm run customer:deploy -- \
+  --env dev \
+  --apply \
+  --confirm "DEPLOY DEV" \
+  --receipt "$HOME/.config/workrr/acme-dev-deployment.json"
+```
+
+The receipt path must be absolute, outside the repository, and unused. The command requires a clean `dev` branch for development or `main` for production, pins the configured Cloudflare account, provisions/binds resources, runs the full repository verification, applies additive remote D1 migrations, deploys the Worker and static admin assets, and completes the Access-protected fixture smoke. If provisioning changes Wrangler, the command stops before migrations so the D1 binding can be reviewed and committed; rerunning is safe. Stage receipts contain timestamps and durations but no commands, output, credentials, prompts, memory, or customer payloads.
+
+Cloudflare Workers Builds remains the recommended routine Git deployment path after the first environment is prepared. `customer:deploy` is the guarded FDE bootstrap/recovery path and produces stronger customer handoff evidence; it does not replace branch-based CI for ordinary releases.
 
 ## Recommended Git deployment policy
 

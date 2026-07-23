@@ -14,6 +14,7 @@
     "audit:production": "npm audit --omit=dev --audit-level=high",
     "verify": "npm run validate:repository && npm run audit:production && npm run typecheck && npm run test && npm run build",
     "provision:plan": "node scripts/provision-cloudflare.mjs",
+    "customer:deploy": "node scripts/deploy-customer.mjs",
     "customer:config": "node scripts/generate-customer-config.mjs",
     "cf:types": "npm run cf:types -w @workrr/platform-worker",
     "access:sync": "node scripts/sync-cloudflare-access.mjs",

@@ -26,10 +26,48 @@ export function resourceManifest(config, environment) {
     accountId: String(config.account_id ?? ""),
     environment,
     databaseName: String(database?.database_name ?? ""),
+    databaseId: String(database?.database_id ?? ""),
     appDomain: String(selected.vars?.APP_DOMAIN ?? ""),
     accessAudience: String(selected.vars?.ACCESS_AUD ?? ""),
     resources: resources.map((resource) => ({ kind: resource.kind, name: String(resource.name) }))
   };
+}
+
+export function resolveD1Database(inventory, name) {
+  let parsed;
+  try {
+    parsed = typeof inventory === "string" ? JSON.parse(inventory) : inventory;
+  } catch {
+    throw new Error("Cloudflare D1 inventory was not valid JSON");
+  }
+  if (!Array.isArray(parsed)) throw new Error("Cloudflare D1 inventory must be an array");
+  const matches = parsed.filter((item) => item?.name === name);
+  if (matches.length !== 1) throw new Error(`Expected exactly one D1 database named ${name}; found ${matches.length}`);
+  const id = String(matches[0]?.uuid ?? matches[0]?.id ?? "");
+  if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id)) {
+    throw new Error(`D1 database ${name} returned an invalid ID`);
+  }
+  return { name, id };
+}
+
+export function bindD1Database(config, environment, database) {
+  const target = environment === "production" ? config : config.env?.[environment];
+  if (!target) throw new Error(`Unknown Wrangler environment: ${environment}`);
+  const bindings = target.d1_databases ?? [];
+  const matches = bindings.filter((item) => item.binding === "DB");
+  if (matches.length !== 1) throw new Error(`Expected exactly one DB binding for ${environment}; found ${matches.length}`);
+  const binding = matches[0];
+  if (binding.database_name !== database.name) {
+    throw new Error(`DB binding name ${binding.database_name ?? "(missing)"} does not match ${database.name}`);
+  }
+  if (binding.database_id && binding.database_id !== database.id) {
+    throw new Error(`Refusing to replace the existing ${environment} D1 database ID`);
+  }
+  if (binding.database_id === database.id) return { config, changed: false };
+  const next = structuredClone(config);
+  const nextTarget = environment === "production" ? next : next.env[environment];
+  nextTarget.d1_databases.find((item) => item.binding === "DB").database_id = database.id;
+  return { config: next, changed: true };
 }
 
 export function inventoryHas(inventory, name) {

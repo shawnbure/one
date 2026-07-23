@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { provisioningPlan, resourceManifest } from "./cloudflare-provisioning-lib.mjs";
+import { bindD1Database, provisioningPlan, resolveD1Database, resourceManifest } from "./cloudflare-provisioning-lib.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workerDir = path.join(root, "apps/platform-worker");
@@ -29,6 +29,15 @@ const inventories = {
 const plan = provisioningPlan(manifest, inventories);
 console.log(`Cloudflare resource plan · ${environment} · account ${manifest.accountId}`);
 for (const item of plan) console.log(`${item.status === "exists" ? "READY " : "CREATE"}  ${item.kind.padEnd(9)} ${item.name}`);
+const existingDatabase = plan.find((item) => item.kind === "D1")?.status === "exists"
+  ? resolveD1Database(inventories.D1, manifest.databaseName)
+  : null;
+if (existingDatabase) {
+  const binding = bindD1Database(config, environment, existingDatabase);
+  console.log(`${binding.changed ? "BIND  " : "READY "}  CONFIG    DB → ${existingDatabase.id}`);
+} else {
+  console.log("BIND    CONFIG    DB → assigned after D1 creation");
+}
 const missing = plan.filter((item) => item.status === "create");
 if (!args.has("--apply")) {
   console.log(missing.length
@@ -45,4 +54,14 @@ for (const item of missing) {
   if (item.kind === "Vectorize") wrangler(["vectorize", "create", item.name, "--dimensions", "768", "--metric", "cosine"]);
   if (item.kind === "Queue") wrangler(["queues", "create", item.name]);
 }
-console.log(`Provisioning complete. Next: deploy, apply D1 migrations, configure secrets, and run the live smoke check.`);
+const database = resolveD1Database(wrangler(["d1", "list", "--json"]), manifest.databaseName);
+const binding = bindD1Database(config, environment, database);
+if (binding.changed) {
+  const temporaryPath = `${configPath}.workrr-tmp`;
+  writeFileSync(temporaryPath, `${JSON.stringify(binding.config, null, 2)}\n`,
+    { encoding: "utf8", mode: 0o600, flag: "wx" });
+  chmodSync(temporaryPath, 0o600);
+  renameSync(temporaryPath, configPath);
+  console.log(`Bound ${manifest.databaseName} (${database.id}) to the exact ${environment} DB binding.`);
+}
+console.log("Provisioning complete. Next: review the Wrangler diff, apply D1 migrations, deploy, configure secrets, and run the live smoke check.");

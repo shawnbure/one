@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inventoryHas, provisioningPlan, resourceManifest } from "./cloudflare-provisioning-lib.mjs";
+import { bindD1Database, inventoryHas, provisioningPlan, resolveD1Database,
+  resourceManifest } from "./cloudflare-provisioning-lib.mjs";
 
 const config = {
   account_id: "account-1",
@@ -23,6 +24,7 @@ const config = {
     }
   }
 };
+const fixtureConfig = () => structuredClone(config);
 
 test("derives isolated production and development resource manifests", () => {
   assert.equal(resourceManifest(config, "production").resources[0].name, "workrr-platform");
@@ -46,4 +48,31 @@ test("creates only missing resources", () => {
     Queue: "workrr-process-jobs-dev-dlq"
   });
   assert.deepEqual(plan.map(({ status }) => status), ["exists", "exists", "exists", "create", "exists"]);
+});
+
+test("resolves an exact D1 inventory name and binds only the intended environment", () => {
+  const database = resolveD1Database(JSON.stringify([
+    { uuid: "11111111-1111-4111-8111-111111111111", name: "workrr-platform" },
+    { uuid: "22222222-2222-4222-8222-222222222222", name: "workrr-platform-dev" }
+  ]), "workrr-platform-dev");
+  assert.equal(database.id, "22222222-2222-4222-8222-222222222222");
+  const config = fixtureConfig();
+  const result = bindD1Database(config, "dev", database);
+  assert.equal(result.changed, true);
+  assert.equal(result.config.env.dev.d1_databases[0].database_id, database.id);
+  assert.equal(result.config.d1_databases[0].database_id, undefined);
+  assert.equal(config.env.dev.d1_databases[0].database_id, undefined);
+});
+
+test("refuses ambiguous inventory and replacement of an existing D1 binding", () => {
+  assert.throws(() => resolveD1Database("[]", "workrr-platform-dev"), /exactly one/);
+  assert.throws(() => resolveD1Database(JSON.stringify([
+    { uuid: "11111111-1111-4111-8111-111111111111", name: "same" },
+    { uuid: "22222222-2222-4222-8222-222222222222", name: "same" }
+  ]), "same"), /found 2/);
+  const config = fixtureConfig();
+  config.env.dev.d1_databases[0].database_id = "11111111-1111-4111-8111-111111111111";
+  assert.throws(() => bindD1Database(config, "dev", {
+    name: "workrr-platform-dev", id: "22222222-2222-4222-8222-222222222222"
+  }), /Refusing to replace/);
 });
