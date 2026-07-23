@@ -525,6 +525,13 @@ export interface UsageData {
   byModel: Array<{ model: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
   byProcess: Array<{ blueprint_id: string; process_name: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
   recent: Array<{ id: string; blueprint_id: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number; started_at: string }>;
+  reconciliations: Array<{ id: string; period_start: string; period_end: string; source: string;
+    source_reference: string; workers_ai_neurons: number | null; workers_ai_cost_usd: number;
+    platform_cost_usd: number | null; workers_requests: number | null; d1_rows_read: number | null;
+    d1_rows_written: number | null; queue_operations: number | null; workflow_wall_time_ms: number | null;
+    workrr_estimated_ai_cost_usd: number; variance_usd: number; variance_percent: number | null;
+    status: "active" | "voided"; imported_by: string; imported_at: string; voided_by: string | null;
+    voided_at: string | null; void_reason: string | null }>;
   estimateNotice: string;
 }
 export interface EvaluationDetail {
@@ -995,6 +1002,18 @@ export const api = {
       { method: "POST", body: JSON.stringify({ note }) }),
   importProcessPackage: (body: unknown) => request<{ data: { id: string; status: string } }>("/api/process-packages/import", { method: "POST", body: JSON.stringify(body) }),
   usage: () => request<{ data: UsageData }>("/api/usage"),
+  importBillingEvidence: (body: {
+    periodStart: string; periodEnd: string; source: string; sourceReference: string;
+    workersAiNeurons?: number | null; workersAiCostUsd: number; platformCostUsd?: number | null;
+    workersRequests?: number | null; d1RowsRead?: number | null; d1RowsWritten?: number | null;
+    queueOperations?: number | null; workflowWallTimeMs?: number | null;
+  }) => request<{ data: { id: string; status: string; imported: boolean; estimated?: number;
+    billed?: number; variance?: number; variancePercent?: number | null } }>(
+    "/api/usage/reconciliations", { method: "POST", body: JSON.stringify(body) }),
+  voidBillingEvidence: (id: string, reason: string) =>
+    request<{ data: { id: string; status: string } }>(
+      `/api/usage/reconciliations/${encodeURIComponent(id)}/void`,
+      { method: "POST", body: JSON.stringify({ reason }) }),
   updateBudget: (body: { monthlyLimitUsd: number; warningPercent: number; hardLimit: boolean }) =>
     request<{ updated: boolean }>("/api/usage/budget", { method: "PATCH", body: JSON.stringify(body) }),
 };

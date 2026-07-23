@@ -14,7 +14,7 @@ import { deliverNotification, emitNotification, enqueueDueNotificationDeliveries
   safeEmailDestination, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust, updateRubricTemplate } from "./evaluation";
-import { getUsageLedger } from "./usage";
+import { getUsageLedger, importBillingEvidence, voidBillingEvidence } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 import { isDlpBlocked, updateDlpRule } from "./dlp";
@@ -700,6 +700,29 @@ app.get("/api/value", requireRoles("admin", "builder", "owner", "operator", "vie
 
 app.get("/api/usage", requireRoles("admin", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await getUsageLedger(c.env, c.get("tenantId")) }));
+
+app.post("/api/usage/reconciliations", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await importBillingEvidence(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Billing evidence import failed" }, 400);
+  }
+});
+
+app.post("/api/usage/reconciliations/:id/void", requireRoles("admin", "owner"), async (c) => {
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Reconciliation ID is required" }, 400);
+  const body: { reason?: string } = await c.req.json<{ reason?: string }>().catch(() => ({}));
+  try {
+    return c.json({ data: await voidBillingEvidence(
+      c.env, c.get("tenantId"), c.get("actorId"), id, body.reason
+    ) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Billing evidence could not be voided" }, 409);
+  }
+});
 
 app.patch("/api/usage/budget", requireRoles("admin", "owner"), async (c) => {
   const body = await c.req.json<{ monthlyLimitUsd?: number; warningPercent?: number; hardLimit?: boolean }>();

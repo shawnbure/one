@@ -356,6 +356,25 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("retention_enforcement_runs"))).toBe(false);
   });
 
+  it("lets viewers inspect costs but prevents billing evidence imports and voids", async () => {
+    for (const request of [
+      new Request("http://localhost/api/usage/reconciliations", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }),
+      new Request("http://localhost/api/usage/reconciliations/billing-1/void", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ reason: "Unauthorized correction" })
+      })
+    ]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(request, env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("INSERT INTO billing_reconciliations") ||
+        sql.includes("UPDATE billing_reconciliations"))).toBe(false);
+    }
+  });
+
   it("allows viewers to inspect Queue evidence but not replay failed work", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/queue-jobs/job-1/replay", {
