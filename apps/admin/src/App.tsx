@@ -225,7 +225,9 @@ export function App() {
       });
       setRunOutput(
         result.output ??
-          `Run ${result.status}. Execution ${result.executionId.slice(0, 8)} is now processing.`,
+          (result.status === "waiting_approval"
+            ? `Proposal created. Execution ${result.executionId.slice(0, 8)} is waiting in the Work Inbox.`
+            : `Run ${result.status}. Execution ${result.executionId.slice(0, 8)} is now processing.`),
       );
       await refresh();
     } catch (error) {

@@ -418,6 +418,13 @@ function Studio({
                 </select>
               </label>
             </div>
+            <div className={`autonomy-guidance level-${autonomy}`}>
+              <ShieldCheck size={17} />
+              <span>
+                <strong>{autonomyLabel(autonomy)}</strong>
+                <small>{autonomyDescription(autonomy)}</small>
+              </span>
+            </div>
             <div className="contract-editor">
               <div className="section-head">
                 <div>
@@ -695,3 +702,21 @@ const exampleOutputSchema = {
     confidence: { type: "number", minimum: 0, maximum: 1 }
   }
 };
+function autonomyLabel(level: string) {
+  return ({
+    observe: "Level 0 · Observe only",
+    suggest: "Level 1 · Recommend",
+    approve: "Level 2 · Human approval",
+    guarded: "Level 3 · Guarded execution",
+    autonomous: "Level 4 · Autonomous"
+  } as Record<string, string>)[level] ?? level;
+}
+function autonomyDescription(level: string) {
+  return ({
+    observe: "Records accepted input without invoking a model or producing a recommendation.",
+    suggest: "Generates a recommendation but never authorizes an external action.",
+    approve: "Generates a proposed result and routes it to the Work Inbox before acceptance.",
+    guarded: "Completes read-only work; any process declaring consequential tools requires human review.",
+    autonomous: "Completes within the published release and operating controls without a human checkpoint."
+  } as Record<string, string>)[level] ?? "";
+}

@@ -53,7 +53,7 @@ export class ProcessAgent extends Agent<Env, AgentState> {
   }
 
   async execute(input: string, safeInput: string, modelProfile: string, executionId: string,
-    outputSchema: ProcessSchema | null = null): Promise<{
+    outputSchema: ProcessSchema | null = null, persistAssistant = true): Promise<{
     output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; turnCount: number;
   }> {
     const row = this.sql<{ bundle_json: string }>`SELECT bundle_json FROM prompt_bundle WHERE release_id = ${this.state.releaseId}`[0];
@@ -68,7 +68,9 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     });
     if (outputDlp.blocked) throw new DlpBlockedError(outputDlp.blockedDetectors);
     const contracted = validateContractOutput(outputDlp.modelText, outputSchema);
-    this.sql`INSERT INTO conversation_turn (id, role, content, created_at) VALUES (${crypto.randomUUID()}, 'assistant', ${contracted.value}, ${new Date().toISOString()})`;
+    if (persistAssistant) {
+      this.sql`INSERT INTO conversation_turn (id, role, content, created_at) VALUES (${crypto.randomUUID()}, 'assistant', ${contracted.value}, ${new Date().toISOString()})`;
+    }
     const turnCount = this.state.turnCount + 1;
     this.setState({ ...this.state, turnCount, lastActiveAt: now });
     return { ...result, output: contracted.value, outputPreview: contracted.value, turnCount };

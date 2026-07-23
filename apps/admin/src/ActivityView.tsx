@@ -182,6 +182,18 @@ export function ActivityView({ processes, onNotice }: Props) {
                   <strong>{duration(detail)}</strong>
                 </span>
               </div>
+              {detail.autonomy_disposition && (
+                <div className={`autonomy-evidence ${detail.autonomy_disposition}`}>
+                  <ShieldCheck size={17} />
+                  <span>
+                    <strong>{autonomyEvidenceTitle(detail.autonomy_disposition)}</strong>
+                    <small>
+                      Level {detail.autonomy_level ?? detail.autonomy ?? "unknown"} ·{" "}
+                      {autonomyEvidenceDetail(detail.autonomy_disposition)}
+                    </small>
+                  </span>
+                </div>
+              )}
               <div className="payload-card">
                 <label>INPUT</label>
                 <p>{detail.input_preview}</p>
@@ -491,4 +503,26 @@ function duration(run: Execution) {
   const ms =
     new Date(run.completed_at).valueOf() - new Date(run.started_at).valueOf();
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+function autonomyEvidenceTitle(disposition: string) {
+  return ({
+    observed: "Observed without model inference",
+    recommended: "Recommendation only",
+    waiting_approval: "Human decision required",
+    guarded_safe: "Guarded read-only completion",
+    autonomous: "Autonomous completion",
+    approved: "Human-approved outcome",
+    rejected: "Human-rejected outcome"
+  } as Record<string, string>)[disposition] ?? disposition.replaceAll("_", " ");
+}
+function autonomyEvidenceDetail(disposition: string) {
+  return ({
+    observed: "The request was recorded with zero model tokens.",
+    recommended: "No external action was authorized.",
+    waiting_approval: "The proposal is visible in the Work Inbox and is not accepted yet.",
+    guarded_safe: "No consequential tools were declared by the published process.",
+    autonomous: "The published release permitted completion without review.",
+    approved: "An authorized reviewer accepted the proposal.",
+    rejected: "An authorized reviewer declined the proposal."
+  } as Record<string, string>)[disposition] ?? "Runtime autonomy policy recorded.";
 }

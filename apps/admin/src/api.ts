@@ -27,6 +27,8 @@ export interface Approval {
   assigned_to: string | null;
   due_at: string | null;
   decision_note: string | null;
+  autonomy_level?: string | null;
+  action_risk?: string | null;
 }
 
 export interface SessionData {
@@ -76,6 +78,9 @@ export interface Execution {
   input_contract_status?: "not_configured" | "pending" | "passed" | "failed";
   output_contract_status?: "not_configured" | "pending" | "passed" | "failed";
   contract_error?: string | null;
+  autonomy_level?: string | null;
+  autonomy_disposition?: string | null;
+  approval_id?: string | null;
 }
 export interface QueueOperation {
   id: string;

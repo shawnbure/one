@@ -318,6 +318,41 @@ a:focus-visible {
   font-size: 12px;
 }
 
+.autonomy-guidance,
+.autonomy-evidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 14px;
+  padding: 13px 15px;
+  border: 1px solid #cdded6;
+  border-radius: 9px;
+  background: #f4f9f6;
+  color: #2f7358;
+}
+.autonomy-guidance > svg,
+.autonomy-evidence > svg { flex: none; margin-top: 2px; }
+.autonomy-guidance strong,
+.autonomy-guidance small,
+.autonomy-evidence strong,
+.autonomy-evidence small { display: block; }
+.autonomy-guidance strong,
+.autonomy-evidence strong { color: #294d3e; font-size: 13px; line-height: 1.35; }
+.autonomy-guidance small,
+.autonomy-evidence small { margin-top: 4px; color: #5b6f65; font-size: 12px; line-height: 1.5; }
+.autonomy-guidance.level-approve,
+.autonomy-evidence.waiting_approval { border-color: #e3ca9d; background: #fff8e9; color: #936628; }
+.autonomy-evidence.rejected { border-color: #dfb5aa; background: #fff3f0; color: #a14d38; }
+
+/* Studio tabs are a semantic nav inside the page, not part of the dark application rail. */
+.studio-tabs button:hover { background: #eef5f1 !important; color: #285f4a !important; }
+.studio-tabs button.active,
+.studio-tabs button.active:hover {
+  background: transparent !important;
+  color: #205f49 !important;
+  box-shadow: none !important;
+}
+
 @media (max-width: 1200px) {
   .shell { grid-template-columns: 220px 1fr; }
   aside { width: 220px; }

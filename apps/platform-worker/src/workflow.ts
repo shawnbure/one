@@ -8,6 +8,7 @@ import { pricedCompletionSql } from "./usage";
 import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 import { augmentWithKnowledge } from "./knowledge";
 import { isContractViolation, outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
+import { autonomyPlan, routeApproval } from "./autonomy";
 
 interface ProcessWorkflowParams { tenantId: string; request: ExecutionRequest }
 
@@ -50,17 +51,24 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
     });
     await step.do("record durable result", async () => {
       const completedAt = new Date().toISOString();
+      const autonomy = autonomyPlan(context.blueprint);
       await this.env.DB.batch([
         this.env.DB.prepare(`${pricedCompletionSql()} AND tenant_id = ?`)
           .bind(result.outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
             result.inputTokens, result.model, result.outputTokens, result.model, completedAt, event.instanceId, tenantId),
         this.env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=? AND tenant_id=?")
           .bind(result.outputContractStatus, event.instanceId, tenantId),
+        this.env.DB.prepare("UPDATE executions SET autonomy_level=?, autonomy_disposition=? WHERE id=? AND tenant_id=?")
+          .bind(autonomy.effective, autonomy.disposition, event.instanceId, tenantId),
         this.env.DB.prepare(`UPDATE schedule_dispatches SET status = 'completed', completed_at = ?, error = NULL
           WHERE execution_id = ? AND tenant_id = ?`).bind(completedAt, event.instanceId, tenantId)
       ]);
     });
-    return { output: result.output };
+    const approvalId = await step.do("apply autonomy policy", async () => {
+      const autonomy = autonomyPlan(context.blueprint);
+      return routeApproval(this.env, tenantId, event.instanceId, context.blueprint, autonomy, result.outputPreview);
+    });
+    return { output: approvalId ? "Result is waiting for human approval." : result.output };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await step.do("record terminal failure", async () => {

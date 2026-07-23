@@ -492,14 +492,16 @@ app.get("/api/executions", async (c) => {
   if (status) { filters.push("status = ?"); bindings.push(status); }
   if (blueprintId) { filters.push("blueprint_id = ?"); bindings.push(blueprintId); }
   const { results } = await c.env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status,
-    input_preview, output_preview, model, input_tokens, output_tokens, total_tokens, started_at, completed_at, error
+    input_preview, output_preview, model, input_tokens, output_tokens, total_tokens, started_at, completed_at, error,
+    autonomy_level, autonomy_disposition, approval_id
     FROM executions WHERE ${filters.join(" AND ")} ORDER BY started_at DESC LIMIT 100`).bind(...bindings).all();
   return c.json({ data: results });
 });
 
 app.get("/api/executions/:id", async (c) => {
   const executionId = c.req.param("id");
-  const execution = await c.env.DB.prepare(`SELECT e.*, b.name blueprint_name, b.autonomy, b.prompt_release_id
+  const execution = await c.env.DB.prepare(`SELECT e.*, b.name blueprint_name,
+    COALESCE(e.autonomy_level, b.autonomy) autonomy, b.prompt_release_id
     FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(executionId, c.get("tenantId")).first();
   if (!execution) return c.json({ error: "Execution not found" }, 404);
@@ -1043,6 +1045,10 @@ app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewe
     WHERE id = ? AND tenant_id = ? AND status = 'pending'`)
     .bind(decision, new Date().toISOString(), c.get("actorId"), body.note ?? null, approvalId, c.get("tenantId")).run();
   if (result.meta.changes === 1) {
+    await c.env.DB.prepare(`UPDATE executions SET status=?, autonomy_disposition=?
+      WHERE tenant_id=? AND approval_id=? AND status='waiting_approval'`)
+      .bind(decision === "approved" ? "completed" : "blocked", decision,
+        c.get("tenantId"), approvalId).run();
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `approval.${decision}`, "approval", approvalId, { decision, note: body.note });
   }
   return c.json({ updated: result.meta.changes === 1 });
@@ -1089,7 +1095,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
         await markQueueFinished(env, job, result.status === "deferred" ? "deferred" : "completed");
         await env.DB.prepare(`UPDATE schedule_dispatches SET status = ?, completed_at = CURRENT_TIMESTAMP
           WHERE tenant_id = ? AND execution_id = ? AND status = 'queued'`)
-          .bind(result.status === "deferred" ? "deferred" : result.status === "completed" ? "completed" : "queued",
+          .bind(result.status === "deferred" ? "deferred" : "completed",
             job.tenantId ?? "demo", job.executionId).run();
         message.ack();
       } catch (error) {

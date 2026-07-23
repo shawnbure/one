@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { assertAsyncExecutionAdmission, executeRequest } from "../src/execution";
 
-function executionEnvironment(tenantMode: string, processMode: string, processStatus = "active", inputSchemaJson: string | null = null) {
+function executionEnvironment(tenantMode: string, processMode: string, processStatus = "active",
+  inputSchemaJson: string | null = null, autonomy = "suggest") {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const DB = {
     prepare(sql: string) {
@@ -11,7 +12,7 @@ function executionEnvironment(tenantMode: string, processMode: string, processSt
         async first() {
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "tenant-1", name: "Intake", description: "Test", execution_profile: "instant",
-            model_profile: "fast", prompt_release_id: "prompt-1", autonomy: "suggest", status: processStatus,
+            model_profile: "fast", prompt_release_id: "prompt-1", autonomy, status: processStatus,
             tools_json: "[]", updated_at: "now", operating_mode: processMode,
             active_release_id: "release-1", input_schema_json: inputSchemaJson, output_schema_json: null
           };
@@ -58,5 +59,15 @@ describe("execution admission controls", () => {
     expect(record?.sql).toContain("'failed'");
     expect(record?.values).toContain("release-1");
     expect(writes.some(({ sql }) => sql.includes("prompt_releases"))).toBe(false);
+  });
+
+  it("records observe-mode work with zero model usage and never loads the prompt", async () => {
+    const { env, writes } = executionEnvironment("active", "active", "active", null, "observe");
+    const result = await executeRequest(env, "tenant-1",
+      { blueprintId: "process-1", input: "Record this request" }, "execution-observe");
+    expect(result).toMatchObject({ status: "completed", output: expect.stringContaining("does not generate") });
+    expect(writes.some(({ sql, values }) => sql.includes("input_tokens=0") &&
+      values.includes("execution-observe"))).toBe(true);
+    expect(writes.some(({ sql }) => sql.includes("FROM prompt_releases"))).toBe(false);
   });
 });

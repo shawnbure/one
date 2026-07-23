@@ -49,6 +49,10 @@ describe("durable workflow accounting", () => {
     expect(completion?.bindings).toEqual(expect.arrayContaining([12, 7, 19, "execution-1", "tenant-1"]));
     expect(writes.some((write) => write.sql.includes("UPDATE schedule_dispatches SET status = 'completed'") &&
       write.bindings.includes("execution-1"))).toBe(true);
+    expect(writes.some((write) => write.sql.includes("INTO approvals") &&
+      write.bindings.includes("execution-1") && write.bindings.includes("approve"))).toBe(true);
+    expect(writes.some((write) => write.sql.includes("status='waiting_approval'") &&
+      write.bindings.includes("execution-1"))).toBe(true);
   });
 
   it("records a terminal failure before rethrowing to Workflow observability", async () => {

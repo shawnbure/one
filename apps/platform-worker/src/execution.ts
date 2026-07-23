@@ -9,6 +9,7 @@ import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 import { augmentWithKnowledge } from "./knowledge";
 import { isContractViolation, outputContractInstruction, parseContracts,
   validateContractInput, validateContractOutput } from "./contracts";
+import { autonomyPlan, routeApproval } from "./autonomy";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
@@ -27,6 +28,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   });
   if (inputDlp.blocked) throw new DlpBlockedError(inputDlp.blockedDetectors);
   const contracts = parseContracts(blueprint.inputSchemaJson, blueprint.outputSchemaJson);
+  const autonomy = autonomyPlan(blueprint);
   const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
   const startedAt = new Date().toISOString();
   let contractedInput;
@@ -37,26 +39,35 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       await env.DB.prepare(`INSERT OR IGNORE INTO executions
         (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview,
          idempotency_key, started_at, completed_at, process_release_id, input_contract_status,
-         output_contract_status, contract_error, error)
-        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?)`)
+         output_contract_status, contract_error, error, autonomy_level, autonomy_disposition)
+        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, 'blocked')`)
         .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
           inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null, startedAt, startedAt,
           blueprint.activeReleaseId ?? null, contracts.outputSchema ? "pending" : "not_configured",
-          error.message.slice(0, 1000), error.message.slice(0, 1000)).run();
+          error.message.slice(0, 1000), error.message.slice(0, 1000), autonomy.effective).run();
     }
     throw error;
   }
   await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
-     started_at, process_release_id, input_contract_status, output_contract_status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+     started_at, process_release_id, input_contract_status, output_contract_status, autonomy_level, autonomy_disposition)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
       admission.deferred ? "deferred" : "running", inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null,
       startedAt, blueprint.activeReleaseId ?? null, contractedInput.status,
-      contracts.outputSchema ? "pending" : "not_configured").run();
+      contracts.outputSchema ? "pending" : "not_configured", autonomy.effective,
+      admission.deferred ? "deferred" : autonomy.disposition).run();
 
   if (admission.deferred) {
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };
+  }
+  if (!autonomy.runModel) {
+    const output = "Input observed. This autonomy level does not generate an AI recommendation.";
+    await env.DB.prepare(`UPDATE executions SET status='completed', output_preview=?, input_tokens=0,
+      output_tokens=0, total_tokens=0, estimated_cost_usd=0, output_contract_status='not_configured',
+      completed_at=? WHERE id=? AND tenant_id=?`)
+      .bind(output, new Date().toISOString(), executionId, tenantId).run();
+    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output, startedAt };
   }
   await assertBudgetAvailable(env, tenantId);
 
@@ -85,7 +96,11 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     const safeResult = { ...result, output: contractedOutput.value };
     await markOutputContract(env, executionId, contractedOutput.status);
     await complete(env, executionId, safeResult, contractedOutput.value);
-    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", ...safeResult, startedAt };
+    const approvalId = await routeApproval(env, tenantId, executionId, blueprint, autonomy, contractedOutput.value);
+    if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
+    return { executionId, instanceKey, profile: blueprint.executionProfile,
+      status: approvalId ? "waiting_approval" : "completed",
+      ...(approvalId ? {} : safeResult), startedAt };
   }
 
   const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey!);
@@ -95,7 +110,8 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   }
   let result;
   try {
-    result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId, contracts.outputSchema);
+    result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId,
+      contracts.outputSchema, !autonomy.requiresApproval);
   } catch (error) {
     if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
       error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
@@ -104,7 +120,11 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   }
   await markOutputContract(env, executionId, contracts.outputSchema ? "passed" : "not_configured");
   await complete(env, executionId, result, result.outputPreview);
-  return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output: result.output, model: result.model, startedAt };
+  const approvalId = await routeApproval(env, tenantId, executionId, blueprint, autonomy, result.outputPreview);
+  if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
+  return { executionId, instanceKey, profile: blueprint.executionProfile,
+    status: approvalId ? "waiting_approval" : "completed",
+    ...(approvalId ? {} : { output: result.output, model: result.model }), startedAt };
 }
 
 export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, request: ExecutionRequest, executionId: string) {
@@ -162,6 +182,9 @@ async function failBlockedOutput(env: Env, id: string, detectors: string[]) {
 
 async function markOutputContract(env: Env, id: string, status: "passed" | "not_configured") {
   await env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=?").bind(status, id).run();
+}
+async function markAutonomyDisposition(env: Env, id: string, disposition: string) {
+  await env.DB.prepare("UPDATE executions SET autonomy_disposition=? WHERE id=?").bind(disposition, id).run();
 }
 async function failContractOutput(env: Env, id: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
