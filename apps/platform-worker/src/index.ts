@@ -13,7 +13,11 @@ import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHand
 import { deliverNotification, emitNotification, enqueueDueNotificationDeliveries, failNotificationDelivery,
   safeEmailDestination, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust, updateRubricTemplate } from "./evaluation";
+import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate, expireRubricPublisherKeys,
+  exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage,
+  listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult,
+  reviewRubricKeyRotation, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust,
+  updateRubricTemplate } from "./evaluation";
 import { getUsageLedger, importBillingEvidence, voidBillingEvidence } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
@@ -1217,6 +1221,22 @@ app.patch("/api/evaluation-rubric-publishers/:id", requireRoles("admin", "owner"
   }
 });
 
+app.post("/api/evaluation-rubric-key-rotations/:id/:decision", requireRoles("admin", "owner"), async (c) => {
+  const id = c.req.param("id");
+  const decision = c.req.param("decision");
+  if (!id) return c.json({ error: "Rotation ID is required" }, 400);
+  if (decision !== "approved" && decision !== "rejected") {
+    return c.json({ error: "Decision must be approved or rejected" }, 400);
+  }
+  try {
+    return c.json({ data: await reviewRubricKeyRotation(c.env, c.get("tenantId"), c.get("actorId"),
+      id, decision, await c.req.json<{ overlapDays?: number; note?: string }>()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Rubric key rotation review failed";
+    return c.json({ error: message }, message.includes("already complete") ? 409 : 400);
+  }
+});
+
 app.post("/api/evaluation-rubrics", requireRoles("admin", "builder", "owner"), async (c) => {
   try {
     const result = await createRubricTemplate(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
@@ -1670,7 +1690,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       escalateUnacknowledgedNotifications(env, now),
       enqueueDueNotificationDeliveries(env, now),
       enqueueDueProcessDisposals(env, now),
-      enforceAllTenantRetention(env, now)
+      enforceAllTenantRetention(env, now),
+      expireRubricPublisherKeys(env, now)
     ]));
   }
 };

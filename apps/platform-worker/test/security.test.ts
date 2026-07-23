@@ -375,6 +375,19 @@ describe("control-plane security boundary", () => {
     }
   });
 
+  it("prevents viewers from approving publisher signing-key rotations", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request(
+      "http://localhost/api/evaluation-rubric-key-rotations/rotation-1/approved", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ overlapDays: 7, note: "Unauthorized rotation approval." })
+      }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("rubric_key_rotations SET") ||
+      sql.includes("superseded_by_trust_id"))).toBe(false);
+  });
+
   it("allows viewers to inspect Queue evidence but not replay failed work", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/queue-jobs/job-1/replay", {

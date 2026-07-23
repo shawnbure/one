@@ -127,6 +127,8 @@ The smoke principal must be an `operator`. The command verifies session identity
 
 When `RUBRIC_SIGNING_JWK` is configured, rubric exports use `workrr-rubrics/v2` with Ed25519 publisher metadata and a detached signature over the canonical package. The private JWK remains a Wrangler secret. Imports verify the public-key fingerprint and signature before retaining a package for review; they do not create templates until an owner or admin approves the package. Approved templates remain archived until explicitly restored.
 
+For scheduled publisher-key rollover, also configure `RUBRIC_SIGNING_VALID_FROM`, `RUBRIC_SIGNING_EXPIRES_AT`, and the prior private key as the optional Wrangler secret `RUBRIC_PREVIOUS_SIGNING_JWK`. Exports then use `workrr-rubrics/v3`: the new key signs the package and the previous key signs a narrowly scoped successor proof containing both fingerprints, the new public key, publisher name, and validity window. A destination must already trust the exact predecessor and an owner or administrator must approve the successor plus a 0–30 day overlap. Cron suspends keys at expiry. Remove the previous private-key secret after the distribution/overlap procedure is complete; it is not stored in D1 or included in packages.
+
 A valid signature establishes package integrity, not publisher trust. Each destination tenant may recognize an exact publisher key and choose one policy:
 
 - **Manual approval** identifies the publisher but keeps every package in the owner/admin review queue.
@@ -140,6 +142,10 @@ Generate a different signing key for each publishing environment and pipe the pr
 ```sh
 node -e "crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']).then(k=>crypto.subtle.exportKey('jwk',k.privateKey)).then(k=>process.stdout.write(JSON.stringify(k)))" \
   | npx wrangler secret put RUBRIC_SIGNING_JWK --env dev
+
+# Only during a scheduled rubric publisher-key rollover:
+cat previous-ed25519-private.jwk \
+  | npx wrangler secret put RUBRIC_PREVIOUS_SIGNING_JWK --env dev
 ```
 
 Unsigned `workrr-rubrics/v1` packages remain supported for deliberate local/manual exchange and retain the existing archived-on-import behavior.

@@ -3,9 +3,11 @@ import {
   createRubricTemplate,
   createRubricPublisherTrust,
   exportRubricPackage,
+  expireRubricPublisherKeys,
   importRubricPackage,
   listRubricTemplates,
   reviewRubricPackage,
+  reviewRubricKeyRotation,
   updateRubricTemplate
 } from "../src/evaluation";
 
@@ -15,7 +17,9 @@ function rubricEnvironment(options: {
   templates?: Array<Record<string, unknown>>;
   existingNames?: string[];
   review?: { id: string; status: string; package_json: string; publisher_name?: string; publisher_key_id?: string } | null;
-  trust?: { id: string; policy: "manual" | "auto_approve" | "block" } | null;
+  trust?: Record<string, unknown> | null;
+  rotation?: Record<string, unknown> | null;
+  expiring?: Array<{ id: string; tenant_id: string; publisher_key_id: string }>;
 } = {}) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const reads: Array<{ sql: string; values: unknown[] }> = [];
@@ -28,6 +32,7 @@ function rubricEnvironment(options: {
           reads.push({ sql, values });
           if (sql.includes("COUNT(*)")) return { count: options.count ?? 0 };
           if (sql.includes("FROM rubric_package_reviews")) return options.review ?? null;
+          if (sql.includes("FROM rubric_key_rotations")) return options.rotation ?? null;
           if (sql.includes("FROM rubric_publisher_trust")) return options.trust ?? null;
           if (sql.includes("FROM evaluation_rubric_templates")) return options.current ?? null;
           return null;
@@ -36,6 +41,9 @@ function rubricEnvironment(options: {
           reads.push({ sql, values });
           if (sql.includes("SELECT name FROM evaluation_rubric_templates")) {
             return { results: (options.existingNames ?? []).map((name) => ({ name })) };
+          }
+          if (sql.includes("FROM rubric_publisher_trust") && sql.includes("expires_at")) {
+            return { results: options.expiring ?? [] };
           }
           return { results: options.templates ?? [] };
         },
@@ -271,5 +279,84 @@ describe("tenant evaluation rubric templates", () => {
     const result = await createRubricPublisherTrust(env, "tenant-2", "owner-2", "review-2", "manual");
     expect(result).toMatchObject({ publisherName: "Publisher", keyId: "key-id", policy: "manual" });
     expect(writes.some(({ values }) => values.includes("tenant-2") && values.includes("public-key-x"))).toBe(true);
+  });
+
+  it("verifies a previous-key successor proof and retains a tenant rotation for approval", async () => {
+    const previousPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const successorPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const previousJwk = await crypto.subtle.exportKey("jwk", previousPair.privateKey);
+    const successorJwk = await crypto.subtle.exportKey("jwk", successorPair.privateKey);
+    const source = rubricEnvironment({ templates: [{
+      name: "Rotated standard", description: "", criteria_json: JSON.stringify([
+        { criterion: "Remain accurate", dimension: "groundedness", weight: 1 }
+      ]), enabled: 1
+    }] });
+    const pkg = await exportRubricPackage({
+      ...source.env,
+      RUBRIC_SIGNING_JWK: JSON.stringify(successorJwk),
+      RUBRIC_PREVIOUS_SIGNING_JWK: JSON.stringify(previousJwk),
+      RUBRIC_SIGNING_VALID_FROM: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+      RUBRIC_SIGNING_EXPIRES_AT: new Date(Date.now() + 366 * 24 * 60 * 60_000).toISOString(),
+      RUBRIC_PUBLISHER_NAME: "Managed standards"
+    } as never, "source");
+    expect(pkg).toMatchObject({ schema: "workrr-rubrics/v3",
+      publisher: { name: "Managed standards", rotation: { previousKeyId: expect.any(String), proof: expect.any(String) } } });
+    if (pkg.schema !== "workrr-rubrics/v3") throw new Error("Expected v3 package");
+    const destination = rubricEnvironment({ trust: {
+      id: "old-trust", policy: "manual", publisher_name: "Managed standards",
+      publisher_key_id: pkg.publisher.rotation?.previousKeyId,
+      public_key_x: previousJwk.x, valid_from: null, expires_at: null
+    } });
+    await expect(importRubricPackage(destination.env, "tenant-1", "builder-1", pkg))
+      .resolves.toMatchObject({ status: "pending" });
+    expect(destination.writes.some(({ sql }) => sql.includes("INSERT OR IGNORE INTO rubric_key_rotations"))).toBe(true);
+    const reviewWrite = destination.writes.find(({ sql }) => sql.includes("INSERT OR IGNORE INTO rubric_package_reviews"));
+    expect(reviewWrite?.values.at(-1)).toEqual(expect.any(String));
+  });
+
+  it("rejects a tampered successor proof and requires tenant review before key rollover", async () => {
+    const previousPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const successorPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const previousJwk = await crypto.subtle.exportKey("jwk", previousPair.privateKey);
+    const successorJwk = await crypto.subtle.exportKey("jwk", successorPair.privateKey);
+    const source = rubricEnvironment({ templates: [{
+      name: "Standard", description: "", criteria_json: JSON.stringify([
+        { criterion: "Be safe", dimension: "safety", weight: 1 }
+      ]), enabled: 1
+    }] });
+    const pkg = await exportRubricPackage({ ...source.env,
+      RUBRIC_SIGNING_JWK: JSON.stringify(successorJwk),
+      RUBRIC_PREVIOUS_SIGNING_JWK: JSON.stringify(previousJwk),
+      RUBRIC_SIGNING_VALID_FROM: new Date().toISOString(),
+      RUBRIC_SIGNING_EXPIRES_AT: new Date(Date.now() + 365 * 24 * 60 * 60_000).toISOString()
+    } as never, "source");
+    if (pkg.schema !== "workrr-rubrics/v3") throw new Error("Expected v3 package");
+    const trust = { id: "old-trust", policy: "auto_approve", publisher_name: "Workrr publisher",
+      publisher_key_id: pkg.publisher.rotation?.previousKeyId, public_key_x: previousJwk.x,
+      valid_from: null, expires_at: null };
+    const tampered = { ...pkg, publisher: { ...pkg.publisher,
+      rotation: { ...pkg.publisher.rotation!, proof: `${pkg.publisher.rotation!.proof.slice(0, -2)}aa` } } };
+    await expect(importRubricPackage(rubricEnvironment({ trust }).env, "tenant-1", "builder-1", tampered))
+      .rejects.toThrow();
+
+    const rotation = { id: "rotation-1", status: "pending", publisher_name: "Workrr publisher",
+      predecessor_trust_id: "old-trust", predecessor_key_id: "old-key", successor_key_id: "new-key",
+      successor_public_key_x: successorJwk.x, predecessor_policy: "manual", predecessor_status: "active",
+      predecessor_expires_at: null, valid_from: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 365 * 24 * 60 * 60_000).toISOString() };
+    const review = rubricEnvironment({ rotation });
+    await expect(reviewRubricKeyRotation(review.env, "tenant-1", "owner-1", "rotation-1", "approved",
+      { overlapDays: 7, note: "Approved scheduled publisher rollover." }))
+      .resolves.toMatchObject({ status: "approved", overlapDays: 7 });
+    expect(review.writes.some(({ sql }) => sql.includes("INSERT INTO rubric_publisher_trust"))).toBe(true);
+    expect(review.writes.some(({ sql }) => sql.includes("superseded_by_trust_id"))).toBe(true);
+  });
+
+  it("suspends expired publisher keys with tenant audit evidence", async () => {
+    const state = rubricEnvironment({ expiring: [{ id: "trust-1", tenant_id: "tenant-1", publisher_key_id: "key-1" }] });
+    await expect(expireRubricPublisherKeys(state.env, new Date("2026-07-23T00:00:00Z")))
+      .resolves.toEqual({ expired: 1 });
+    expect(state.writes.some(({ sql }) => sql.includes("status='suspended'"))).toBe(true);
+    expect(JSON.stringify(state.writes)).toContain("evaluation_rubric_publisher.expired");
   });
 });

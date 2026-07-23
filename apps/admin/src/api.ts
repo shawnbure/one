@@ -566,6 +566,7 @@ export interface EvaluationDetail {
     reviewed_by: string | null;
     reviewed_at: string | null;
     review_note: string | null;
+    rotation_id: string | null;
   }>;
   rubricPublisherTrust: Array<{
     id: string;
@@ -573,9 +574,30 @@ export interface EvaluationDetail {
     publisher_key_id: string;
     policy: "manual" | "auto_approve" | "block";
     status: "active" | "suspended";
+    valid_from: string | null;
+    expires_at: string | null;
+    expired_at: string | null;
+    superseded_by_trust_id: string | null;
     created_by: string;
     created_at: string;
     updated_at: string;
+  }>;
+  rubricKeyRotations: Array<{
+    id: string;
+    publisher_name: string;
+    predecessor_trust_id: string;
+    predecessor_key_id: string;
+    successor_key_id: string;
+    valid_from: string;
+    expires_at: string;
+    status: "pending" | "approved" | "rejected";
+    requested_by: string;
+    requested_at: string;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    review_note: string | null;
+    overlap_days: number | null;
+    successor_trust_id: string | null;
   }>;
   modelProfiles: Array<{ id: string; label: string; model: string; use: string }>;
 }
@@ -595,10 +617,11 @@ export interface RubricTemplate {
   updated_at: string;
 }
 export interface RubricPackage {
-  schema: "workrr-rubrics/v1" | "workrr-rubrics/v2";
+  schema: "workrr-rubrics/v1" | "workrr-rubrics/v2" | "workrr-rubrics/v3";
   exportedAt?: string;
   issuedAt?: string;
-  publisher?: { name: string; keyId: string; publicKey: JsonWebKey };
+  publisher?: { name: string; keyId: string; publicKey: JsonWebKey; validFrom?: string; expiresAt?: string;
+    rotation?: { previousKeyId: string; proof: string } };
   signature?: string;
   templates: Array<{
     name: string;
@@ -912,6 +935,12 @@ export const api = {
     request<{ data: { id: string; updated: boolean } }>(
       `/api/evaluation-rubric-publishers/${encodeURIComponent(id)}`,
       { method: "PATCH", body: JSON.stringify(body) }),
+  reviewRubricKeyRotation: (id: string, decision: "approved" | "rejected",
+    body: { overlapDays?: number; note: string }) =>
+    request<{ data: { id: string; status: string; successorTrustId?: string;
+      predecessorRetiresAt?: string; overlapDays?: number } }>(
+      `/api/evaluation-rubric-key-rotations/${encodeURIComponent(id)}/${decision}`,
+      { method: "POST", body: JSON.stringify(body) }),
   exportEvaluationDataset: (id: string) =>
     request<{ data: EvaluationDataset }>(`/api/evaluations/${encodeURIComponent(id)}/dataset`),
   importEvaluationDataset: (id: string, body: EvaluationDataset) =>

@@ -330,6 +330,31 @@ function fromBase64Url(value: string): ArrayBuffer {
   return buffer;
 }
 
+function validKeyWindow(validFromValue: unknown, expiresAtValue: unknown) {
+  const validFrom = new Date(String(validFromValue ?? ""));
+  const expiresAt = new Date(String(expiresAtValue ?? ""));
+  if (Number.isNaN(validFrom.getTime()) || Number.isNaN(expiresAt.getTime()) || expiresAt <= validFrom) {
+    throw new Error("Rubric signing key requires a valid start and expiry");
+  }
+  if (expiresAt.getTime() - validFrom.getTime() > 5 * 365 * 86_400_000) {
+    throw new Error("Rubric signing key validity cannot exceed five years");
+  }
+  return { validFrom: validFrom.toISOString(), expiresAt: expiresAt.toISOString() };
+}
+
+function rotationPayload(publisherName: string, previousKeyId: string, successorKeyId: string,
+  successorPublicKey: { kty: string; crv: string; x: string }, validFrom: string, expiresAt: string) {
+  return { schema: "workrr-rubric-key-rotation/v1", publisherName, previousKeyId, successorKeyId,
+    successorPublicKey, validFrom, expiresAt };
+}
+
+function rubricAudit(env: Env, tenantId: string, actorId: string, eventType: string, id: string, detail: unknown) {
+  return env.DB.prepare(`INSERT INTO audit_events
+    (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+    VALUES (?, ?, ?, ?, 'rubric_key_rotation', ?, ?)`)
+    .bind(crypto.randomUUID(), tenantId, actorId, eventType, id, JSON.stringify(detail));
+}
+
 export async function persistEvaluationRun(env: Env, tenantId: string, actorId: string, prepared: PreparedEvaluation,
   runId: string, caseResults: EvaluationCaseResult[], updateScenario = true) {
   const controlPassed = prepared.controls.filter((check) => check.passed).length;
@@ -404,7 +429,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
 }
 
 export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId: string) {
-  const [scenario, cases, runs, rubricTemplates, rubricPackageReviews, rubricPublisherTrust] = await Promise.all([
+  const [scenario, cases, runs, rubricTemplates, rubricPackageReviews, rubricPublisherTrust, rubricKeyRotations] = await Promise.all([
     env.DB.prepare(`SELECT e.*, b.name process_name, b.active_release_id FROM evaluation_scenarios e
       JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
       WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first(),
@@ -416,10 +441,15 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
       WHERE r.tenant_id = ? AND r.scenario_id = ? ORDER BY r.created_at DESC LIMIT 12`).bind(tenantId, scenarioId).all(),
     listRubricTemplates(env, tenantId),
     env.DB.prepare(`SELECT id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
-      template_count, status, submitted_by, submitted_at, reviewed_by, reviewed_at, review_note
+      template_count, status, submitted_by, submitted_at, reviewed_by, reviewed_at, review_note, rotation_id
       FROM rubric_package_reviews WHERE tenant_id = ? ORDER BY submitted_at DESC LIMIT 20`).bind(tenantId).all(),
-    env.DB.prepare(`SELECT id, publisher_name, publisher_key_id, policy, status, created_by, created_at, updated_at
-      FROM rubric_publisher_trust WHERE tenant_id = ? ORDER BY publisher_name`).bind(tenantId).all()
+    env.DB.prepare(`SELECT id, publisher_name, publisher_key_id, policy, status, valid_from, expires_at,
+      expired_at, superseded_by_trust_id, created_by, created_at, updated_at
+      FROM rubric_publisher_trust WHERE tenant_id = ? ORDER BY publisher_name, created_at DESC`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT id, publisher_name, predecessor_trust_id, predecessor_key_id, successor_key_id,
+      valid_from, expires_at, status, requested_by, requested_at, reviewed_by, reviewed_at, review_note,
+      overlap_days, successor_trust_id FROM rubric_key_rotations WHERE tenant_id=?
+      ORDER BY requested_at DESC LIMIT 20`).bind(tenantId).all()
   ]);
   if (!scenario) return null;
   const runIds = runs.results.map((row) => String((row as Record<string, unknown>).id));
@@ -443,6 +473,7 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
   return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results,
     suites: suites.results, humanReviews: reviews.results, modelTrials: modelTrials.results,
     rubricTemplates, rubricPackageReviews: rubricPackageReviews.results, rubricPublisherTrust: rubricPublisherTrust.results,
+    rubricKeyRotations: rubricKeyRotations.results,
     modelProfiles: Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile })) };
 }
 
@@ -576,12 +607,29 @@ export async function exportRubricPackage(env: Env, tenantId: string) {
   const privateJwk = parseSigningJwk(env.RUBRIC_SIGNING_JWK);
   const publicJwk = { kty: "OKP", crv: "Ed25519", x: privateJwk.x };
   const keyId = await digestText(canonicalJson(publicJwk));
+  const publisherName = (env.RUBRIC_PUBLISHER_NAME ?? "Workrr publisher").trim().slice(0, 120);
+  const keyWindow = env.RUBRIC_SIGNING_VALID_FROM || env.RUBRIC_SIGNING_EXPIRES_AT
+    ? validKeyWindow(env.RUBRIC_SIGNING_VALID_FROM, env.RUBRIC_SIGNING_EXPIRES_AT) : null;
+  let rotation: { previousKeyId: string; proof: string } | undefined;
+  if (keyWindow && env.RUBRIC_PREVIOUS_SIGNING_JWK) {
+    const previousJwk = parseSigningJwk(env.RUBRIC_PREVIOUS_SIGNING_JWK);
+    const previousPublic = { kty: "OKP", crv: "Ed25519", x: previousJwk.x };
+    const previousKeyId = await digestText(canonicalJson(previousPublic));
+    if (previousKeyId === keyId) throw new Error("Previous and current rubric signing keys must differ");
+    const payload = rotationPayload(publisherName, previousKeyId, keyId, publicJwk, keyWindow.validFrom, keyWindow.expiresAt);
+    const previousKey = await crypto.subtle.importKey("jwk", previousJwk, { name: "Ed25519" }, false, ["sign"]);
+    rotation = { previousKeyId, proof: base64Url(new Uint8Array(await crypto.subtle.sign(
+      { name: "Ed25519" }, previousKey, new TextEncoder().encode(canonicalJson(payload))
+    ))) };
+  }
   const signed = {
-    schema: "workrr-rubrics/v2" as const,
+    schema: keyWindow ? "workrr-rubrics/v3" as const : "workrr-rubrics/v2" as const,
     publisher: {
-      name: (env.RUBRIC_PUBLISHER_NAME ?? "Workrr publisher").trim().slice(0, 120),
+      name: publisherName,
       keyId,
-      publicKey: publicJwk
+      publicKey: publicJwk,
+      ...(keyWindow ?? {}),
+      ...(rotation ? { rotation } : {})
     },
     issuedAt: new Date().toISOString(),
     templates: portableTemplates
@@ -596,10 +644,10 @@ export async function exportRubricPackage(env: Env, tenantId: string) {
 export async function importRubricPackage(env: Env, tenantId: string, actorId: string, value: unknown) {
   if (!value || typeof value !== "object") throw new Error("Rubric package must be a JSON object");
   const manifest = value as { schema?: unknown; templates?: unknown; publisher?: unknown; issuedAt?: unknown; signature?: unknown };
-  if (manifest.schema === "workrr-rubrics/v2") {
+  if (manifest.schema === "workrr-rubrics/v2" || manifest.schema === "workrr-rubrics/v3") {
     return submitSignedRubricPackage(env, tenantId, actorId, manifest);
   }
-  if (manifest.schema !== "workrr-rubrics/v1") throw new Error("A Workrr rubric v1 or signed v2 package is required");
+  if (manifest.schema !== "workrr-rubrics/v1") throw new Error("A Workrr rubric v1 or signed v2/v3 package is required");
   return importRubricTemplates(env, tenantId, actorId, manifest);
 }
 
@@ -646,12 +694,14 @@ async function importRubricTemplates(env: Env, tenantId: string, actorId: string
 async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: string, manifest: {
   schema?: unknown; templates?: unknown; publisher?: unknown; issuedAt?: unknown; signature?: unknown;
 }) {
+  const schema = manifest.schema === "workrr-rubrics/v3" ? "workrr-rubrics/v3" : "workrr-rubrics/v2";
   if (!Array.isArray(manifest.templates) || manifest.templates.length < 1 || manifest.templates.length > 20 ||
       typeof manifest.signature !== "string" || typeof manifest.issuedAt !== "string" ||
       !manifest.publisher || typeof manifest.publisher !== "object") {
-    throw new Error("A complete signed Workrr rubric v2 package is required");
+    throw new Error("A complete signed Workrr rubric package is required");
   }
-  const publisher = manifest.publisher as { name?: unknown; keyId?: unknown; publicKey?: unknown };
+  const publisher = manifest.publisher as { name?: unknown; keyId?: unknown; publicKey?: unknown;
+    validFrom?: unknown; expiresAt?: unknown; rotation?: unknown };
   if (typeof publisher.name !== "string" || !publisher.name.trim() || publisher.name.length > 120 ||
       typeof publisher.keyId !== "string" || typeof publisher.publicKey !== "object" || !publisher.publicKey) {
     throw new Error("Signed rubric publisher metadata is invalid");
@@ -662,10 +712,32 @@ async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: st
   }
   const expectedKeyId = await digestText(canonicalJson({ kty: "OKP", crv: "Ed25519", x: publicJwk.x }));
   if (publisher.keyId !== expectedKeyId) throw new Error("Signed rubric publisher key ID does not match its public key");
+  let keyWindow: { validFrom: string; expiresAt: string } | null = null;
+  let rotation: { previousKeyId: string; proof: string } | null = null;
+  if (schema === "workrr-rubrics/v3") {
+    keyWindow = validKeyWindow(publisher.validFrom, publisher.expiresAt);
+    const issuedAt = new Date(String(manifest.issuedAt));
+    if (Number.isNaN(issuedAt.getTime()) || issuedAt.getTime() > Date.now() + 5 * 60_000) {
+      throw new Error("Signed rubric issue time is invalid");
+    }
+    if (issuedAt.getTime() < new Date(keyWindow.validFrom).getTime() - 90 * 86_400_000 ||
+        issuedAt >= new Date(keyWindow.expiresAt)) {
+      throw new Error("Signed rubric package was issued outside its key validity window");
+    }
+    if (publisher.rotation !== undefined) {
+      if (!publisher.rotation || typeof publisher.rotation !== "object") throw new Error("Rubric key rotation metadata is invalid");
+      const raw = publisher.rotation as { previousKeyId?: unknown; proof?: unknown };
+      if (typeof raw.previousKeyId !== "string" || typeof raw.proof !== "string" || !raw.proof) {
+        throw new Error("Rubric key rotation proof is incomplete");
+      }
+      rotation = { previousKeyId: raw.previousKeyId, proof: raw.proof };
+    }
+  }
   const signed = {
-    schema: "workrr-rubrics/v2",
+    schema,
     publisher: { name: publisher.name, keyId: publisher.keyId,
-      publicKey: { kty: "OKP", crv: "Ed25519", x: publicJwk.x } },
+      publicKey: { kty: "OKP", crv: "Ed25519", x: publicJwk.x },
+      ...(keyWindow ?? {}), ...(rotation ? { rotation } : {}) },
     issuedAt: manifest.issuedAt,
     templates: manifest.templates
   };
@@ -684,16 +756,49 @@ async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: st
   const packageJson = canonicalJson({ ...signed, signature: manifest.signature });
   const digest = await digestText(packageJson);
   const id = crypto.randomUUID();
+  let rotationId: string | null = null;
+  if (rotation && keyWindow) {
+    const predecessor = await env.DB.prepare(`SELECT id, publisher_name, publisher_key_id, public_key_x,
+      valid_from, expires_at FROM rubric_publisher_trust WHERE tenant_id=? AND publisher_key_id=?
+      AND publisher_name=?`).bind(tenantId, rotation.previousKeyId, publisher.name)
+      .first<{ id: string; publisher_name: string; publisher_key_id: string; public_key_x: string;
+        valid_from: string | null; expires_at: string | null }>();
+    if (!predecessor) throw new Error("Rubric rotation predecessor is not trusted by this tenant");
+    const proofIssuedAt = new Date(String(manifest.issuedAt));
+    if ((predecessor.valid_from && proofIssuedAt < new Date(predecessor.valid_from)) ||
+        (predecessor.expires_at && proofIssuedAt >= new Date(predecessor.expires_at))) {
+      throw new Error("Rubric rotation predecessor was not valid when the handoff was issued");
+    }
+    const predecessorPublic = { kty: "OKP", crv: "Ed25519", x: predecessor.public_key_x };
+    const predecessorKey = await crypto.subtle.importKey("jwk", predecessorPublic, { name: "Ed25519" }, false, ["verify"]);
+    const payload = rotationPayload(String(publisher.name), rotation.previousKeyId, String(publisher.keyId),
+      { kty: "OKP", crv: "Ed25519", x: publicJwk.x }, keyWindow.validFrom, keyWindow.expiresAt);
+    const proofValid = await crypto.subtle.verify({ name: "Ed25519" }, predecessorKey,
+      fromBase64Url(rotation.proof), new TextEncoder().encode(canonicalJson(payload)));
+    if (!proofValid) throw new Error("Rubric key successor proof verification failed");
+    rotationId = crypto.randomUUID();
+    await env.DB.prepare(`INSERT OR IGNORE INTO rubric_key_rotations
+      (id, tenant_id, publisher_name, predecessor_trust_id, predecessor_key_id, successor_key_id,
+       successor_public_key_x, valid_from, expires_at, proof, requested_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(rotationId, tenantId, publisher.name, predecessor.id, rotation.previousKeyId, publisher.keyId,
+        publicJwk.x, keyWindow.validFrom, keyWindow.expiresAt, rotation.proof, actorId).run();
+    const existingRotation = await env.DB.prepare(`SELECT id FROM rubric_key_rotations
+      WHERE tenant_id=? AND successor_key_id=?`).bind(tenantId, publisher.keyId).first<{ id: string }>();
+    rotationId = existingRotation?.id ?? rotationId;
+  }
   const trust = await env.DB.prepare(`SELECT id, policy FROM rubric_publisher_trust
-    WHERE tenant_id = ? AND publisher_key_id = ? AND public_key_x = ? AND status = 'active'`)
+    WHERE tenant_id = ? AND publisher_key_id = ? AND public_key_x = ? AND status = 'active'
+    AND (valid_from IS NULL OR datetime(valid_from)<=CURRENT_TIMESTAMP)
+    AND (expires_at IS NULL OR datetime(expires_at)>CURRENT_TIMESTAMP)`)
     .bind(tenantId, publisher.keyId, publicJwk.x).first<{ id: string; policy: "manual" | "auto_approve" | "block" }>();
   if (trust?.policy === "auto_approve") {
     const imported = await importRubricTemplates(env, tenantId, actorId, manifest);
     await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
       (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
        package_json, template_count, status, submitted_by, reviewed_by, reviewed_at, review_note)
-      VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP, ?)`)
-      .bind(id, tenantId, digest, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
+      VALUES (?, ?, ?, ?, ?, ?, 'verified', ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP, ?)`)
+      .bind(id, tenantId, digest, schema, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
         actorId, `trust-policy:${trust.id}`, "Automatically approved by active publisher trust policy").run();
     return { pendingReview: undefined, reviewId: id, status: "approved", duplicate: false,
       autoApproved: true, ...imported };
@@ -702,16 +807,17 @@ async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: st
     await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
       (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
        package_json, template_count, status, submitted_by, reviewed_by, reviewed_at, review_note)
-      VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, 'rejected', ?, ?, CURRENT_TIMESTAMP, ?)`)
-      .bind(id, tenantId, digest, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
+      VALUES (?, ?, ?, ?, ?, ?, 'verified', ?, ?, 'rejected', ?, ?, CURRENT_TIMESTAMP, ?)`)
+      .bind(id, tenantId, digest, schema, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
         actorId, `trust-policy:${trust.id}`, "Rejected by active publisher block policy").run();
     return { pendingReview: undefined, reviewId: id, status: "rejected", duplicate: false,
       autoApproved: false, imported: 0, skipped: 0, activationRequired: 0 };
   }
   const result = await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
     (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
-     package_json, template_count, submitted_by) VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, ?)`)
-    .bind(id, tenantId, digest, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length, actorId).run();
+     package_json, template_count, submitted_by, rotation_id) VALUES (?, ?, ?, ?, ?, ?, 'verified', ?, ?, ?, ?)`)
+    .bind(id, tenantId, digest, schema, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length,
+      actorId, rotationId).run();
   if (!result.meta.changes) {
     const existing = await env.DB.prepare(`SELECT id, status FROM rubric_package_reviews
       WHERE tenant_id = ? AND package_digest = ?`).bind(tenantId, digest).first<{ id: string; status: string }>();
@@ -724,22 +830,35 @@ async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: st
 export async function createRubricPublisherTrust(env: Env, tenantId: string, actorId: string, reviewId: string,
   policy: "manual" | "auto_approve" | "block") {
   if (!["manual", "auto_approve", "block"].includes(policy)) throw new Error("Publisher policy is invalid");
-  const review = await env.DB.prepare(`SELECT publisher_name, publisher_key_id, package_json
+  const review = await env.DB.prepare(`SELECT publisher_name, publisher_key_id, package_json, rotation_id
     FROM rubric_package_reviews WHERE id = ? AND tenant_id = ? AND signature_status = 'verified'`)
-    .bind(reviewId, tenantId).first<{ publisher_name: string; publisher_key_id: string; package_json: string }>();
+    .bind(reviewId, tenantId).first<{ publisher_name: string; publisher_key_id: string; package_json: string;
+      rotation_id: string | null }>();
   if (!review?.publisher_key_id) throw new Error("Verified rubric package review not found");
-  const manifest = JSON.parse(review.package_json) as { publisher?: { publicKey?: { x?: unknown } } };
+  if (review.rotation_id) {
+    const rotation = await env.DB.prepare(`SELECT status FROM rubric_key_rotations WHERE id=? AND tenant_id=?`)
+      .bind(review.rotation_id, tenantId).first<{ status: string }>();
+    if (rotation?.status !== "approved") throw new Error("Approve the cryptographic key rotation before trusting its successor");
+  }
+  const manifest = JSON.parse(review.package_json) as { publisher?: {
+    publicKey?: { x?: unknown }; validFrom?: unknown; expiresAt?: unknown
+  } };
   const publicKeyX = manifest.publisher?.publicKey?.x;
   if (typeof publicKeyX !== "string" || !publicKeyX) throw new Error("Review does not contain a valid publisher key");
+  const keyWindow = manifest.publisher?.validFrom || manifest.publisher?.expiresAt
+    ? validKeyWindow(manifest.publisher?.validFrom, manifest.publisher?.expiresAt) : null;
   const id = crypto.randomUUID();
   await env.DB.prepare(`INSERT INTO rubric_publisher_trust
-    (id, tenant_id, publisher_name, publisher_key_id, public_key_x, policy, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, tenant_id, publisher_name, publisher_key_id, public_key_x, policy, valid_from, expires_at, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(tenant_id, publisher_key_id) DO UPDATE SET publisher_name = excluded.publisher_name,
       public_key_x = excluded.public_key_x, policy = excluded.policy, status = 'active',
+      valid_from=excluded.valid_from, expires_at=excluded.expires_at, expired_at=NULL,
       updated_at = CURRENT_TIMESTAMP`).bind(
-      id, tenantId, review.publisher_name, review.publisher_key_id, publicKeyX, policy, actorId).run();
-  return { id, publisherName: review.publisher_name, keyId: review.publisher_key_id, policy, status: "active" };
+      id, tenantId, review.publisher_name, review.publisher_key_id, publicKeyX, policy,
+      keyWindow?.validFrom ?? null, keyWindow?.expiresAt ?? null, actorId).run();
+  return { id, publisherName: review.publisher_name, keyId: review.publisher_key_id, policy,
+    status: "active", validFrom: keyWindow?.validFrom ?? null, expiresAt: keyWindow?.expiresAt ?? null };
 }
 
 export async function updateRubricPublisherTrust(env: Env, tenantId: string, trustId: string, input: {
@@ -757,15 +876,100 @@ export async function updateRubricPublisherTrust(env: Env, tenantId: string, tru
   return { id: trustId, updated: result.meta.changes === 1, policy, status };
 }
 
+export async function reviewRubricKeyRotation(env: Env, tenantId: string, actorId: string, rotationId: string,
+  decision: "approved" | "rejected", input: { overlapDays?: unknown; note?: unknown }) {
+  const rotation = await env.DB.prepare(`SELECT r.*, t.policy predecessor_policy, t.status predecessor_status,
+    t.expires_at predecessor_expires_at FROM rubric_key_rotations r JOIN rubric_publisher_trust t
+      ON t.id=r.predecessor_trust_id AND t.tenant_id=r.tenant_id
+    WHERE r.id=? AND r.tenant_id=?`).bind(rotationId, tenantId).first<Record<string, unknown>>();
+  if (!rotation) throw new Error("Rubric key rotation was not found");
+  if (rotation.status !== "pending") throw new Error("Rubric key rotation is already complete");
+  const note = String(input.note ?? "").trim();
+  if (note.length < 10 || note.length > 500) throw new Error("Rotation review note must be 10–500 characters");
+  const now = new Date().toISOString();
+  if (decision === "rejected") {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE rubric_key_rotations SET status='rejected', reviewed_by=?, reviewed_at=?,
+        review_note=? WHERE id=? AND tenant_id=? AND status='pending'`)
+        .bind(actorId, now, note, rotationId, tenantId),
+      rubricAudit(env, tenantId, actorId, "evaluation_rubric_key_rotation.rejected", rotationId,
+        { predecessorKeyId: rotation.predecessor_key_id, successorKeyId: rotation.successor_key_id, note })
+    ]);
+    return { id: rotationId, status: "rejected" };
+  }
+  const overlapDays = Number(input.overlapDays ?? 7);
+  if (!Number.isInteger(overlapDays) || overlapDays < 0 || overlapDays > 30) {
+    throw new Error("Rotation overlap must be 0–30 days");
+  }
+  const validFrom = new Date(String(rotation.valid_from));
+  const expiresAt = new Date(String(rotation.expires_at));
+  if (Number.isNaN(validFrom.getTime()) || Number.isNaN(expiresAt.getTime()) || expiresAt <= validFrom) {
+    throw new Error("Successor key validity window is invalid");
+  }
+  const predecessorRetiresAt = new Date(validFrom.getTime() + overlapDays * 86_400_000).toISOString();
+  const existingSuccessor = await env.DB.prepare(`SELECT id FROM rubric_publisher_trust
+    WHERE tenant_id=? AND publisher_key_id=?`).bind(tenantId, rotation.successor_key_id).first<{ id: string }>();
+  const successorTrustId = existingSuccessor?.id ?? crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO rubric_publisher_trust
+      (id, tenant_id, publisher_name, publisher_key_id, public_key_x, policy, status,
+       valid_from, expires_at, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+      ON CONFLICT(tenant_id, publisher_key_id) DO UPDATE SET public_key_x=excluded.public_key_x,
+       publisher_name=excluded.publisher_name, policy=excluded.policy, status='active',
+       valid_from=excluded.valid_from, expires_at=excluded.expires_at, expired_at=NULL,
+       updated_at=CURRENT_TIMESTAMP`)
+      .bind(successorTrustId, tenantId, rotation.publisher_name, rotation.successor_key_id,
+        rotation.successor_public_key_x, rotation.predecessor_policy, rotation.valid_from,
+        rotation.expires_at, actorId),
+    env.DB.prepare(`UPDATE rubric_publisher_trust SET expires_at=CASE
+        WHEN expires_at IS NULL OR datetime(expires_at)>datetime(?) THEN ? ELSE expires_at END,
+        superseded_by_trust_id=?, updated_at=? WHERE id=? AND tenant_id=?`)
+      .bind(predecessorRetiresAt, predecessorRetiresAt, successorTrustId, now,
+        rotation.predecessor_trust_id, tenantId),
+    env.DB.prepare(`UPDATE rubric_key_rotations SET status='approved', reviewed_by=?, reviewed_at=?,
+      review_note=?, overlap_days=?, successor_trust_id=? WHERE id=? AND tenant_id=? AND status='pending'`)
+      .bind(actorId, now, note, overlapDays, successorTrustId, rotationId, tenantId),
+    rubricAudit(env, tenantId, actorId, "evaluation_rubric_key_rotation.approved", rotationId, {
+      predecessorKeyId: rotation.predecessor_key_id, successorKeyId: rotation.successor_key_id,
+      validFrom: rotation.valid_from, expiresAt: rotation.expires_at, overlapDays, predecessorRetiresAt
+    })
+  ]);
+  return { id: rotationId, status: "approved", successorTrustId, predecessorRetiresAt, overlapDays };
+}
+
+export async function expireRubricPublisherKeys(env: Env, now = new Date()) {
+  const { results } = await env.DB.prepare(`SELECT id, tenant_id, publisher_key_id FROM rubric_publisher_trust
+    WHERE status='active' AND expires_at IS NOT NULL AND datetime(expires_at)<=datetime(?) LIMIT 100`)
+    .bind(now.toISOString()).all<{ id: string; tenant_id: string; publisher_key_id: string }>();
+  let expired = 0;
+  for (const trust of results) {
+    const update = await env.DB.prepare(`UPDATE rubric_publisher_trust SET status='suspended', expired_at=?, updated_at=?
+      WHERE id=? AND tenant_id=? AND status='active'`).bind(
+        now.toISOString(), now.toISOString(), trust.id, trust.tenant_id).run();
+    if (update.meta.changes === 1) {
+      expired += 1;
+      await rubricAudit(env, trust.tenant_id, "system", "evaluation_rubric_publisher.expired", trust.id,
+        { keyId: trust.publisher_key_id, expiredAt: now.toISOString() }).run();
+    }
+  }
+  return { expired };
+}
+
 export async function reviewRubricPackage(env: Env, tenantId: string, actorId: string, reviewId: string,
   decision: "approved" | "rejected", note = "") {
-  const review = await env.DB.prepare(`SELECT id, status, package_json FROM rubric_package_reviews
+  const review = await env.DB.prepare(`SELECT id, status, package_json, rotation_id FROM rubric_package_reviews
     WHERE id = ? AND tenant_id = ?`).bind(reviewId, tenantId)
-    .first<{ id: string; status: string; package_json: string }>();
+    .first<{ id: string; status: string; package_json: string; rotation_id: string | null }>();
   if (!review) throw new Error("Rubric package review not found");
   if (review.status !== "pending") throw new Error("Rubric package review is already complete");
   let imported = 0, skipped = 0, activationRequired = 0;
   if (decision === "approved") {
+    if (review.rotation_id) {
+      const rotation = await env.DB.prepare(`SELECT status FROM rubric_key_rotations WHERE id=? AND tenant_id=?`)
+        .bind(review.rotation_id, tenantId).first<{ status: string }>();
+      if (rotation?.status !== "approved") throw new Error("Approve the publisher key rotation before importing its package");
+    }
     const manifest = JSON.parse(review.package_json) as { templates: unknown[] };
     const result = await importRubricTemplates(env, tenantId, actorId, manifest);
     ({ imported, skipped, activationRequired } = result);

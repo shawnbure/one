@@ -20,6 +20,9 @@ export interface Env {
   MICROSOFT_CLIENT_SECRET?: string;
   OAUTH_TOKEN_ENCRYPTION_KEY?: string;
   RUBRIC_SIGNING_JWK?: string;
+  RUBRIC_PREVIOUS_SIGNING_JWK?: string;
+  RUBRIC_SIGNING_VALID_FROM?: string;
+  RUBRIC_SIGNING_EXPIRES_AT?: string;
   RUBRIC_PUBLISHER_NAME?: string;
   LOCAL_DEV?: string;
 }

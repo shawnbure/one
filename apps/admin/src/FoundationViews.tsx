@@ -52,7 +52,7 @@ export function FoundationView({ section, session, onNotice }: Props) {
     return <div className="loading-card">Loading {section.toLowerCase()}…</div>;
   if (section === "Connections") return <Connections data={data} session={session} onReload={load} onNotice={onNotice} />;
   if (section === "Knowledge") return <Knowledge data={data} onReload={load} onNotice={onNotice} />;
-  if (section === "Evaluations") return <Evaluations data={data} onReload={load} onNotice={onNotice} />;
+  if (section === "Evaluations") return <Evaluations data={data} session={session} onReload={load} onNotice={onNotice} />;
   return <Governance data={data} session={session} onReload={load} onNotice={onNotice} />;
 }
 
@@ -573,7 +573,8 @@ function Knowledge({ data, onReload, onNotice }: {
     </section>
   );
 }
-function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
+function Evaluations({ data, session, onReload, onNotice }: { data: GovernanceData; session: SessionData | null;
+  onReload: () => Promise<void>; onNotice: (message: string) => void }) {
   const [running, setRunning] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<EvaluationDetail | null>(null);
@@ -583,6 +584,8 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [candidateProfile, setCandidateProfile] = useState("fast");
   const [trialRunning, setTrialRunning] = useState(false);
   const [datasetBusy, setDatasetBusy] = useState<"export" | "import" | null>(null);
+  const [rotationReview, setRotationReview] = useState<{ id: string; overlapDays: number; note: string } | null>(null);
+  const canManagePublisher = session?.user.role === "admin" || session?.user.role === "owner";
   const [rubricPackageBusy, setRubricPackageBusy] = useState<"export" | "import" | null>(null);
   const [templateBusy, setTemplateBusy] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({
@@ -782,6 +785,22 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
     } catch (error) { onNotice(error instanceof Error ? error.message : "Publisher trust could not be updated"); }
     finally { setTemplateBusy(null); }
   }
+  async function reviewRotation(id: string, decision: "approved" | "rejected") {
+    if (!selected || !rotationReview || rotationReview.id !== id) return;
+    setTemplateBusy(id);
+    try {
+      await api.reviewRubricKeyRotation(id, decision, {
+        overlapDays: decision === "approved" ? rotationReview.overlapDays : undefined,
+        note: rotationReview.note
+      });
+      setRotationReview(null);
+      await inspect(selected);
+      onNotice(decision === "approved"
+        ? "Successor publisher key approved with a scheduled overlap window."
+        : "Publisher key rotation rejected and retained as audit evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Publisher key rotation review failed"); }
+    finally { setTemplateBusy(null); }
+  }
   async function importDataset(file: File | undefined) {
     if (!selected || !file) return;
     setDatasetBusy("import");
@@ -874,18 +893,45 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
             <div className="section-head"><div><h3>Organization rubric templates</h3><p>Reusable standards are copied into each case, keeping durable runs independent from later template edits.</p></div><span className="rubric-library-actions"><small>{detail.rubricTemplates.length}/20 templates</small><button disabled={rubricPackageBusy !== null} onClick={() => void exportRubrics()}><Download size={14}/>{rubricPackageBusy === "export" ? "Exporting…" : "Export standards"}</button><label className="dataset-import"><Upload size={14}/>{rubricPackageBusy === "import" ? "Importing…" : "Import standards"}<input type="file" accept="application/json,.json" disabled={rubricPackageBusy !== null} onChange={(event) => { void importRubrics(event.target.files?.[0]); event.target.value = ""; }}/></label></span></div>
             {detail.rubricPackageReviews.filter((review) => review.status === "pending").map((review) => {
               const trust = detail.rubricPublisherTrust.find((item) => item.publisher_key_id === review.publisher_key_id);
+              const rotation = detail.rubricKeyRotations.find((item) => item.id === review.rotation_id);
               return <article className="rubric-package-review" key={review.id}><ShieldCheck size={18}/><span>
                 <strong>{review.publisher_name}</strong><small>{trust
                   ? `Valid signature · recognized key · ${trust.status === "active" ? trust.policy.replace("_", " ") : "trust suspended"}`
-                  : `Valid signature · untrusted until this tenant recognizes key ${review.publisher_key_id?.slice(0, 12)}…`}</small>
-              </span>{!trust && <button disabled={templateBusy === review.id} onClick={() => void trustPublisher(review.id)}>Trust key</button>}
+                  : review.rotation_id
+                    ? `Valid successor signature · rotation approval required for key ${review.publisher_key_id?.slice(0, 12)}…`
+                    : `Valid signature · untrusted until this tenant recognizes key ${review.publisher_key_id?.slice(0, 12)}…`}</small>
+              </span>{!trust && !review.rotation_id && canManagePublisher &&
+                <button disabled={templateBusy === review.id} onClick={() => void trustPublisher(review.id)}>Trust key</button>}
               <button disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "rejected")}>Reject</button>
-              <button className="primary" disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "approved")}>Approve import</button></article>;
+              <button className="primary" disabled={templateBusy === review.id || Boolean(rotation && rotation.status !== "approved")}
+                onClick={() => void reviewRubrics(review.id, "approved")}>Approve import</button></article>;
             })}
+            {detail.rubricKeyRotations.length > 0 && <div className="publisher-rotation-list"><div><strong>Publisher key rotations</strong>
+              <small>Successor proofs are signed by the exact predecessor key. Tenant approval controls overlap and activation.</small></div>
+              {detail.rubricKeyRotations.map((rotation) => <article key={rotation.id}>
+                <span className={`rotation-state ${rotation.status}`}>{rotation.status}</span><span>
+                  <strong>{rotation.publisher_name}</strong><small>{rotation.predecessor_key_id.slice(0, 10)}… → {rotation.successor_key_id.slice(0, 10)}…</small>
+                  <small>Valid {dateTime(rotation.valid_from)} through {dateTime(rotation.expires_at)}</small></span>
+                {rotation.status === "approved" ? <span><strong>{rotation.overlap_days} day overlap</strong><small>Successor trust activated</small></span>
+                  : rotation.status === "rejected" ? <span><strong>Rejected</strong><small>{rotation.review_note}</small></span>
+                    : canManagePublisher && rotationReview?.id === rotation.id ? <span className="rotation-review-controls">
+                      <label>Overlap days<input type="number" min="0" max="30" value={rotationReview.overlapDays}
+                        onChange={(event) => setRotationReview({ ...rotationReview, overlapDays: Number(event.target.value) })}/></label>
+                      <label>Review evidence<input placeholder="Required approval or rejection rationale" value={rotationReview.note}
+                        onChange={(event) => setRotationReview({ ...rotationReview, note: event.target.value })}/></label>
+                      <span><button disabled={rotationReview.note.trim().length < 10 || templateBusy === rotation.id}
+                        onClick={() => void reviewRotation(rotation.id, "rejected")}>Reject</button>
+                      <button className="primary" disabled={rotationReview.note.trim().length < 10 || templateBusy === rotation.id}
+                        onClick={() => void reviewRotation(rotation.id, "approved")}>Approve rotation</button></span>
+                    </span> : rotation.status === "pending" && canManagePublisher
+                      ? <button onClick={() => setRotationReview({ id: rotation.id, overlapDays: 7, note: "" })}>Review rotation</button>
+                      : <span><strong>Review required</strong><small>Owner or administrator</small></span>}
+              </article>)}</div>}
             {detail.rubricPublisherTrust.length > 0 && <div className="publisher-trust-list"><div><strong>Trusted publisher keys</strong>
               <small>Trust is tenant-specific. Automatic approval still imports templates archived.</small></div>
               {detail.rubricPublisherTrust.map((trust) => <article key={trust.id}><ShieldCheck size={16}/><span>
-                <strong>{trust.publisher_name}</strong><small>{trust.publisher_key_id.slice(0, 16)}…</small></span>
+                <strong>{trust.publisher_name}</strong><small>{trust.publisher_key_id.slice(0, 16)}…</small>
+                <small>{trust.expires_at ? `Expires ${dateTime(trust.expires_at)}` : "Legacy key · no expiry configured"}</small></span>
                 <select value={trust.policy} disabled={templateBusy === trust.id || trust.status === "suspended"}
                   onChange={(event) => void updatePublisher(trust.id, { policy: event.target.value as typeof trust.policy })}>
                   <option value="manual">Manual approval</option><option value="auto_approve">Auto-approve signed packages</option>
@@ -969,6 +1015,8 @@ function rubricCriteria(value: string) {
 }
 function money(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value || 0); }
 function number(value: number) { return new Intl.NumberFormat().format(value || 0); }
+function dateTime(value: string) { return new Intl.DateTimeFormat(undefined,
+  { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 
 function Governance({
   data,
