@@ -256,6 +256,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [candidateProfile, setCandidateProfile] = useState("fast");
   const [trialRunning, setTrialRunning] = useState(false);
   const [datasetBusy, setDatasetBusy] = useState<"export" | "import" | null>(null);
+  const [rubricPackageBusy, setRubricPackageBusy] = useState<"export" | "import" | null>(null);
   const [templateBusy, setTemplateBusy] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "", description: "",
@@ -392,6 +393,33 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
     } catch (error) { onNotice(error instanceof Error ? error.message : "Rubric template could not be updated"); }
     finally { setTemplateBusy(null); }
   }
+  async function exportRubrics() {
+    setRubricPackageBusy("export");
+    try {
+      const result = await api.exportRubricPackage();
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "workrr-organization-rubrics.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      onNotice(`Exported ${result.data.templates.length} organization rubric templates.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Rubric package could not be exported"); }
+    finally { setRubricPackageBusy(null); }
+  }
+  async function importRubrics(file: File | undefined) {
+    if (!selected || !file) return;
+    setRubricPackageBusy("import");
+    try {
+      if (file.size > 250_000) throw new Error("Rubric packages must be smaller than 250 KB");
+      const manifest = JSON.parse(await file.text());
+      const result = await api.importRubricPackage(manifest);
+      await inspect(selected);
+      onNotice(`Imported ${result.data.imported} archived templates; ${result.data.skipped} existing templates skipped.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Rubric package could not be imported"); }
+    finally { setRubricPackageBusy(null); }
+  }
   async function importDataset(file: File | undefined) {
     if (!selected || !file) return;
     setDatasetBusy("import");
@@ -481,7 +509,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               : <p className="empty-copy">Run the suite to populate dimension-level evidence.</p>}
           </div>
           <div className="rubric-library">
-            <div className="section-head"><div><h3>Organization rubric templates</h3><p>Reusable standards are copied into each case, keeping durable runs independent from later template edits.</p></div><span>{detail.rubricTemplates.length}/20 templates</span></div>
+            <div className="section-head"><div><h3>Organization rubric templates</h3><p>Reusable standards are copied into each case, keeping durable runs independent from later template edits.</p></div><span className="rubric-library-actions"><small>{detail.rubricTemplates.length}/20 templates</small><button disabled={rubricPackageBusy !== null} onClick={() => void exportRubrics()}><Download size={14}/>{rubricPackageBusy === "export" ? "Exporting…" : "Export standards"}</button><label className="dataset-import"><Upload size={14}/>{rubricPackageBusy === "import" ? "Importing…" : "Import standards"}<input type="file" accept="application/json,.json" disabled={rubricPackageBusy !== null} onChange={(event) => { void importRubrics(event.target.files?.[0]); event.target.value = ""; }}/></label></span></div>
             <div className="rubric-template-grid">
               <div className="rubric-template-list">
                 {detail.rubricTemplates.map((template) => {

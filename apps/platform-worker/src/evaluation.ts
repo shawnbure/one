@@ -504,6 +504,62 @@ export async function updateRubricTemplate(env: Env, tenantId: string, templateI
   return { id: templateId, name, description, criteria, enabled };
 }
 
+export async function exportRubricPackage(env: Env, tenantId: string) {
+  const templates = await listRubricTemplates(env, tenantId);
+  return {
+    schema: "workrr-rubrics/v1" as const,
+    exportedAt: new Date().toISOString(),
+    templates: templates.map((template) => ({
+      name: template.name,
+      description: template.description,
+      criteria: parseRubricCriteria(template.criteria_json),
+      enabled: Number(template.enabled) === 1
+    }))
+  };
+}
+
+export async function importRubricPackage(env: Env, tenantId: string, actorId: string, value: unknown) {
+  if (!value || typeof value !== "object") throw new Error("Rubric package must be a JSON object");
+  const manifest = value as { schema?: unknown; templates?: unknown };
+  if (manifest.schema !== "workrr-rubrics/v1" || !Array.isArray(manifest.templates) ||
+      manifest.templates.length < 1 || manifest.templates.length > 20) {
+    throw new Error("A Workrr rubric v1 package with one to 20 templates is required");
+  }
+  const existing = await env.DB.prepare("SELECT name FROM evaluation_rubric_templates WHERE tenant_id = ?")
+    .bind(tenantId).all<{ name: string }>();
+  const existingNames = new Set(existing.results.map((item) => item.name.toLocaleLowerCase()));
+  const packageNames = new Set<string>();
+  const inserts: D1PreparedStatement[] = [];
+  let skipped = 0;
+  for (const raw of manifest.templates) {
+    if (!raw || typeof raw !== "object") throw new Error("Every imported rubric template must be an object");
+    const item = raw as { name?: unknown; description?: unknown; criteria?: unknown };
+    const name = cleanTemplateName(item.name);
+    const normalizedName = name.toLocaleLowerCase();
+    if (existingNames.has(normalizedName) || packageNames.has(normalizedName)) {
+      skipped += 1;
+      continue;
+    }
+    if (existingNames.size + inserts.length >= 20) throw new Error("Import would exceed the 20-template organization limit");
+    const description = typeof item.description === "string" ? item.description.trim().slice(0, 500) : "";
+    const criteria = normalizeRubricCriteria(item.criteria);
+    assertRubricTemplateSafe(name, description, criteria);
+    packageNames.add(normalizedName);
+    inserts.push(env.DB.prepare(`INSERT OR IGNORE INTO evaluation_rubric_templates
+      (id, tenant_id, name, description, criteria_json, enabled, created_by)
+      VALUES (?, ?, ?, ?, ?, 0, ?)`).bind(
+      crypto.randomUUID(), tenantId, name, description, JSON.stringify(criteria), actorId
+    ));
+  }
+  if (inserts.length) await env.DB.batch(inserts);
+  return {
+    imported: inserts.length,
+    skipped,
+    totalTemplates: existingNames.size + inserts.length,
+    activationRequired: inserts.length
+  };
+}
+
 export async function exportEvaluationDataset(env: Env, tenantId: string, scenarioId: string) {
   const scenario = await env.DB.prepare(`SELECT id, name, category, gate_threshold FROM evaluation_scenarios
     WHERE id = ? AND tenant_id = ?`).bind(scenarioId, tenantId)

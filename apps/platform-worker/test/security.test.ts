@@ -165,4 +165,17 @@ describe("control-plane security boundary", () => {
         sql.includes("UPDATE evaluation_rubric_templates"))).toBe(false);
     }
   });
+
+  it("allows viewers to export but not import organization rubric packages", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/evaluation-rubrics/package", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ schema: "workrr-rubrics/v1", templates: [{
+        name: "Unauthorized", criteria: [{ criterion: "Be useful", dimension: "completeness", weight: 1 }]
+      }] })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("INSERT OR IGNORE INTO evaluation_rubric_templates"))).toBe(false);
+  });
 });

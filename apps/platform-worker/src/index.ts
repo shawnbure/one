@@ -11,7 +11,7 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, createRubricTemplate, exportEvaluationDataset, getEvaluationDetail, importEvaluationDataset, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation, updateRubricTemplate } from "./evaluation";
+import { createEvaluationCase, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation, updateRubricTemplate } from "./evaluation";
 import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
@@ -474,6 +474,22 @@ app.get("/api/evaluations/:id", requireRoles("admin", "builder", "owner", "opera
 
 app.get("/api/evaluation-rubrics", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await listRubricTemplates(c.env, c.get("tenantId")) }));
+
+app.get("/api/evaluation-rubrics/package", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  c.header("cache-control", "no-store");
+  return c.json({ data: await exportRubricPackage(c.env, c.get("tenantId")) });
+});
+
+app.post("/api/evaluation-rubrics/package", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const result = await importRubricPackage(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_rubric_package.imported",
+      "tenant", c.get("tenantId"), result);
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Rubric package could not be imported" }, 400);
+  }
+});
 
 app.post("/api/evaluation-rubrics", requireRoles("admin", "builder", "owner"), async (c) => {
   try {

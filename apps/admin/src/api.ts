@@ -245,6 +245,16 @@ export interface RubricTemplate {
   created_at: string;
   updated_at: string;
 }
+export interface RubricPackage {
+  schema: "workrr-rubrics/v1";
+  exportedAt?: string;
+  templates: Array<{
+    name: string;
+    description: string;
+    criteria: RubricCriterion[];
+    enabled: boolean;
+  }>;
+}
 export interface EvaluationDataset {
   schema: "workrr-evaluation/v1";
   exportedAt?: string;
@@ -410,6 +420,11 @@ export const api = {
   updateRubricTemplate: (id: string, body: { enabled?: boolean }) =>
     request<{ data: { id: string; name: string; description: string; criteria: RubricCriterion[]; enabled: number } }>(
       `/api/evaluation-rubrics/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  exportRubricPackage: () =>
+    request<{ data: RubricPackage }>("/api/evaluation-rubrics/package"),
+  importRubricPackage: (body: RubricPackage) =>
+    request<{ data: { imported: number; skipped: number; totalTemplates: number; activationRequired: number } }>(
+      "/api/evaluation-rubrics/package", { method: "POST", body: JSON.stringify(body) }),
   exportEvaluationDataset: (id: string) =>
     request<{ data: EvaluationDataset }>(`/api/evaluations/${encodeURIComponent(id)}/dataset`),
   importEvaluationDataset: (id: string, body: EvaluationDataset) =>
