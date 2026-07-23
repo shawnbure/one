@@ -56,7 +56,7 @@ npm run deploy -w @workrr/platform-worker
 npm run build -w @workrr/admin
 ```
 
-The admin build is ready to be served by a Workers Static Assets deployment; attaching it to the API Worker is the next deployment slice once the customer domain/auth choice is fixed.
+The admin build is served by the same Worker through Workers Static Assets. API and health paths run through the Worker first; browser routes use the SPA fallback.
 
 ## Recommended Git deployment policy
 
@@ -75,8 +75,8 @@ Root directory: /
 Build command: npm ci && npm run typecheck && npm test && npm run build -w @workrr/admin
 Production deploy command: npm run deploy -w @workrr/platform-worker
 Preview deploy command: npx wrangler versions upload --config apps/platform-worker/wrangler.jsonc
-Production branch: main
-Non-production branch builds: enabled
+Production branch: main for `workrr-platform`; dev for `workrr-platform-dev`
+Non-production branch builds: enabled only on the development Worker
 ```
 
 The Cloudflare account is pinned by `account_id` in the Wrangler configuration. The account ID is an identifier, not a credential; authentication remains in Wrangler locally or in the Cloudflare-managed build token.

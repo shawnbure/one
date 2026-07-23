@@ -5,12 +5,20 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-22",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "../admin/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/health"]
+  },
   "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
+  "routes": [{ "pattern": "one.workrr.ai", "custom_domain": true }],
   "ai": { "binding": "AI" },
   "d1_databases": [{
     "binding": "DB",
     "database_name": "workrr-platform",
-    "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+    "database_id": "67c9313a-e4a5-41ce-948e-4095edb27b95",
     "migrations_dir": "migrations"
   }],
   "durable_objects": { "bindings": [{ "name": "PROCESS_AGENT", "class_name": "ProcessAgent" }] },
@@ -27,5 +35,39 @@
   },
   "workflows": [{ "name": "workrr-process-workflow", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" }],
   "triggers": { "crons": ["0 * * * *"] },
-  "vars": { "ENVIRONMENT": "development" }
+  "vars": { "ENVIRONMENT": "production" },
+  "env": {
+    "dev": {
+      "name": "workrr-platform-dev",
+      "workers_dev": true,
+      "preview_urls": true,
+      "routes": [{ "pattern": "one-dev.workrr.ai", "custom_domain": true }],
+      "assets": {
+        "directory": "../admin/dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*", "/health"]
+      },
+      "ai": { "binding": "AI" },
+      "d1_databases": [{
+        "binding": "DB",
+        "database_name": "workrr-platform-dev",
+        "database_id": "5dad1856-7790-496c-bc17-91cddd655dd7",
+        "migrations_dir": "migrations"
+      }],
+      "durable_objects": { "bindings": [{ "name": "PROCESS_AGENT", "class_name": "ProcessAgent" }] },
+      "queues": {
+        "producers": [{ "binding": "PROCESS_QUEUE", "queue": "workrr-process-jobs-dev" }],
+        "consumers": [{
+          "queue": "workrr-process-jobs-dev",
+          "max_batch_size": 10,
+          "max_batch_timeout": 5,
+          "max_retries": 5,
+          "dead_letter_queue": "workrr-process-jobs-dev-dlq"
+        }]
+      },
+      "workflows": [{ "name": "workrr-process-workflow-dev", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" }],
+      "triggers": { "crons": ["0 * * * *"] },
+      "vars": { "ENVIRONMENT": "development" }
+    }
+  }
 }
