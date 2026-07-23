@@ -1127,6 +1127,59 @@ nav button em,
   .api-table { overflow-x: auto; }
   .api-head, .api-row { min-width: 920px; }
 }
+
+.webhook-create {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) repeat(3, minmax(150px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 16px;
+}
+.webhook-create > div strong,
+.webhook-create > div small { display: block; }
+.webhook-create > div strong { color: #263b31; font-size: 14px; }
+.webhook-create > div small { margin-top: 3px; font-size: 12px; }
+.webhook-create label { color: #405149; font-size: 12px; font-weight: 700; }
+.webhook-create input,
+.webhook-create select {
+  width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid #ccd8d2;
+  border-radius: 7px; background: #fff; color: #263930; font-size: 13px;
+}
+.webhook-create button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.webhook-row { grid-template-columns: 40px minmax(190px, 1.4fr) minmax(150px, .8fr) .5fr .45fr auto; }
+.webhook-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.webhook-actions button {
+  min-height: 32px; padding: 6px 8px; border: 1px solid #cbdad3; border-radius: 7px;
+  background: #fff; color: #306c54; font-size: 12px; font-weight: 700;
+}
+.webhook-receipts {
+  grid-column: 2 / -1; display: grid; gap: 7px; margin-top: 5px;
+  padding: 13px; border: 1px solid #dce6e1; border-radius: 9px; background: #f8faf9;
+}
+.webhook-receipts > div strong,
+.webhook-receipts > div small { display: block; }
+.webhook-receipts > span {
+  display: grid; grid-template-columns: minmax(160px, .7fr) 1fr auto; align-items: center;
+  gap: 10px; padding-top: 7px; border-top: 1px solid #e2e9e5;
+}
+.webhook-receipts em {
+  padding: 4px 8px; border-radius: 12px; background: #e8f3ed;
+  color: #307157; font-size: 12px; font-style: normal; text-transform: capitalize;
+}
+.webhook-receipts p { margin: 0; color: #68776f; font-size: 13px; }
+@media (max-width: 1180px) {
+  .webhook-create { grid-template-columns: 1fr 1fr; }
+  .webhook-create > div { grid-column: 1 / -1; }
+  .webhook-row { grid-template-columns: 40px 1fr 1fr; }
+  .webhook-row > .connection-state, .webhook-actions { justify-self: start; }
+  .webhook-receipts { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .webhook-create, .webhook-row { grid-template-columns: 1fr; }
+  .webhook-create > div, .webhook-receipts { grid-column: 1; }
+  .webhook-receipts > span { grid-template-columns: 1fr; }
+}
 .retention-actions {
   display: flex;
   flex-wrap: wrap;

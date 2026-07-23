@@ -23,7 +23,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type RetentionOperationsData,
-  type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition } from "./api";
+  type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition,
+  type WebhookReceipt } from "./api";
 import "./governed-standards.css";
 
 interface Props {
@@ -67,6 +68,10 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
   const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [toolAdapters, setToolAdapters] = useState<ToolAdapterDefinition[]>([]);
   const [toolBusy, setToolBusy] = useState(false);
+  const [webhookBusy, setWebhookBusy] = useState<string | null>(null);
+  const [editingWebhook, setEditingWebhook] = useState<string | null>(null);
+  const [webhookReceipts, setWebhookReceipts] = useState<Record<string, WebhookReceipt[]>>({});
+  const [webhookForm, setWebhookForm] = useState({ name: "", blueprintId: "", acceptedEvents: "request.created" });
   const [toolForm, setToolForm] = useState({
     name: "", description: "", owner: "", adapterKind: "mock", connectionId: "", handlerKey: "",
     accessMode: "read", riskLevel: "low", dataClassification: "internal", rateLimitPerMinute: "60",
@@ -180,9 +185,54 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
     } catch (error) { onNotice(error instanceof Error ? error.message : "Tool process scope could not be changed"); }
     finally { setToolBusy(false); }
   }
+  async function saveWebhook(event: React.FormEvent) {
+    event.preventDefault();
+    setWebhookBusy("create");
+    try {
+      const body = { name: webhookForm.name, blueprintId: webhookForm.blueprintId,
+        acceptedEvents: webhookForm.acceptedEvents.split(",").map((value) => value.trim()).filter(Boolean) };
+      if (editingWebhook) await api.updateWebhook(editingWebhook, body);
+      else await api.createWebhook(body);
+      setWebhookForm({ name: "", blueprintId: "", acceptedEvents: "request.created" });
+      setEditingWebhook(null);
+      await onReload();
+      onNotice(editingWebhook ? "Disabled webhook routing configuration updated." :
+        "Webhook created disabled. Verify the Cloudflare secret before activation.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Webhook could not be created"); }
+    finally { setWebhookBusy(null); }
+  }
+  function editWebhook(webhook: GovernanceData["webhooks"][number]) {
+    setEditingWebhook(webhook.id);
+    setWebhookForm({
+      name: webhook.name, blueprintId: webhook.blueprint_id,
+      acceptedEvents: parseArray(webhook.accepted_events_json).join(", ")
+    });
+  }
+  async function toggleWebhook(id: string, status: "active" | "disabled") {
+    setWebhookBusy(id);
+    try {
+      await api.setWebhookStatus(id, status);
+      await onReload();
+      onNotice(`Webhook ${status === "active" ? "activated" : "disabled"}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Webhook status could not be changed"); }
+    finally { setWebhookBusy(null); }
+  }
+  async function loadWebhookReceipts(id: string) {
+    if (webhookReceipts[id]) {
+      setWebhookReceipts((current) => { const next = { ...current }; delete next[id]; return next; });
+      return;
+    }
+    setWebhookBusy(id);
+    try {
+      const result = await api.webhookReceipts(id);
+      setWebhookReceipts((current) => ({ ...current, [id]: result.data.receipts }));
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Webhook receipts could not be loaded"); }
+    finally { setWebhookBusy(null); }
+  }
   const microsoft = data.connections.find((item) => item.name === "Microsoft 365");
   const microsoftConnected = microsoft && Number(microsoft.secret_configured) === 1;
   const canManageLifecycle = Boolean(session && ["admin", "builder", "owner", "operator"].includes(session.user.role));
+  const canManageWebhooks = Boolean(session && ["admin", "builder", "owner"].includes(session.user.role));
   const rotationOwners = data.members.filter((member) =>
     member.status === "active" && ["admin", "builder", "owner", "operator"].includes(String(member.role)));
   return (
@@ -379,6 +429,30 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
             <p>Signed, idempotent process triggers with Queue buffering.</p>
           </div>
         </div>
+        {canManageWebhooks && <form className="webhook-create panel" onSubmit={saveWebhook}>
+          <div><strong>{editingWebhook ? "Edit disabled endpoint" : "Create inbound endpoint"}</strong>
+            <small>{editingWebhook ? "Routing changes are audited before the endpoint can be reactivated." :
+              "Starts disabled and uses the environment-level Cloudflare secret reference."}</small></div>
+          <label>Name<input required minLength={3} maxLength={80} value={webhookForm.name}
+            onChange={(event) => setWebhookForm({ ...webhookForm, name: event.target.value })}
+            placeholder="Customer request intake"/></label>
+          <label>Process<select required value={webhookForm.blueprintId}
+            onChange={(event) => setWebhookForm({ ...webhookForm, blueprintId: event.target.value })}>
+            <option value="">Select a process</option>{data.processes.map((process) =>
+              <option key={String(process.id)} value={String(process.id)}>{String(process.name)}</option>)}
+          </select></label>
+          <label>Accepted events<input required maxLength={500} value={webhookForm.acceptedEvents}
+            onChange={(event) => setWebhookForm({ ...webhookForm, acceptedEvents: event.target.value })}
+            placeholder="request.created, request.updated"/></label>
+          <button className="primary" disabled={webhookBusy === "create"}>
+            <Plus size={14}/>{webhookBusy === "create" ? "Saving…" :
+              editingWebhook ? "Save configuration" : "Create endpoint"}
+          </button>
+          {editingWebhook && <button type="button" onClick={() => {
+            setEditingWebhook(null);
+            setWebhookForm({ name: "", blueprintId: "", acceptedEvents: "request.created" });
+          }}>Cancel</button>}
+        </form>}
         {data.webhooks.map((webhook) => (
           <article className="webhook-row panel" key={webhook.id}>
             <span className="foundation-icon">
@@ -408,8 +482,31 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
               <i />
               {webhook.status}
             </span>
+            <span className="webhook-actions">
+              <button disabled={webhookBusy === webhook.id} onClick={() => void loadWebhookReceipts(webhook.id)}>
+                {webhookReceipts[webhook.id] ? "Hide receipts" : "Receipts"}
+              </button>
+              {canManageWebhooks && <button disabled={webhookBusy === webhook.id ||
+                (webhook.status !== "active" && !webhook.secret_configured)}
+                onClick={() => void toggleWebhook(webhook.id, webhook.status === "active" ? "disabled" : "active")}>
+                {webhook.status === "active" ? "Disable" : "Activate"}
+              </button>}
+              {canManageWebhooks && webhook.status === "disabled" &&
+                <button disabled={webhookBusy === webhook.id} onClick={() => editWebhook(webhook)}>Edit</button>}
+            </span>
+            {webhookReceipts[webhook.id] && <div className="webhook-receipts">
+              <div><strong>Recent receipts</strong><small>Latest 25 · idempotency keys are never displayed</small></div>
+              {webhookReceipts[webhook.id]!.map((receipt) => <span key={receipt.id}>
+                <strong>{receipt.event_type || "Unspecified event"}</strong>
+                <small>{receipt.execution_id ? `Execution ${receipt.execution_id.slice(0, 12)}` : "Blocked before execution"} ·{" "}
+                  {dateTime(receipt.received_at)}</small>
+                <em>{receipt.execution_status || (receipt.execution_id ? "queued" : "blocked")}</em>
+              </span>)}
+              {!webhookReceipts[webhook.id]!.length && <p>No receipts have been retained for this endpoint.</p>}
+            </div>}
           </article>
         ))}
+        {!data.webhooks.length && <p className="empty-copy">No inbound webhook endpoints are configured.</p>}
       </div>
     </section>
   );

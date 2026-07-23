@@ -596,6 +596,14 @@ export interface WebhookEndpoint {
   last_received_at: string | null;
   secret_configured: number;
 }
+export interface WebhookReceipt {
+  id: string;
+  event_type: string | null;
+  execution_id: string | null;
+  execution_status: string | null;
+  received_at: string;
+  completed_at: string | null;
+}
 export interface ProcessTemplate {
   id: string;
   name: string;
@@ -1122,6 +1130,15 @@ export const api = {
     return request<ApiLogPage>(`/api/logs${query}`);
   },
   webhooks: () => request<{ data: WebhookEndpoint[] }>("/api/webhooks"),
+  createWebhook: (body: { name: string; blueprintId: string; acceptedEvents: string[] }) =>
+    request<{ data: { id: string; status: string; secretConfigured: boolean } }>(
+      "/api/webhooks", { method: "POST", body: JSON.stringify(body) }),
+  updateWebhook: (id: string, body: { name: string; blueprintId: string; acceptedEvents: string[] }) =>
+    request<{ data: { id: string; status: string } }>(
+      `/api/webhooks/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  webhookReceipts: (id: string) =>
+    request<{ data: { endpoint: { id: string; name: string }; receipts: WebhookReceipt[] } }>(
+      `/api/webhooks/${encodeURIComponent(id)}/receipts`),
   setWebhookStatus: (id: string, status: "active" | "disabled") =>
     request<{ updated: boolean; status: string }>(
       `/api/webhooks/${encodeURIComponent(id)}/status`,

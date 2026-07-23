@@ -86,6 +86,14 @@ describe("signed webhook intake", () => {
     expect(jobs).toHaveLength(0);
   });
 
+  it("rejects oversized idempotency keys before D1 persistence", async () => {
+    const { env, jobs } = webhookEnvironment();
+    const response = await deliver(env, '{"event":"request.created","input":"hello"}', "x".repeat(201));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("200 characters") });
+    expect(jobs).toHaveLength(0);
+  });
+
   it("blocks sensitive webhook content before Queue persistence", async () => {
     const { env, jobs } = webhookEnvironment([
       { detector: "ssn", action: "block", direction: "both", enabled: 1 }

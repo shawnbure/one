@@ -8,6 +8,8 @@ import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease, rollbackRelease } from "./studio";
 import { getOverviewData } from "./overview";
 import { listApiLogs } from "./api-logs";
+import { createWebhookEndpoint, listWebhookReceipts, setWebhookEndpointStatus,
+  updateWebhookEndpoint } from "./webhook-operations";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
@@ -1647,6 +1649,40 @@ app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "
   return c.json({ data: results });
 });
 
+app.post("/api/webhooks", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    return c.json({ data: await createWebhookEndpoint(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Webhook could not be created" }, 400);
+  }
+});
+
+app.put("/api/webhooks/:id", requireRoles("admin", "builder", "owner"), async (c) => {
+  const endpointId = c.req.param("id");
+  if (!endpointId) return c.json({ error: "Webhook endpoint ID is required" }, 400);
+  try {
+    return c.json({ data: await updateWebhookEndpoint(
+      c.env, c.get("tenantId"), c.get("actorId"), endpointId, await c.req.json()
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Webhook could not be updated";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 409);
+  }
+});
+
+app.get("/api/webhooks/:id/receipts",
+  requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+    const endpointId = c.req.param("id");
+    if (!endpointId) return c.json({ error: "Webhook endpoint ID is required" }, 400);
+    try {
+      return c.json({ data: await listWebhookReceipts(c.env, c.get("tenantId"), endpointId) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Webhook receipts could not be loaded" }, 404);
+    }
+  });
+
 app.get("/api/tools", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await listTools(c.env, c.get("tenantId")) }));
 
@@ -1746,15 +1782,18 @@ app.patch("/api/connections/:id/lifecycle", requireRoles("admin", "builder", "ow
   }
 });
 
-app.patch("/api/webhooks/:id/status", requireRoles("admin", "builder"), async (c) => {
+app.patch("/api/webhooks/:id/status", requireRoles("admin", "builder", "owner"), async (c) => {
   const webhookId = c.req.param("id");
   const body = await c.req.json<{ status?: "active" | "disabled" }>();
   if (!webhookId || !body.status || !["active", "disabled"].includes(body.status)) return c.json({ error: "Valid status is required" }, 400);
-  if (body.status === "active" && !c.env.WEBHOOK_INBOX_SECRET) return c.json({ error: "Configure WEBHOOK_INBOX_SECRET before activating this endpoint" }, 409);
-  const result = await c.env.DB.prepare("UPDATE webhook_endpoints SET status = ? WHERE id = ? AND tenant_id = ?")
-    .bind(body.status, webhookId, c.get("tenantId")).run();
-  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "webhook.status_changed", "webhook", webhookId, body);
-  return c.json({ updated: result.meta.changes === 1, status: body.status });
+  try {
+    return c.json(await setWebhookEndpointStatus(
+      c.env, c.get("tenantId"), c.get("actorId"), webhookId, body.status
+    ));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Webhook status could not be changed";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 409);
+  }
 });
 
 app.patch("/api/processes/:id/mode", requireRoles("admin", "owner"), async (c) => {

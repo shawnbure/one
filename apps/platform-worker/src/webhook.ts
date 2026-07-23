@@ -21,6 +21,7 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   if (!signature || !await validSignature(raw, secret, signature)) return c.json({ error: "Invalid webhook signature" }, 401);
   const idempotencyKey = c.req.header("idempotency-key") ?? c.req.header("x-workrr-event-id");
   if (!idempotencyKey) return c.json({ error: "Idempotency-Key is required" }, 400);
+  if (idempotencyKey.length > 200) return c.json({ error: "Idempotency-Key is limited to 200 characters" }, 400);
   const existing = await c.env.DB.prepare("SELECT execution_id FROM webhook_receipts WHERE endpoint_id = ? AND idempotency_key = ?")
     .bind(endpoint.id, idempotencyKey).first<{ execution_id: string | null }>();
   if (existing) return c.json({ duplicate: true, executionId: existing.execution_id }, 200);
