@@ -558,6 +558,32 @@ a:focus-visible {
   gap: 12px;
   margin-top: 12px;
 }
+
+.deployment-proof {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 8px;
+  padding: 12px;
+  border: 1px solid #ead7b8;
+  border-radius: 9px;
+  background: #fff9ee;
+}
+.deployment-proof > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f6e9d2;
+  color: #8b6128;
+}
+.deployment-proof.verified { border-color: #cce4d8; background: #f1f8f4; }
+.deployment-proof.verified > span { background: #dff0e7; color: #287052; }
+.deployment-proof strong, .deployment-proof small { display: block; }
+.deployment-proof strong { color: #34433c; font-size: 13px; }
+.deployment-proof small { margin-top: 3px; color: #64736c; font-size: 12px; line-height: 1.45; }
 .opportunity-readiness > section {
   overflow: hidden;
   border: 1px solid #dce5e0;

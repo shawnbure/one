@@ -52,6 +52,7 @@ import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence
 import { governExecutionMemory, listExecutionMemory } from "./memory-governance";
 import { getRecoveryOperations, RecoveryConflict, updateRecoveryTask } from "./recovery";
 import { DelegationConflict, listApprovalDelegations, setApprovalDelegation } from "./approval-delegations";
+import { getDeploymentVerification } from "./deployment-verification";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -480,6 +481,10 @@ app.get("/api/members", requireRoles("admin", "builder", "owner", "operator", "r
     FROM tenant_members WHERE tenant_id = ? ORDER BY display_name`).bind(c.get("tenantId")).all();
   return c.json({ data: results });
 });
+
+app.get("/api/deployment-verification",
+  requireRoles("admin", "owner", "operator", "viewer"), async (c) =>
+    c.json({ data: await getDeploymentVerification(c.env, c.get("tenantId")) }));
 
 app.post("/api/members", requireRoles("admin"), async (c) => {
   const body = await c.req.json<{ email?: string; name?: string; role?: string }>();

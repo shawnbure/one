@@ -51,6 +51,11 @@ try {
   fixtureId = undefined;
   if (!fixtureCleaned) throw new Error("Smoke fixture cleanup was not confirmed");
   checks.push("fixture-deleted");
+  const verification = await request("/api/deployment-verification");
+  if (verification.data?.status !== "verified") {
+    throw new Error("Deployment verification evidence was not recognized after the smoke cycle");
+  }
+  checks.push("deployment-evidence");
   console.log(JSON.stringify({
     ok: true, baseUrl, tenantId: session.tenantId, principal: session.user.email,
     role: session.user.role, checks, fixtureCleaned, startedAt, completedAt: new Date().toISOString(),

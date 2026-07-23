@@ -406,6 +406,14 @@ export interface GovernanceData {
     detail: string;
   }>;
   dataFlow: string[];
+  deploymentVerification: {
+    evidenceWindowDays: number;
+    status: "verified" | "verification_due" | "principal_required";
+    activeOperatorPrincipals: number;
+    lastVerifiedAt: string | null;
+    lastVerifiedBy: string | null;
+    checks: Array<{ id: string; label: string; ready: boolean; detail: string }>;
+  };
 }
 export interface RetentionControl {
   tenant_id: string;

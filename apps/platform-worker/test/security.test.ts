@@ -337,6 +337,15 @@ describe("control-plane security boundary", () => {
     }
   });
 
+  it("keeps deployment-verification evidence out of consumer sessions", async () => {
+    const consumer = environment("consumer");
+    const response = await app.fetch(new Request("http://localhost/api/deployment-verification", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), consumer.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("FROM audit_events deleted"))).toBe(false);
+  });
+
   it("allows viewers to inspect typed tools but not create or change them", async () => {
     const registryEnvironment = environment("viewer");
     const registryResponse = await app.fetch(new Request("http://localhost/api/tool-adapters", {

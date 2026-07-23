@@ -1180,6 +1180,18 @@ function Governance({
           <div className="readiness-bar">
             <i style={{ width: `${(ready / data.readiness.length) * 100}%` }} />
           </div>
+          <div className={`deployment-proof ${data.deploymentVerification.status}`}>
+            <span><ShieldCheck size={17}/></span>
+            <div>
+              <strong>{data.deploymentVerification.status === "verified"
+                ? "Live environment verified"
+                : data.deploymentVerification.status === "verification_due"
+                  ? "Live verification is due" : "Service principal required"}</strong>
+              <small>{data.deploymentVerification.lastVerifiedAt
+                ? `Last complete smoke cycle ${dateTime(data.deploymentVerification.lastVerifiedAt)}${data.deploymentVerification.lastVerifiedBy ? ` · ${data.deploymentVerification.lastVerifiedBy}` : ""}`
+                : "Run the deployment smoke command with a least-privilege Cloudflare Access operator token."}</small>
+            </div>
+          </div>
           {data.readiness.map((item) => (
             <div className="readiness-row" key={item.id}>
               {item.ready ? (

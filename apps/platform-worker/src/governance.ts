@@ -1,6 +1,8 @@
 import type { Env } from "./types";
+import { getDeploymentVerification } from "./deployment-verification";
 
 export async function getGovernance(env: Env, tenantId: string) {
+  const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
     tenantControl, dlpRules, dlpEvents, tools] = await Promise.all([
     env.DB.prepare(`SELECT id, name, model_profile, prompt_release_id, active_release_id, autonomy, operating_mode,
@@ -45,6 +47,7 @@ export async function getGovernance(env: Env, tenantId: string) {
   const credentialRows = credentials.results as Array<Record<string, unknown>>;
   const knowledgeRows = knowledge.results as Array<Record<string, unknown>>;
   const toolRows = tools.results as Array<Record<string, unknown>>;
+  const deploymentVerification = await deploymentVerificationPromise;
   const requiredConnectionRows = connectionRows.filter((row) => row.kind !== "oauth" || row.status !== "disconnected");
   const lifecycleConnectionRows = requiredConnectionRows.filter((row) => row.kind !== "model_provider");
   const lifecycleReadyRows = lifecycleConnectionRows.filter((row) =>
@@ -69,9 +72,11 @@ export async function getGovernance(env: Env, tenantId: string) {
     credentials: credentialRows,
     dlpRules: dlpRules.results,
     dlpEvents: dlpEvents.results,
+    deploymentVerification,
     models,
     readiness: [
       { id: "identity", label: "Cloudflare Access trust boundary", ready: Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), detail: env.ACCESS_TEAM_DOMAIN ? "JWT verification configured" : "Access application configuration required" },
+      ...deploymentVerification.checks,
       { id: "members", label: "Organization membership and roles", ready: members.results.length > 0, detail: `${members.results.length} active membership records` },
       { id: "releases", label: "Published process releases", ready: processRows.every((row) => Boolean(row.active_release_id)), detail: `${processRows.filter((row) => row.active_release_id).length}/${processRows.length} processes pinned` },
       { id: "connections", label: "Connection secret readiness", ready: requiredConnectionRows.every((row) => Number(row.secret_configured) === 1), detail: `${requiredConnectionRows.filter((row) => Number(row.secret_configured) === 1).length}/${requiredConnectionRows.length} required connections configured` },
