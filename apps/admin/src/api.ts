@@ -630,6 +630,7 @@ export interface ProcessTemplate {
   autonomy: string;
   tools_json: string;
   category: string;
+  starter_json: string;
 }
 export interface ProcessOpportunity {
   id: string;

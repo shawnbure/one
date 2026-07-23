@@ -712,7 +712,7 @@ app.post("/api/process-schedules/:id/run", requireRoles("admin", "builder", "own
 
 app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, name, description, execution_profile, model_profile, autonomy,
-    tools_json, category FROM process_templates ORDER BY category, name`).all();
+    tools_json, category, starter_json FROM process_templates ORDER BY category, name`).all();
   return c.json({ data: results });
 });
 

@@ -41,6 +41,10 @@ export function CreateProcessWizard({ onClose, onCreated, onNotice }: Props) {
       .catch((error: Error) => onNotice(error.message));
   }, []);
   const selected = templates.find((template) => template.id === templateId);
+  const selectedKit = useMemo(
+    () => parseStarterKit(selected?.starter_json),
+    [selected?.starter_json],
+  );
   const score = useMemo(
     () =>
       Math.min(
@@ -204,6 +208,26 @@ export function CreateProcessWizard({ onClose, onCreated, onNotice }: Props) {
                   </button>
                 ))}
               </div>
+              {selected && selectedKit && (
+                <section className="template-kit">
+                  <header>
+                    <div><FileSearch size={17} /><span><strong>Implementation-ready starter kit</strong>
+                      <small>Copied into the new process as an immutable starting snapshot.</small></span></div>
+                    <em>{selectedKit.testCases.length} acceptance examples</em>
+                  </header>
+                  <div>
+                    <span><small>DELIVERY TOPOLOGY</small>
+                      <strong>{selectedKit.topology.join(" → ")}</strong></span>
+                    <span><small>DISCOVERY</small>
+                      <strong>{selectedKit.discoveryQuestions.length} questions · {selectedKit.systems.length} system boundaries</strong></span>
+                    <span><small>SUCCESS EVIDENCE</small>
+                      <strong>{selectedKit.successMetrics.join(" · ")}</strong></span>
+                    <span><small>DEFAULT POSTURE</small>
+                      <strong>{selectedKit.privacy.sensitivity} · {selectedKit.privacy.conversationRetentionDays}-day conversation retention
+                        {selectedKit.schedule ? ` · ${selectedKit.schedule.recommended} schedule disabled` : ""}</strong></span>
+                  </div>
+                </section>
+              )}
             </div>
           )}
           {step === 3 && (
@@ -351,4 +375,39 @@ export function CreateProcessWizard({ onClose, onCreated, onNotice }: Props) {
       </section>
     </div>
   );
+}
+
+function parseStarterKit(value?: string) {
+  try {
+    const parsed = JSON.parse(value ?? "{}") as {
+      topology?: unknown;
+      discoveryQuestions?: unknown;
+      systems?: unknown;
+      successMetrics?: unknown;
+      privacy?: { sensitivity?: unknown; conversationRetentionDays?: unknown };
+      schedule?: { recommended?: unknown } | null;
+      testCases?: unknown;
+    };
+    const strings = (items: unknown) => Array.isArray(items)
+      ? items.filter((item): item is string => typeof item === "string")
+      : [];
+    const topology = strings(parsed.topology);
+    if (!topology.length) return null;
+    return {
+      topology,
+      discoveryQuestions: strings(parsed.discoveryQuestions),
+      systems: strings(parsed.systems),
+      successMetrics: strings(parsed.successMetrics),
+      privacy: {
+        sensitivity: typeof parsed.privacy?.sensitivity === "string" ? parsed.privacy.sensitivity : "internal",
+        conversationRetentionDays: Number(parsed.privacy?.conversationRetentionDays) || 90,
+      },
+      schedule: parsed.schedule && typeof parsed.schedule.recommended === "string"
+        ? { recommended: parsed.schedule.recommended }
+        : null,
+      testCases: Array.isArray(parsed.testCases) ? parsed.testCases : [],
+    };
+  } catch {
+    return null;
+  }
 }

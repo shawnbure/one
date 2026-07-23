@@ -9,7 +9,24 @@ const template = {
   system_prompt: "Assist customer operations.",
   instructions_json: '["Use verified facts"]',
   guardrails_json: '["Require approval"]',
-  tools_json: '["lookup_customer"]'
+  tools_json: '["lookup_customer"]',
+  starter_json: JSON.stringify({
+    version: 1,
+    topology: ["Request", "Agent", "Approval"],
+    currentSteps: ["Read request", "Draft response"],
+    futureSteps: ["Validate request", "Prepare governed response"],
+    discoveryQuestions: ["Who approves the response?"],
+    systems: ["Customer records"],
+    exceptions: ["Missing customer identity"],
+    successMetrics: ["Response preparation time"],
+    privacy: { sensitivity: "confidential", conversationRetentionDays: 90 },
+    schedule: null,
+    adapterInstructions: ["Bind customer lookup read-only"],
+    testCases: [
+      { name: "Missing identity", input: "No account identifier", contains: ["missing"], prohibited: ["sent"] },
+      { name: "Routine request", input: "Account ACME-1 asks for status", contains: ["ACME-1"], prohibited: ["completed"] }
+    ]
+  })
 };
 
 function bootstrapEnvironment() {
@@ -114,6 +131,10 @@ describe("customer launch bootstrap", () => {
     expect(state().statements.some((item) => item.sql.includes("'incident.emergency_stop'"))).toBe(true);
     expect(state().statements.some((item) => item.sql.includes("'help.request.created'"))).toBe(true);
     expect(state().statements.filter((item) => item.sql.includes("INSERT OR IGNORE INTO dlp_rules"))).toHaveLength(6);
+    const discoveryWrite = state().statements.find((item) => item.sql.includes("INSERT INTO process_discovery"));
+    expect(discoveryWrite?.bindings).toContain("template-customer-ops");
+    expect(discoveryWrite?.bindings).toContain("Read request; Draft response");
+    expect(state().statements.filter((item) => item.sql.includes("INSERT INTO evaluation_cases"))).toHaveLength(2);
 
     const retry = await bootstrapCustomer(env as never, "tenant-1", "member-admin", manifest);
     expect(retry.launch).toMatchObject({ status: "completed", alreadyCompleted: true, processId: state().processId });

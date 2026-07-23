@@ -1105,6 +1105,8 @@ Do not add KV in v1. Compile the active prompt configuration into one immutable 
 
 If measured production data later shows that cold D1 bundle reads materially affect user latency, a distributed cache can be added behind the prompt-bundle repository interface without changing agent definitions or release records. It should be a measured optimization, not a starting dependency.
 
+Reusable process templates are versioned implementation starters rather than prompt snippets. A starter carries discovery questions, current/future operating steps, Cloudflare execution topology, system and exception boundaries, success measures, privacy defaults, adapter guidance, and acceptance examples alongside its prompt/tool defaults. Process creation stores a normalized snapshot with the discovery record and copies the acceptance examples into the release gate. Catalog improvements therefore affect future processes only and do not mutate a deployed customer's design or evidence.
+
 The central distinction is:
 
 - **More stored prompt content** does not have to slow each turn.
