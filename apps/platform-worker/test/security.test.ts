@@ -141,6 +141,27 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("approval_messages"))).toBe(false);
   });
 
+  it("keeps approval coverage readable but restricts changes to decision roles", async () => {
+    const consumer = environment("consumer");
+    const hidden = await app.fetch(new Request("http://localhost/api/approval-delegations", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), consumer.env as never, executionCtx as never);
+    expect(hidden.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("approval_delegations d"))).toBe(false);
+
+    const viewer = environment("viewer");
+    const read = await app.fetch(new Request("http://localhost/api/approval-delegations", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(read.status).toBe(200);
+    const change = await app.fetch(new Request("http://localhost/api/approval-delegations/member-1", {
+      method: "PUT", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: "{}"
+    }), viewer.env as never, executionCtx as never);
+    expect(change.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("INSERT INTO approval_delegations"))).toBe(false);
+  });
+
   it("restricts proposal correction to authorized decision roles", async () => {
     for (const role of ["builder", "operator", "viewer", "consumer"]) {
       const principal = environment(role);

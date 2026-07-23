@@ -1,25 +1,26 @@
 import type { Role } from "./auth";
 import { emitNotification } from "./notifications";
 import type { Env } from "./types";
+import { resolveRequestedApprovalAssignee } from "./approval-delegations";
 
 export type ApprovalMessageKind = "comment" | "information_request" | "information_response" | "escalation";
 
 export async function assignApproval(env: Env, tenantId: string, actorId: string, approvalId: string,
   assignedTo: string) {
-  const member = await env.DB.prepare(`SELECT id, email, display_name, role FROM tenant_members
-    WHERE tenant_id=? AND status='active' AND (id=? OR lower(email)=lower(?))
-      AND role IN ('admin','owner','operator','reviewer')`)
-    .bind(tenantId, assignedTo, assignedTo).first<{ id: string; email: string; display_name: string; role: string }>();
+  const member = await resolveRequestedApprovalAssignee(env, tenantId, assignedTo);
   if (!member) throw new Error("Assignee must be an active administrator, owner, operator, or reviewer in this organization");
   const now = new Date().toISOString();
-  const result = await env.DB.prepare(`UPDATE approvals SET assigned_to=?, last_activity_at=?
+  const result = await env.DB.prepare(`UPDATE approvals SET assigned_to=?, assigned_via_delegation_from=?,
+    last_activity_at=?
     WHERE id=? AND tenant_id=? AND status='pending'`)
-    .bind(member.email, now, approvalId, tenantId).run();
+    .bind(member.email, member.delegated ? member.original_member_id : null, now, approvalId, tenantId).run();
   if (result.meta.changes !== 1) throw new Error("Review item is not pending or was not found");
   await audit(env, tenantId, actorId, "approval.assigned", approvalId, {
-    assignedMemberId: member.id, assignedEmail: member.email, assignedRole: member.role
+    requestedMemberId: member.original_member_id, assignedMemberId: member.id,
+    assignedRole: member.role, delegated: Boolean(member.delegated)
   }).run();
-  return { updated: true, assignedTo: member.email, displayName: member.display_name };
+  return { updated: true, assignedTo: member.email, displayName: member.display_name,
+    delegated: Boolean(member.delegated), requestedMemberId: member.original_member_id };
 }
 
 export async function addApprovalMessage(env: Env, tenantId: string, actorId: string, actorEmail: string,

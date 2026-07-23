@@ -16,7 +16,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Opportunities | Manual-process intake, transparent impact/feasibility scoring, qualification, and secure conversion to paused draft processes |
 | Discover | Intake wizard, process templates, baseline capture, and opportunity scoring |
 | Process Studio | Visual topology, explicit execution profile, enforced five-level autonomy, immutable prompt/model/input-output contract releases, publish/rollback, and recurring process schedules with dispatch history |
-| Work Inbox | Evidence and rationale review, governed edit-and-approve, automatic accountable ownership, response SLA/aging, bounded overdue escalation, validated reassignment, comments, information request/response, approval/decline, and audit trail |
+| Work Inbox | Evidence and rationale review, governed edit-and-approve, automatic accountable ownership, scheduled substitute approvers, response SLA/aging, bounded overdue escalation, validated reassignment, comments, information request/response, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, deterministic outcome explanation, redacted evidence export, approved external-action queue, inputs/outputs, failures, and safe replay/recovery |
 | Accountable recovery | Automatically created failure/blocked/deferred tasks with owner, SLA, investigation state, risk acceptance, and completed-run closure proof |
 | Memory governance | Bounded actor-local conversation context plus operating-role inspection, correction, quarantine, restoration, and content deletion without copying message bodies into D1 or KV |
@@ -64,7 +64,7 @@ The process `read_only` operating mode caps any non-observe release at `suggest`
 
 The process `shadow` operating mode is a production-safe learning boundary. It runs the published model as `suggest`, records its proposal, suppresses tool approval/action delivery, and excludes the assistant response from durable actor memory. Authorized reviewers compare that proposal with the DLP-protected actual human outcome using `match`, `partial`, `miss`, or `unsafe` evidence. This lets a customer establish quality before increasing autonomy without presenting a proposal as completed work.
 
-Every runtime-created approval receives a four-hour response deadline and a responsible reviewer. Workrr prefers the configured active support owner and falls back deterministically to an eligible same-tenant owner, administrator, operator, or reviewer without a separate request-time lookup. Work Inbox displays due time, open age, and overdue state. Hourly Cron uses an indexed, 100-item ceiling and a conditional claim so each overdue approval receives one SLA escalation, one metadata-only audit event, and the existing tenant approval notification even when scheduled invocations overlap.
+Every runtime-created approval receives a four-hour response deadline and a responsible reviewer. Workrr prefers the configured active support owner and falls back deterministically to an eligible same-tenant owner, administrator, operator, or reviewer. A single indexed lookup is performed only when an approval is created or manually reassigned; ordinary agent turns do not read delegation state. An active, time-bounded substitute routes that new item one hop to another eligible same-tenant member. Existing items do not move, routing cycles and stale edits are rejected, the inbox identifies the covered person, and audit evidence stores IDs/timing rather than the business reason. Work Inbox displays due time, open age, and overdue state. Hourly Cron uses an indexed, 100-item ceiling and a conditional claim so each overdue approval receives one SLA escalation, one metadata-only audit event, and the existing tenant approval notification even when scheduled invocations overlap.
 
 Authorized decision roles can correct a pending proposal before approval without turning the edit into an action. Corrected output passes tenant output DLP and the immutable release output contract. Corrected tool inputs pass input DLP and the exact snapshotted tool/version JSON Schema; their provider idempotency identity is recomputed from the corrected safe payload. The proposal, execution preview, and tool evidence change only under the displayed optimistic revision. Audit evidence retains the reason, changed invocation IDs, before/after checksums, actor, and revision numbers without duplicating business payloads. Approval and rejection also require that exact revision, preventing a reviewer from deciding content changed in another session.
 
@@ -196,6 +196,12 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 49. `0049_rubric_key_rotation.sql`: publisher key validity, predecessor-signed successor proofs, tenant rollover approval, overlap evidence, and expiry state.
 50. `0050_learning_center.sql`: tenant- and actor-scoped, versioned training acknowledgement evidence.
 51. `0051_help_operations.sql`: tenant support-request lifecycle, response ownership, notification policy, training oversight, and help-content retention.
+52. `0052_execution_recovery.sql`: owned execution recovery tasks, optimistic revisions, and resolution evidence.
+53. `0053_operational_shadow.sql`: production shadow-mode comparison, protected human outcomes, and review evidence.
+54. `0054_release_activations.sql`: governed release activation history and rollback lineage.
+55. `0055_approval_sla.sql`: bounded approval SLA escalation and idempotent Cron evidence.
+56. `0056_approval_proposal_revisions.sql`: optimistic proposal correction revisions and attributable edit metadata.
+57. `0057_approval_delegations.sql`: time-bounded substitute approvers, optimistic delegation revisions, and visible assignment lineage.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

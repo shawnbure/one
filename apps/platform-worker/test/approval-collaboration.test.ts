@@ -7,7 +7,8 @@ type Write = { sql: string; bindings: unknown[] };
 function environment(options?: { member?: Record<string, unknown> | null; approval?: Record<string, unknown> | null }) {
   const writes: Write[] = [];
   const member = options?.member === undefined
-    ? { id: "member-2", email: "reviewer@example.com", display_name: "Reviewer", role: "reviewer" }
+    ? { id: "member-2", email: "reviewer@example.com", display_name: "Reviewer", role: "reviewer",
+      original_member_id: "member-2", delegated: 0 }
     : options.member;
   const approval = options?.approval === undefined
     ? { id: "approval-1", execution_id: "run-1", title: "Review action", status: "pending",
@@ -40,7 +41,8 @@ describe("approval collaboration", () => {
   it("canonicalizes assignment to an active eligible tenant member", async () => {
     const { env, writes } = environment();
     const result = await assignApproval(env, "tenant-1", "actor-1", "approval-1", "member-2");
-    expect(result).toEqual({ updated: true, assignedTo: "reviewer@example.com", displayName: "Reviewer" });
+    expect(result).toEqual({ updated: true, assignedTo: "reviewer@example.com", displayName: "Reviewer",
+      delegated: false, requestedMemberId: "member-2" });
     expect(writes.some(({ sql, bindings }) =>
       sql.includes("UPDATE approvals SET assigned_to") && bindings.includes("reviewer@example.com"))).toBe(true);
     expect(JSON.stringify(writes)).toContain("assignedMemberId");

@@ -165,7 +165,7 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
               <button disabled={busy} onClick={() => void operateAction(action, "cancel")}>Cancel delivery</button>}
           </span>)}
         </div>}
-        <div className="decision-context"><span><ShieldCheck size={17}/><div><strong>{detail.impact} impact</strong><small>{detail.autonomy_level ? `${detail.autonomy_level} autonomy routed this proposal to review` : "Human authorization required by process policy"}</small></div></span><span><UserRound size={17}/><div><strong>{detail.assigned_to ?? "Unassigned"}</strong><small>Assigned reviewer</small></div></span></div>
+        <div className="decision-context"><span><ShieldCheck size={17}/><div><strong>{detail.impact} impact</strong><small>{detail.autonomy_level ? `${detail.autonomy_level} autonomy routed this proposal to review` : "Human authorization required by process policy"}</small></div></span><span><UserRound size={17}/><div><strong>{detail.assigned_to ?? "Unassigned"}</strong><small>{detail.delegated_from_name ? `Covering for ${detail.delegated_from_name}` : "Assigned reviewer"}</small></div></span></div>
         {detail.status === "pending" && <div className={`approval-sla ${detail.overdue ? "overdue" : ""}`}>
           <Clock3 size={17}/><span><strong>{detail.overdue ? "Response SLA overdue" : "Response SLA active"}</strong>
             <small>{detail.due_at ? `Due ${formatDate(detail.due_at)} · open ${formatAge(detail.age_minutes)}` : "No response deadline is configured."}
@@ -238,6 +238,7 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
       <span className={`review-state ${item.review_state}`}>{item.review_state.replaceAll("_", " ")}</span>}</span><small>{item.description ?? "Human authorization requested"}</small><em>{item.action_name.replaceAll("_", " ")} · Execution {item.execution_id.slice(0, 8)}</em></span><span className="work-meta"><small><Clock3 size={13}/>{item.status === "pending" && item.due_at
         ? `${item.overdue ? "Overdue" : "Due"} ${formatDate(item.due_at)}`
         : formatDate(item.requested_at)}</small><strong>{item.assigned_to ?? "Unassigned"}</strong>
+        {item.delegated_from_name && <small>Covering for {item.delegated_from_name}</small>}
         {item.status === "pending" && <em>{formatAge(item.age_minutes)} open</em>}</span><ChevronRight size={18}/></button>) : <div className="work-empty"><Check size={25}/><strong>Nothing waiting here</strong><span>New human checkpoints will be routed into this queue.</span></div>}</div>
   </section>;
 }

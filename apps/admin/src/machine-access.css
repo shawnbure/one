@@ -19,3 +19,15 @@
   font-size: 13px;
 }
 .machine-empty { padding: 22px; color: #64736c; font-size: 13px; }
+.coverage-heading { margin-bottom: 12px; }
+.coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 12px; }
+.coverage-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; }
+.coverage-card > strong { color: #24332d; font-size: 15px; }
+.coverage-card p, .coverage-card small { margin: 0; color: #64736c; font-size: 13px; line-height: 1.55; }
+.coverage-card button { display: inline-flex; align-items: center; gap: 6px; margin-top: auto; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: #355c4c; font-weight: 650; }
+.coverage-state { padding: 4px 8px; border-radius: 999px; background: #eef2f0; color: #586a62; font-size: 11px; font-weight: 750; }
+.coverage-state.active { background: #e3f5ec; color: #176b4a; }
+.invite-modal .coverage-toggle { display: flex; flex-direction: row; align-items: center; gap: 9px;
+  color: #3f5048; font-size: 13px; font-weight: 650; }
+.invite-modal .coverage-toggle input { width: 17px; height: 17px; margin: 0; }

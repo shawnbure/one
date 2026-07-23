@@ -1,6 +1,7 @@
 import type { AgentBlueprint, AutonomyLevel } from "@workrr/contracts";
 import type { Env } from "./types";
 import { emitNotification } from "./notifications";
+import { resolveDefaultApprovalAssignee } from "./approval-delegations";
 
 export type AutonomyDisposition =
   | "observed"
@@ -81,21 +82,17 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
     WHERE tenant_id=? AND execution_id=? AND status='proposed' ORDER BY started_at`)
     .bind(tenantId, executionId).all<Record<string, unknown>>();
   const actionName = proposedActions.length ? "review_proposed_tool_action" : "review_ai_outcome";
+  const assignee = await resolveDefaultApprovalAssignee(env, tenantId);
   const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO approvals
       (id, tenant_id, execution_id, action_name, action_input_json, status, requested_at, title,
-       description, impact, autonomy_level, action_risk, assigned_to, due_at)
+       description, impact, autonomy_level, action_risk, assigned_to, assigned_via_delegation_from, due_at)
       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'medium', ?, 'medium',
-        (SELECT m.email FROM tenant_members m
-          LEFT JOIN tenant_lifecycle_settings l ON l.tenant_id=m.tenant_id
-          WHERE m.tenant_id=? AND m.status='active'
-            AND m.role IN ('admin','owner','operator','reviewer')
-          ORDER BY CASE WHEN m.id=l.support_owner_id THEN 0 WHEN m.role='owner' THEN 1
-            WHEN m.role='admin' THEN 2 WHEN m.role='operator' THEN 3 ELSE 4 END, m.id LIMIT 1),
-        datetime(?, '+4 hours'))`)
+        ?, ?, datetime(?, '+4 hours'))`)
     .bind(approvalId, tenantId, executionId, actionName,
       JSON.stringify({ tools: blueprint.toolPolicies ?? blueprint.tools, proposedActions,
         proposedOutput: output.slice(0, 4000) }), now,
-      `Review ${blueprint.name} proposal`, plan.explanation, plan.effective, tenantId, now).run();
+      `Review ${blueprint.name} proposal`, plan.explanation, plan.effective, assignee?.email ?? null,
+      assignee?.delegated ? assignee.original_member_id : null, now).run();
   await env.DB.batch([
     env.DB.prepare(`UPDATE executions SET status='waiting_approval', autonomy_disposition='waiting_approval',
       approval_id=? WHERE id=? AND tenant_id=?`).bind(approvalId, executionId, tenantId),
@@ -105,7 +102,9 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
       .bind(`audit-autonomy-${executionId}`, tenantId, approvalId,
         JSON.stringify({ executionId, blueprintId: blueprint.id, autonomy: plan.effective,
           tools: blueprint.toolPolicies ?? blueprint.tools,
-          proposedActions: proposedActions.map((item) => item.id) }), now)
+          proposedActions: proposedActions.map((item) => item.id),
+          assignedMemberId: assignee?.delegate_member_id ?? assignee?.original_member_id ?? null,
+          delegated: Boolean(assignee?.delegated) }), now)
   ]);
   if (inserted.meta.changes === 1) {
     try {

@@ -51,6 +51,7 @@ import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConfl
 import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence } from "./execution-evidence";
 import { governExecutionMemory, listExecutionMemory } from "./memory-governance";
 import { getRecoveryOperations, RecoveryConflict, updateRecoveryTask } from "./recovery";
+import { DelegationConflict, listApprovalDelegations, setApprovalDelegation } from "./approval-delegations";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -474,7 +475,7 @@ app.post("/api/notifications/policies/:id/test", requireRoles("admin", "owner"),
   return c.json({ eventId, status: "pending" }, 202);
 });
 
-app.get("/api/members", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+app.get("/api/members", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role, status, created_at, last_seen_at
     FROM tenant_members WHERE tenant_id = ? ORDER BY display_name`).bind(c.get("tenantId")).all();
   return c.json({ data: results });
@@ -504,6 +505,26 @@ app.patch("/api/members/:id", requireRoles("admin"), async (c) => {
   if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "member.updated", "member", memberId, body);
   return c.json({ updated: result.meta.changes === 1 });
 });
+
+app.get("/api/approval-delegations",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
+    c.json({ data: await listApprovalDelegations(c.env, c.get("tenantId")) }));
+
+app.put("/api/approval-delegations/:memberId",
+  requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
+    try {
+      const memberId = c.req.param("memberId");
+      if (!memberId) return c.json({ error: "Member ID is required" }, 400);
+      const data = await setApprovalDelegation(c.env, c.get("tenantId"), c.get("actorId"),
+        c.get("role"), memberId, await c.req.json());
+      return c.json({ data });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Approval delegation could not be saved";
+      return c.json({ error: message }, error instanceof DelegationConflict ? 409 :
+        message.includes("active approval-eligible") ? 404 :
+          message.includes("Only an owner") ? 403 : 400);
+    }
+  });
 
 app.get("/api/service-principals", requireRoles("admin", "owner", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, access_common_name, display_name, role, status, created_at, last_seen_at
@@ -1092,14 +1113,16 @@ app.post("/api/queue-jobs/:id/replay", requireRoles("admin", "owner", "operator"
 
 app.get("/api/approvals", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const status = c.req.query("status");
-  const filter = status && ["pending", "approved", "rejected", "expired"].includes(status) ? " AND status = ?" : "";
-  const statement = c.env.DB.prepare(`SELECT *,
-    CASE WHEN status='pending' AND due_at IS NOT NULL AND datetime(due_at)<datetime('now') THEN 1 ELSE 0 END overdue,
-    MAX(0, CAST((julianday('now')-julianday(requested_at))*1440 AS INTEGER)) age_minutes
-    FROM approvals WHERE tenant_id = ?${filter}
-    ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END,
-      CASE WHEN status='pending' THEN COALESCE(due_at, '9999-12-31') END,
-      COALESCE(last_activity_at, requested_at) DESC LIMIT 100`);
+  const filter = status && ["pending", "approved", "rejected", "expired"].includes(status) ? " AND a.status = ?" : "";
+  const statement = c.env.DB.prepare(`SELECT a.*, origin.display_name delegated_from_name,
+    CASE WHEN a.status='pending' AND a.due_at IS NOT NULL AND datetime(a.due_at)<datetime('now') THEN 1 ELSE 0 END overdue,
+    MAX(0, CAST((julianday('now')-julianday(a.requested_at))*1440 AS INTEGER)) age_minutes
+    FROM approvals a LEFT JOIN tenant_members origin
+      ON origin.id=a.assigned_via_delegation_from AND origin.tenant_id=a.tenant_id
+    WHERE a.tenant_id = ?${filter}
+    ORDER BY CASE WHEN a.status='pending' THEN 0 ELSE 1 END,
+      CASE WHEN a.status='pending' THEN COALESCE(a.due_at, '9999-12-31') END,
+      COALESCE(a.last_activity_at, a.requested_at) DESC LIMIT 100`);
   const { results } = await (filter ? statement.bind(c.get("tenantId"), status) : statement.bind(c.get("tenantId"))).all();
   return c.json({ data: results });
 });
@@ -1107,9 +1130,12 @@ app.get("/api/approvals", requireRoles("admin", "builder", "owner", "operator", 
 app.get("/api/approvals/:id", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const [approval, audit, actions, messages] = await Promise.all([
     c.env.DB.prepare(`SELECT a.*, e.blueprint_id, e.input_preview, e.output_preview, e.model,
+      origin.display_name delegated_from_name,
       CASE WHEN a.status='pending' AND a.due_at IS NOT NULL AND datetime(a.due_at)<datetime('now') THEN 1 ELSE 0 END overdue,
       MAX(0, CAST((julianday('now')-julianday(a.requested_at))*1440 AS INTEGER)) age_minutes
       FROM approvals a JOIN executions e ON e.id = a.execution_id
+      LEFT JOIN tenant_members origin ON origin.id=a.assigned_via_delegation_from
+        AND origin.tenant_id=a.tenant_id
       WHERE a.id = ? AND a.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first(),
     c.env.DB.prepare(`SELECT actor_id, event_type, detail_json, created_at FROM audit_events
       WHERE tenant_id = ? AND ((target_type = 'approval' AND target_id = ?) OR

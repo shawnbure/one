@@ -39,6 +39,8 @@ export interface Approval {
   revision: number;
   proposal_edited_at?: string | null;
   proposal_edited_by?: string | null;
+  assigned_via_delegation_from?: string | null;
+  delegated_from_name?: string | null;
 }
 
 export interface SessionData {
@@ -106,6 +108,21 @@ export interface ApprovalAssignee {
   email: string;
   display_name: string;
   role: "admin" | "owner" | "operator" | "reviewer";
+}
+export interface ApprovalDelegation {
+  tenant_id: string;
+  member_id: string;
+  delegate_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string;
+  enabled: number;
+  revision: number;
+  member_name: string;
+  member_email: string;
+  delegate_name: string;
+  delegate_email: string;
+  active_now: number;
 }
 
 export interface ToolActionDispatch {
@@ -845,7 +862,7 @@ export const api = {
       { method: "POST", body: JSON.stringify({ note }) },
     ),
   assignApproval: (id: string, assignedTo: string) =>
-    request<{ updated: boolean; assignedTo: string; displayName: string }>(
+    request<{ updated: boolean; assignedTo: string; displayName: string; delegated: boolean; requestedMemberId: string }>(
       `/api/approvals/${encodeURIComponent(id)}/assign`,
       { method: "POST", body: JSON.stringify({ assignedTo }) },
     ),
@@ -1049,6 +1066,15 @@ export const api = {
       { method: "POST", body: JSON.stringify(body) },
     ),
   members: () => request<{ data: Member[] }>("/api/members"),
+  approvalDelegations: () =>
+    request<{ data: ApprovalDelegation[] }>("/api/approval-delegations"),
+  setApprovalDelegation: (memberId: string, body: {
+    delegateId: string; startsAt: string; endsAt: string; reason: string;
+    enabled: boolean; expectedRevision?: number;
+  }) => request<{ data: { memberId: string; delegateId: string; startsAt: string;
+    endsAt: string; enabled: boolean; revision: number } }>(
+      `/api/approval-delegations/${encodeURIComponent(memberId)}`,
+      { method: "PUT", body: JSON.stringify(body) }),
   createMember: (body: { email: string; name: string; role: string }) =>
     request<{ id: string; status: string }>("/api/members", {
       method: "POST",
