@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  Component,
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -51,18 +60,110 @@ import "./memory-governance.css";
 import "./actor-release.css";
 import "./actor-adoption.css";
 import "./recovery.css";
-import { WorkInbox } from "./WorkInbox";
-import { ActivityView } from "./ActivityView";
-import { ProcessStudioView } from "./ProcessStudioView";
-import { FoundationView } from "./FoundationViews";
-import { ApiLogsView } from "./ApiLogsView";
-import { CreateProcessWizard } from "./CreateProcessWizard";
-import { TeamRolesView } from "./TeamRolesView";
-import { CustomerSetupView } from "./CustomerSetupView";
-import { NotificationsView } from "./NotificationsView";
-import { UsageView } from "./UsageView";
-import { OpportunitiesView } from "./OpportunitiesView";
-import { HelpCenterView } from "./HelpCenterView";
+
+const WorkInbox = lazy(() =>
+  import("./WorkInbox").then(({ WorkInbox }) => ({ default: WorkInbox })),
+);
+const ActivityView = lazy(() =>
+  import("./ActivityView").then(({ ActivityView }) => ({ default: ActivityView })),
+);
+const ProcessStudioView = lazy(() =>
+  import("./ProcessStudioView").then(({ ProcessStudioView }) => ({
+    default: ProcessStudioView,
+  })),
+);
+const FoundationView = lazy(() =>
+  import("./FoundationViews").then(({ FoundationView }) => ({
+    default: FoundationView,
+  })),
+);
+const ApiLogsView = lazy(() =>
+  import("./ApiLogsView").then(({ ApiLogsView }) => ({ default: ApiLogsView })),
+);
+const CreateProcessWizard = lazy(() =>
+  import("./CreateProcessWizard").then(({ CreateProcessWizard }) => ({
+    default: CreateProcessWizard,
+  })),
+);
+const TeamRolesView = lazy(() =>
+  import("./TeamRolesView").then(({ TeamRolesView }) => ({
+    default: TeamRolesView,
+  })),
+);
+const CustomerSetupView = lazy(() =>
+  import("./CustomerSetupView").then(({ CustomerSetupView }) => ({
+    default: CustomerSetupView,
+  })),
+);
+const NotificationsView = lazy(() =>
+  import("./NotificationsView").then(({ NotificationsView }) => ({
+    default: NotificationsView,
+  })),
+);
+const UsageView = lazy(() =>
+  import("./UsageView").then(({ UsageView }) => ({ default: UsageView })),
+);
+const OpportunitiesView = lazy(() =>
+  import("./OpportunitiesView").then(({ OpportunitiesView }) => ({
+    default: OpportunitiesView,
+  })),
+);
+const HelpCenterView = lazy(() =>
+  import("./HelpCenterView").then(({ HelpCenterView }) => ({
+    default: HelpCenterView,
+  })),
+);
+
+function FeatureLoading({ label }: { label: string }) {
+  return (
+    <section className="feature-loading" role="status" aria-live="polite">
+      <span className="feature-loading-mark" aria-hidden="true" />
+      <div>
+        <strong>Opening {label}</strong>
+        <p>Loading this workspace securely…</p>
+      </div>
+    </section>
+  );
+}
+
+class FeatureBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "This workspace could not be loaded.",
+    };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Admin feature failed to load", error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <section className="feature-load-error" role="alert">
+          <strong>This workspace did not load</strong>
+          <p>
+            Your session is still active. Reload the application to request the
+            workspace again.
+          </p>
+          <button className="primary" onClick={() => window.location.reload()}>
+            Reload application
+          </button>
+        </section>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -358,6 +459,8 @@ export function App() {
               <X size={14} />
             </button>
           )}
+          <FeatureBoundary key={active}>
+            <Suspense fallback={<FeatureLoading label={active} />}>
           {active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
           ) : active === "Notifications" ? (
@@ -661,20 +764,26 @@ export function App() {
               </section>
             </>
           )}
+            </Suspense>
+          </FeatureBoundary>
         </div>
       </main>
 
       {creatingProcess && (
-        <CreateProcessWizard
-          onClose={() => setCreatingProcess(false)}
-          onNotice={setNotice}
-          onCreated={async (id) => {
-            setCreatingProcess(false);
-            await refresh();
-            setStudioProcessId(id);
-            setActive("Processes");
-          }}
-        />
+        <FeatureBoundary>
+          <Suspense fallback={<FeatureLoading label="process builder" />}>
+            <CreateProcessWizard
+              onClose={() => setCreatingProcess(false)}
+              onNotice={setNotice}
+              onCreated={async (id) => {
+                setCreatingProcess(false);
+                await refresh();
+                setStudioProcessId(id);
+                setActive("Processes");
+              }}
+            />
+          </Suspense>
+        </FeatureBoundary>
       )}
 
       {selected && (
