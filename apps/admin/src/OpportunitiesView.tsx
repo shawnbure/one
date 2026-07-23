@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BriefcaseBusiness, CheckCircle2, Gauge, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, CheckCircle2, Download, Gauge, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { api, type ProcessOpportunity, type ProcessTemplate, type SessionData } from "./api";
 import "./opportunities.css";
 
@@ -131,6 +131,8 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
         <button className="primary" disabled={busy === item.id} onClick={() => void convert(item)}>Create paused draft process<ArrowRight size={14}/></button>
       </div>}
       {item.status === "converted" && <button className="converted-link" onClick={() => item.blueprint_id && void onProcessCreated(item.blueprint_id)}>Open {item.blueprint_name || "draft process"}<ArrowRight size={14}/></button>}
+      <a className="opportunity-brief-link" href={`/api/opportunities/${encodeURIComponent(item.id)}/brief`}
+        target="_blank" rel="noreferrer"><Download size={14}/>Open implementation brief</a>
     </article>) : <div className="loading-card">No opportunities captured yet.</div>}</div>
   </section>;
 }

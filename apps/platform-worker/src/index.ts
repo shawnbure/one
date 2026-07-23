@@ -31,6 +31,7 @@ import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
   updateConnectionLifecycle } from "./connection-operations";
 import { convertOpportunity, createOpportunity, listOpportunities, qualifyOpportunity } from "./opportunities";
+import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -400,6 +401,24 @@ app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "ope
 
 app.get("/api/opportunities", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await listOpportunities(c.env, c.get("tenantId")) }));
+
+app.get("/api/opportunities/:id/brief", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  const opportunityId = c.req.param("id");
+  if (!opportunityId) return c.json({ error: "Opportunity id is required" }, 400);
+  const brief = await getOpportunityImplementationBrief(
+    c.env, c.get("tenantId"), opportunityId, c.get("actorEmail")
+  );
+  if (!brief) return c.json({ error: "Opportunity was not found" }, 404);
+  c.header("cache-control", "no-store");
+  c.header("x-content-type-options", "nosniff");
+  if (c.req.query("format") === "json") {
+    c.header("content-disposition", `attachment; filename="workrr-opportunity-${opportunityId}.json"`);
+    return c.json({ data: brief });
+  }
+  c.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
+  c.header("content-disposition", `inline; filename="workrr-opportunity-${opportunityId}.html"`);
+  return c.html(renderOpportunityBriefHtml(brief));
+});
 
 app.post("/api/opportunities", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
   try {

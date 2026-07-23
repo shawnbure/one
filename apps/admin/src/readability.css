@@ -500,6 +500,21 @@ a:focus-visible {
 }
 .connection-lifecycle-form > div { display: flex !important; gap: 7px; }
 .connection-lifecycle-form button { flex: 1; padding: 8px; font-size: 12px; }
+.opportunity-brief-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 8px 0 0;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
 
 @media (max-width: 1200px) {
   .tool-layout { grid-template-columns: 1fr; }
