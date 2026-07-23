@@ -590,7 +590,9 @@ function ScheduleStudio({ processId, executionProfile, data, busy, setBusy, onRe
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  }).format(new Date(value));
 }
 
 function nodeIcon(type: string) {
