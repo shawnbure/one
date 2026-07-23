@@ -63,6 +63,7 @@ export { ProcessWorkflow } from "./workflow";
 export { EvaluationWorkflow } from "./evaluation-workflow";
 export { ActorReleaseRolloutWorkflow } from "./actor-release-rollout-workflow";
 export { ProcessDisposalWorkflow } from "./process-disposal-workflow";
+export { TenantRetentionWorkflow } from "./retention-workflow";
 
 export const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 

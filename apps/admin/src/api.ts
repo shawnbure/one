@@ -481,8 +481,9 @@ export interface RetentionControl {
 }
 export interface RetentionOperationsData {
   control: RetentionControl;
-  runs: Array<{ id: string; status: "completed" | "failed"; evidence_json: string; error: string | null;
-    started_at: string; completed_at: string }>;
+  runs: Array<{ id: string; status: "queued" | "running" | "completed" | "failed";
+    workflow_id: string | null; processed_actors: number; expired_turns: number;
+    evidence_json: string; error: string | null; started_at: string; completed_at: string | null }>;
 }
 export interface RetentionPreview {
   legalHold: boolean;
@@ -1068,7 +1069,7 @@ export const api = {
   }) => request<{ data: RetentionOperationsData }>("/api/governance/retention",
     { method: "PUT", body: JSON.stringify(body) }),
   enforceRetention: (confirmation: string) =>
-    request<{ data: { skipped: boolean; reason?: string; runId?: string } }>(
+    request<{ data: { skipped: boolean; reason?: string; runId?: string; status?: "queued" } }>(
       "/api/governance/retention/enforce", { method: "POST", body: JSON.stringify({ confirmation }) }),
   createKnowledgeSource: async (form: FormData) => {
     const response = await fetch("/api/knowledge-sources", { method: "POST", body: form });

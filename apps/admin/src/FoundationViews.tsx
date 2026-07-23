@@ -1079,7 +1079,8 @@ function Governance({
       const result = await api.enforceRetention(enforceConfirmation);
       setEnforceConfirmation("");
       await loadRetention();
-      onNotice(result.data.skipped ? "Retention enforcement is blocked by tenant legal hold." : "Retention enforcement completed with audit evidence.");
+      onNotice(result.data.skipped ? "Retention enforcement is blocked by tenant legal hold." :
+        "Retention Workflow queued. Progress and audit evidence will update here.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "Retention enforcement failed"); }
     finally { setRetentionBusy(false); }
   }
@@ -1398,6 +1399,15 @@ function Governance({
             <span><strong>{retention.control.last_enforced_at || "Not yet"}</strong><small>last enforced</small></span>
             <span><strong>{retention.runs[0]?.status || "No runs"}</strong><small>latest result</small></span>
           </div>
+          {retention.runs[0] && ["queued", "running"].includes(retention.runs[0].status) && (
+            <div className="retention-run-progress" role="status">
+              <span className="status-dot live"/>
+              <div><strong>Retention Workflow {retention.runs[0].status}</strong>
+                <small>{retention.runs[0].processed_actors.toLocaleString()} durable actors checked ·{" "}
+                  {retention.runs[0].expired_turns.toLocaleString()} conversation turns expired</small></div>
+              <em>Resumable</em>
+            </div>
+          )}
           {canManageRetention && <div className="retention-actions">
             <button disabled={retentionBusy} onClick={() => void saveRetention()}>Save policy</button>
             <input placeholder="Type ENFORCE RETENTION to run now" value={enforceConfirmation}

@@ -1009,6 +1009,17 @@ a:focus-visible {
 .retention-preview strong { color: #21352c; font-size: 14px; }
 .retention-preview small,
 .retention-note { margin-top: 4px; color: #65766e; font-size: 12px; line-height: 1.5; }
+.retention-run-progress {
+  display: flex; align-items: center; gap: 11px; margin: 14px 0; padding: 14px 16px;
+  border: 1px solid #b9dccc; border-radius: 10px; background: #f1faf6;
+}
+.retention-run-progress div { flex: 1; }
+.retention-run-progress strong, .retention-run-progress small { display: block; }
+.retention-run-progress strong { color: #173d2e; font-size: 14px; }
+.retention-run-progress small { margin-top: 3px; color: #405f52; font-size: 13px; line-height: 1.45; }
+.retention-run-progress em {
+  color: #176b4b; font-size: 12px; font-style: normal; font-weight: 800; text-transform: uppercase;
+}
 .retention-actions {
   display: flex;
   flex-wrap: wrap;

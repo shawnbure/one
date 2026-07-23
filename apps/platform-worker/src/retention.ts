@@ -19,7 +19,8 @@ const defaults = {
 export async function getRetentionOperations(env: Env, tenantId: string) {
   const control = await env.DB.prepare(`SELECT * FROM tenant_retention_controls WHERE tenant_id=?`)
     .bind(tenantId).first<Record<string, unknown>>();
-  const { results: runs } = await env.DB.prepare(`SELECT id, status, evidence_json, error, started_at, completed_at
+  const { results: runs } = await env.DB.prepare(`SELECT id, status, workflow_id, processed_actors, expired_turns,
+    evidence_json, error, started_at, completed_at
     FROM retention_enforcement_runs WHERE tenant_id=? ORDER BY started_at DESC LIMIT 10`)
     .bind(tenantId).all();
   return { control: control ?? { tenant_id: tenantId, ...defaults }, runs };
@@ -105,25 +106,79 @@ export async function enforceTenantRetention(env: Env, tenantId: string, now = n
   if (Number(policy.legal_hold)) return { skipped: true, reason: "tenant_legal_hold" };
   const startedAt = now.toISOString();
   const runId = crypto.randomUUID();
+  const cutoffs = cutoffMap(policy, now);
   try {
-    const cutoffs = cutoffMap(policy, now);
-    const { results: instances } = await env.DB.prepare(`SELECT DISTINCT e.instance_key, e.blueprint_id
-      FROM executions e WHERE e.tenant_id=? AND e.instance_key IS NOT NULL
-      AND datetime(e.started_at)<datetime(?)
-      AND NOT EXISTS (SELECT 1 FROM process_retirements r WHERE r.tenant_id=e.tenant_id
-        AND r.blueprint_id=e.blueprint_id AND r.legal_hold=1
-        AND r.status IN ('requested','approved','failed')) LIMIT 201`)
-      .bind(tenantId, cutoffs.conversation).all<{ instance_key: string; blueprint_id: string }>();
-    if (instances.length > 200) throw new Error("More than 200 durable actors require a batched retention Workflow");
-    let conversationTurns = 0;
-    for (let offset = 0; offset < instances.length; offset += 20) {
-      const results = await Promise.all(instances.slice(offset, offset + 20).map(async (item) => {
-        const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, item.instance_key);
-        return agent.expireConversationBefore(tenantId, item.blueprint_id, cutoffs.conversation);
-      }));
-      conversationTurns += results.reduce((sum, result) => sum + result.deleted, 0);
-    }
-    const statements = [
+    await env.DB.prepare(`INSERT INTO retention_enforcement_runs
+      (id, tenant_id, status, workflow_id, cutoffs_json, started_at) VALUES (?, ?, 'queued', ?, ?, ?)`)
+      .bind(runId, tenantId, runId, JSON.stringify(cutoffs), startedAt).run();
+    await env.RETENTION_WORKFLOW.create({ id: runId, params: { tenantId, runId } });
+    await env.DB.prepare(`UPDATE tenant_retention_controls SET last_enforced_at=? WHERE tenant_id=?`)
+      .bind(startedAt, tenantId).run();
+    return { skipped: false, runId, status: "queued" as const };
+  } catch (error) {
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    await env.DB.prepare(`UPDATE retention_enforcement_runs SET status='failed', error=?, completed_at=?
+      WHERE id=? AND tenant_id=? AND status='queued'`)
+      .bind(message, new Date().toISOString(), runId, tenantId).run();
+    throw error;
+  }
+}
+
+export async function markRetentionRunning(env: Env, tenantId: string, runId: string) {
+  await assertRetentionActive(env, tenantId, runId);
+  await env.DB.prepare(`UPDATE retention_enforcement_runs SET status='running'
+    WHERE id=? AND tenant_id=? AND status='queued'`).bind(runId, tenantId).run();
+  return { status: "running" };
+}
+
+export interface RetentionActorBatchItem { instanceKey: string; blueprintId: string; cursor: string }
+
+export async function loadRetentionActorBatch(env: Env, tenantId: string, runId: string,
+  cursor: string, limit = 100): Promise<RetentionActorBatchItem[]> {
+  const run = await assertRetentionActive(env, tenantId, runId);
+  const cutoffs = parseCutoffs(run.cutoffs_json);
+  const { results } = await env.DB.prepare(`SELECT DISTINCT e.instance_key, e.blueprint_id
+    FROM executions e WHERE e.tenant_id=? AND e.instance_key IS NOT NULL
+    AND (e.instance_key || char(31) || e.blueprint_id)>? AND datetime(e.started_at)<datetime(?)
+    AND NOT EXISTS (SELECT 1 FROM process_retirements r WHERE r.tenant_id=e.tenant_id
+      AND r.blueprint_id=e.blueprint_id AND r.legal_hold=1
+      AND r.status IN ('requested','approved','disposing','failed'))
+    ORDER BY e.instance_key, e.blueprint_id LIMIT ?`)
+    .bind(tenantId, cursor, cutoffs.conversation, limit)
+    .all<{ instance_key: string; blueprint_id: string }>();
+  return results.map((item) => ({ instanceKey: item.instance_key, blueprintId: item.blueprint_id,
+    cursor: `${item.instance_key}\u001f${item.blueprint_id}` }));
+}
+
+export async function expireRetentionActorBatch(env: Env, tenantId: string, runId: string,
+  batch: RetentionActorBatchItem[]) {
+  const run = await assertRetentionActive(env, tenantId, runId);
+  const cutoff = parseCutoffs(run.cutoffs_json).conversation;
+  let conversationTurns = 0;
+  for (let offset = 0; offset < batch.length; offset += 20) {
+    const results = await Promise.all(batch.slice(offset, offset + 20).map(async (item) => {
+      const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, item.instanceKey);
+      return agent.expireConversationBefore(tenantId, item.blueprintId, cutoff);
+    }));
+    conversationTurns += results.reduce((sum, result) => sum + result.deleted, 0);
+  }
+  return { durableActors: batch.length, conversationTurns };
+}
+
+export async function recordRetentionProgress(env: Env, tenantId: string, runId: string, cursor: string,
+  counts: { durableActors: number; conversationTurns: number }) {
+  await assertRetentionActive(env, tenantId, runId);
+  await env.DB.prepare(`UPDATE retention_enforcement_runs SET actor_cursor=?, processed_actors=?, expired_turns=?
+    WHERE id=? AND tenant_id=? AND status='running'`)
+    .bind(cursor, counts.durableActors, counts.conversationTurns, runId, tenantId).run();
+  return counts;
+}
+
+export async function finalizeRetentionWorkflow(env: Env, tenantId: string, runId: string,
+  counts: { durableActors: number; conversationTurns: number }) {
+  const run = await assertRetentionActive(env, tenantId, runId);
+  const cutoffs = parseCutoffs(run.cutoffs_json);
+  const statements = [
       env.DB.prepare(`UPDATE executions SET input_preview='[retention expired]', output_preview=NULL, error=NULL
         WHERE tenant_id=? AND datetime(started_at)<datetime(?) AND input_preview!='[retention expired]'
         AND NOT EXISTS (SELECT 1 FROM process_retirements r WHERE r.tenant_id=executions.tenant_id
@@ -154,40 +209,66 @@ export async function enforceTenantRetention(env: Env, tenantId: string, now = n
       env.DB.prepare(`DELETE FROM api_logs WHERE tenant_id=? AND datetime(created_at)<datetime(?)`)
         .bind(tenantId, cutoffs.apiLog)
     ];
-    const results = await env.DB.batch(statements);
+  const results = await env.DB.batch(statements);
+  const completedAt = new Date().toISOString();
     const evidence = {
-      conversationTurns,
+      ...counts,
       executionContent: Number(results[0]?.meta.changes ?? 0),
       approvalContent: Number(results[1]?.meta.changes ?? 0) + Number(results[2]?.meta.changes ?? 0),
       notificationContent: Number(results[3]?.meta.changes ?? 0),
       helpRequestContent: Number(results[4]?.meta.changes ?? 0),
       apiLogs: Number(results[5]?.meta.changes ?? 0),
       auditRetained: true,
-      enforcedAt: startedAt
+      enforcedAt: String(run.started_at)
     };
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO retention_enforcement_runs
-        (id, tenant_id, status, evidence_json, started_at, completed_at)
-        VALUES (?, ?, 'completed', ?, ?, ?)`).bind(runId, tenantId, JSON.stringify(evidence), startedAt, new Date().toISOString()),
-      env.DB.prepare(`UPDATE tenant_retention_controls SET last_enforced_at=? WHERE tenant_id=?`)
-        .bind(startedAt, tenantId),
+  await env.DB.batch([
+      env.DB.prepare(`UPDATE retention_enforcement_runs SET status='completed', actor_cursor=NULL,
+        processed_actors=?, expired_turns=?, evidence_json=?, error=NULL, completed_at=?
+        WHERE id=? AND tenant_id=? AND status='running'`)
+        .bind(counts.durableActors, counts.conversationTurns, JSON.stringify(evidence), completedAt, runId, tenantId),
       audit(env, tenantId, "system", "retention.enforced", evidence)
     ]);
-    return { skipped: false, runId, evidence };
-  } catch (error) {
-    await env.DB.prepare(`INSERT INTO retention_enforcement_runs
-      (id, tenant_id, status, evidence_json, error, started_at, completed_at)
-      VALUES (?, ?, 'failed', '{}', ?, ?, ?)`)
-      .bind(runId, tenantId, String(error).slice(0, 500), startedAt, new Date().toISOString()).run();
-    throw error;
-  }
+  return evidence;
+}
+
+export async function failRetentionWorkflow(env: Env, tenantId: string, runId: string, error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+  await env.DB.prepare(`UPDATE retention_enforcement_runs SET status='failed', error=?, completed_at=?
+    WHERE id=? AND tenant_id=? AND status IN ('queued','running')`)
+    .bind(message, new Date().toISOString(), runId, tenantId).run();
+  return { status: "failed", error: message };
 }
 
 export async function enforceAllTenantRetention(env: Env, now = new Date()) {
   const { results } = await env.DB.prepare(`SELECT tenant_id FROM tenant_retention_controls
     WHERE legal_hold=0 AND (last_enforced_at IS NULL OR datetime(last_enforced_at)<datetime(?)) LIMIT 20`)
     .bind(new Date(now.getTime() - 20 * 60 * 60_000).toISOString()).all<{ tenant_id: string }>();
-  return Promise.allSettled(results.map((item) => enforceTenantRetention(env, item.tenant_id, now)));
+  const settled = [];
+  for (const item of results) {
+    settled.push(await Promise.resolve(enforceTenantRetention(env, item.tenant_id, now))
+      .then((value) => ({ status: "fulfilled" as const, value }))
+      .catch((reason) => ({ status: "rejected" as const, reason })));
+  }
+  return settled;
+}
+
+async function assertRetentionActive(env: Env, tenantId: string, runId: string) {
+  const run = await env.DB.prepare(`SELECT r.* FROM retention_enforcement_runs r
+    JOIN tenant_retention_controls c ON c.tenant_id=r.tenant_id
+    WHERE r.id=? AND r.tenant_id=? AND r.status IN ('queued','running') AND c.legal_hold=0`)
+    .bind(runId, tenantId).first<Record<string, unknown>>();
+  if (!run) throw new Error("Retention Workflow is not active or is protected by tenant legal hold");
+  return run;
+}
+
+function parseCutoffs(value: unknown) {
+  const parsed = JSON.parse(String(value ?? "{}")) as Record<string, unknown>;
+  for (const key of ["conversation", "execution", "approval", "notification", "helpRequest", "apiLog"]) {
+    if (typeof parsed[key] !== "string" || Number.isNaN(Date.parse(parsed[key] as string))) {
+      throw new Error("Retention Workflow cutoff snapshot is invalid");
+    }
+  }
+  return parsed as Record<"conversation" | "execution" | "approval" | "notification" | "helpRequest" | "apiLog", string>;
 }
 
 async function control(env: Env, tenantId: string) {
