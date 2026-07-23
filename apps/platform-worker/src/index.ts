@@ -31,6 +31,8 @@ import { getProviderAcceptance, runMicrosoftAcceptance } from "./provider-accept
 import { getPlatformVersion } from "./platform-version";
 import { clearAutonomySafetyCap, evaluateAllAutonomySafety, getAutonomySafety,
   updateAutonomySafetyPolicy } from "./autonomy-safety";
+import { expireAccessSessions, getAccessOperations, reviewEmergencyAccessEvent,
+  updateEmergencyAccessPlan } from "./access-operations";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
@@ -118,6 +120,31 @@ app.get("/api/session", async (c) => {
     tenantId: c.get("tenantId"), tenantName: tenant?.name ?? c.get("tenantId"), accentColor: tenant?.accent_color ?? "#1f7a5b",
     environment: c.env.ENVIRONMENT, appDomain: c.env.APP_DOMAIN
   });
+});
+
+app.get("/api/access/operations", requireRoles("admin", "owner", "viewer"), async (c) =>
+  c.json({ data: await getAccessOperations(c.env, c.get("tenantId")) }));
+
+app.put("/api/access/emergency-plan", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await updateEmergencyAccessPlan(c.env, c.get("tenantId"), c.get("actorId"),
+      await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Emergency access plan could not be saved";
+    return c.json({ error: message }, message.includes("changed") ? 409 : 400);
+  }
+});
+
+app.post("/api/access/emergency-events/:eventId/review", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const eventId = c.req.param("eventId");
+    if (!eventId) return c.json({ error: "Emergency access event ID is required" }, 400);
+    return c.json({ data: await reviewEmergencyAccessEvent(c.env, c.get("tenantId"), c.get("actorId"),
+      eventId, await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Emergency access event could not be reviewed";
+    return c.json({ error: message }, message.includes("changed") ? 409 : 400);
+  }
 });
 
 app.get("/api/help-center", async (c) =>
@@ -2210,7 +2237,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       enqueueDueProcessDisposals(env, now),
       enforceAllTenantRetention(env, now),
       expireRubricPublisherKeys(env, now),
-      evaluateAllAutonomySafety(env, now)
+      evaluateAllAutonomySafety(env, now),
+      expireAccessSessions(env, now)
     ]));
   }
 };

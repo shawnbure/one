@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bot, CalendarClock, Check, LockKeyhole, Plus, ShieldCheck, UserRound, Users, X } from "lucide-react";
-import { api, type ApprovalDelegation, type Member, type ServicePrincipal, type SessionData } from "./api";
+import { AlertTriangle, Bot, CalendarClock, Check, KeyRound, Laptop, LockKeyhole, Plus, ShieldCheck, UserRound, Users, X } from "lucide-react";
+import { api, type AccessOperationsData, type ApprovalDelegation, type Member, type ServicePrincipal, type SessionData } from "./api";
 import "./machine-access.css";
 
 const roleInfo: Record<string, string> = {
@@ -17,6 +17,13 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
   const [members, setMembers] = useState<Member[]>([]);
   const [machines, setMachines] = useState<ServicePrincipal[]>([]);
   const [delegations, setDelegations] = useState<ApprovalDelegation[]>([]);
+  const [access, setAccess] = useState<AccessOperationsData | null>(null);
+  const [emergencyMember, setEmergencyMember] = useState("");
+  const [emergencyProcedure, setEmergencyProcedure] = useState("");
+  const [emergencyEvidence, setEmergencyEvidence] = useState("");
+  const [emergencyReviewDue, setEmergencyReviewDue] = useState("");
+  const [emergencyEnabled, setEmergencyEnabled] = useState(true);
+  const [eventDrafts, setEventDrafts] = useState<Record<string, { classification: "drill" | "incident" | "false_positive"; note: string }>>({});
   const [modal, setModal] = useState<"member" | "machine" | "delegation" | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -31,11 +38,22 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
   const [delegationEnabled, setDelegationEnabled] = useState(true);
   const privileged = ["admin", "owner"].includes(session?.user.role ?? "");
   async function load() { try {
-    const [people, coverage, principals] = await Promise.all([
+    const [people, coverage, principals, accessData] = await Promise.all([
       api.members(), api.approvalDelegations(),
-      ["admin", "owner", "viewer"].includes(session?.user.role ?? "") ? api.servicePrincipals() : Promise.resolve({ data: [] })
+      ["admin", "owner", "viewer"].includes(session?.user.role ?? "") ? api.servicePrincipals() : Promise.resolve({ data: [] }),
+      ["admin", "owner", "viewer"].includes(session?.user.role ?? "") ? api.accessOperations() : Promise.resolve({ data: null })
     ]);
     setMembers(people.data); setDelegations(coverage.data); setMachines(principals.data);
+    setAccess(accessData.data);
+    if (accessData.data?.plan) {
+      setEmergencyMember(accessData.data.plan.member_id);
+      setEmergencyProcedure(accessData.data.plan.procedure_summary);
+      setEmergencyEvidence(accessData.data.plan.evidence_reference);
+      setEmergencyReviewDue(accessData.data.plan.review_due_at.slice(0, 10));
+      setEmergencyEnabled(Boolean(accessData.data.plan.enabled));
+    } else if (accessData.data) {
+      setEmergencyReviewDue(new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10));
+    }
   } catch (error) { onNotice(error instanceof Error ? error.message : "Could not load identities"); } }
   useEffect(() => { void load(); }, []);
   async function invite() { try { await api.createMember({ name, email, role }); onNotice(`${name} added. Cloudflare Access must also allow this email.`);
@@ -65,6 +83,19 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
     });
     onNotice("Approval coverage saved and audited."); setModal(null); await load();
   } catch (error) { onNotice(error instanceof Error ? error.message : "Could not save approval coverage"); } }
+  async function saveEmergencyPlan() { try {
+    const response = await api.updateEmergencyAccessPlan({
+      memberId: emergencyMember, procedureSummary: emergencyProcedure,
+      evidenceReference: emergencyEvidence, reviewDueAt: new Date(`${emergencyReviewDue}T23:59:59Z`).toISOString(),
+      enabled: emergencyEnabled, expectedRevision: access?.plan?.revision ?? 0
+    });
+    setAccess(response.data); onNotice("Emergency access plan saved and audited.");
+  } catch (error) { onNotice(error instanceof Error ? error.message : "Could not save emergency access plan"); } }
+  async function reviewEmergencyEvent(eventId: string, revision: number) { try {
+    const draft = eventDrafts[eventId] ?? { classification: "drill" as const, note: "" };
+    const response = await api.reviewEmergencyAccessEvent(eventId, { ...draft, expectedRevision: revision });
+    setAccess(response.data); onNotice("Emergency session classified and audited.");
+  } catch (error) { onNotice(error instanceof Error ? error.message : "Could not review emergency session"); } }
 
   return <section className="team-page">
     <div className="page-title"><div><span className="eyebrow"><Users size={14}/> ORGANIZATION ACCESS</span><h1>Team & roles</h1>
@@ -102,6 +133,14 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
         <button className={`member-status ${machine.status}`} disabled={!privileged} onClick={() => void updateMachine(machine.id,
           { status: machine.status === "active" ? "suspended" : "active" })}><i/>{machine.status}</button>
         <span>{machine.last_seen_at ?? "Never"}</span></div>)}</div>
+    {access && <AccessOperations access={access} session={session} privileged={privileged}
+      memberId={emergencyMember} setMemberId={setEmergencyMember}
+      procedure={emergencyProcedure} setProcedure={setEmergencyProcedure}
+      evidence={emergencyEvidence} setEvidence={setEmergencyEvidence}
+      reviewDue={emergencyReviewDue} setReviewDue={setEmergencyReviewDue}
+      enabled={emergencyEnabled} setEnabled={setEmergencyEnabled}
+      drafts={eventDrafts} setDrafts={setEventDrafts}
+      savePlan={saveEmergencyPlan} reviewEvent={reviewEmergencyEvent}/>}
     <div className="roles-grid">{Object.entries(roleInfo).map(([roleName, description]) => <article className="panel" key={roleName}>
       <span><ShieldCheck size={17}/></span><div><strong>{roleName}</strong><small>{description}</small></div></article>)}</div>
     {modal === "member" && <IdentityModal title="Add organization member" icon={<UserRound size={20}/>}
@@ -137,6 +176,71 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
     </IdentityModal>}
   </section>;
 }
+function AccessOperations({ access, session, privileged, memberId, setMemberId, procedure, setProcedure, evidence, setEvidence,
+  reviewDue, setReviewDue, enabled, setEnabled, drafts, setDrafts, savePlan, reviewEvent }: {
+  access: AccessOperationsData; session: SessionData | null; privileged: boolean;
+  memberId: string; setMemberId: (value: string) => void; procedure: string; setProcedure: (value: string) => void;
+  evidence: string; setEvidence: (value: string) => void; reviewDue: string; setReviewDue: (value: string) => void;
+  enabled: boolean; setEnabled: (value: boolean) => void;
+  drafts: Record<string, { classification: "drill" | "incident" | "false_positive"; note: string }>;
+  setDrafts: (value: Record<string, { classification: "drill" | "incident" | "false_positive"; note: string }>) => void;
+  savePlan: () => Promise<void>; reviewEvent: (id: string, revision: number) => Promise<void>;
+}) {
+  const openEvents = access.events.filter((event) => event.status === "open");
+  const overdue = Boolean(access.plan && new Date(access.plan.review_due_at) < new Date());
+  return <div className="access-ops">
+    <div className="machine-heading"><div><span className="eyebrow"><Laptop size={14}/> ACCESS EVIDENCE</span>
+      <h2>Recent authenticated sessions</h2>
+      <p>Privacy-bounded evidence from Cloudflare Access. Session keys are hashed; IP addresses and raw browser strings are not stored.</p></div></div>
+    <div className="session-grid">
+      {access.sessions.length === 0 && <div className="panel machine-empty">Session evidence will appear after an authenticated request.</div>}
+      {access.sessions.slice(0, 12).map((item) => <article className="session-card panel" key={item.id}>
+        <span className={`session-kind ${item.identity_type}`}>{item.identity_type}</span>
+        <strong>{item.actor_name}</strong><small>{item.actor_email}</small>
+        <dl><div><dt>Client</dt><dd>{item.client_label}</dd></div>
+          <div><dt>Edge</dt><dd>{[item.country_code, item.colo_code].filter(Boolean).join(" · ") || "Not reported"}</dd></div>
+          <div><dt>Last seen</dt><dd>{formatMoment(item.last_seen_at)}</dd></div>
+          <div><dt>Heartbeats</dt><dd>{item.request_count}</dd></div></dl>
+      </article>)}
+    </div>
+    <div className={`emergency-panel panel ${openEvents.length || overdue ? "attention" : ""}`}>
+      <div className="emergency-title"><span><KeyRound size={20}/></span><div><h2>Emergency administrator</h2>
+        <p>A separate Workrr administrator that still must pass Cloudflare Access. Every new session opens a review item.</p></div>
+        {(openEvents.length > 0 || overdue) && <b><AlertTriangle size={14}/>{openEvents.length ? `${openEvents.length} open review` : "Review overdue"}</b>}</div>
+      <div className="emergency-form">
+        <label>Dedicated administrator<select value={memberId} disabled={!privileged} onChange={(event) => setMemberId(event.target.value)}>
+          <option value="">Choose a separate admin</option>
+          {access.eligibleAdmins.filter((admin) => admin.id !== session?.user.id).map((admin) =>
+            <option key={admin.id} value={admin.id}>{admin.display_name} · {admin.email}</option>)}</select></label>
+        <label>Evidence reference<input value={evidence} disabled={!privileged} placeholder="Password vault item or runbook reference"
+          onChange={(event) => setEvidence(event.target.value)}/></label>
+        <label>Review due<input type="date" value={reviewDue} disabled={!privileged} onChange={(event) => setReviewDue(event.target.value)}/></label>
+        <label className="procedure">Recovery procedure<textarea value={procedure} disabled={!privileged} rows={3}
+          placeholder="Describe who may authorize use, how Access is recovered, and the required follow-up."
+          onChange={(event) => setProcedure(event.target.value)}/></label>
+        {privileged && <div className="emergency-actions"><label><input type="checkbox" checked={enabled}
+          onChange={(event) => setEnabled(event.target.checked)}/>Monitor this identity</label>
+          <button className="primary" disabled={!memberId || procedure.trim().length < 20 || evidence.trim().length < 5 || !reviewDue}
+            onClick={() => void savePlan()}><Check size={15}/>Save plan</button></div>}
+      </div>
+      {access.events.length > 0 && <div className="emergency-events"><h3>Emergency session reviews</h3>
+        {access.events.map((event) => {
+          const draft = drafts[event.id] ?? { classification: "drill" as const, note: "" };
+          return <article key={event.id} className={event.status === "open" ? "open" : ""}>
+            <div><strong>{event.member_name}</strong><small>{formatMoment(event.observed_at)} · {event.client_label} · {[event.country_code, event.colo_code].filter(Boolean).join(" / ") || "edge unknown"}</small></div>
+            {event.status === "reviewed" ? <span className="reviewed">Reviewed · {event.classification?.replace("_", " ")}</span> :
+              privileged ? <div className="event-review"><select value={draft.classification} onChange={(e) =>
+                setDrafts({ ...drafts, [event.id]: { ...draft, classification: e.target.value as typeof draft.classification } })}>
+                <option value="drill">Planned drill</option><option value="incident">Incident</option><option value="false_positive">False positive</option></select>
+                <input value={draft.note} placeholder="Review note (10+ characters)" onChange={(e) =>
+                  setDrafts({ ...drafts, [event.id]: { ...draft, note: e.target.value } })}/>
+                <button disabled={draft.note.trim().length < 10} onClick={() => void reviewEvent(event.id, event.revision)}>Complete review</button></div> :
+                <span className="needs-review">Needs admin review</span>}
+          </article>;
+        })}</div>}
+    </div>
+  </div>;
+}
 
 function IdentityTable({ members, session, update }: { members: Member[]; session: SessionData | null;
   update: (id: string, body: { role?: string; status?: string }) => Promise<void> }) {
@@ -164,4 +268,7 @@ function localDateTime(date: Date) {
 function formatCoverage(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
     .format(new Date(value));
+}
+function formatMoment(value: string) {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }

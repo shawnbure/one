@@ -732,6 +732,27 @@ export interface ServicePrincipal {
   created_at: string;
   last_seen_at: string | null;
 }
+export interface AccessOperationsData {
+  sessions: Array<{
+    id: string; actor_id: string; identity_type: "human" | "service";
+    actor_name: string; actor_email: string; client_label: string;
+    country_code: string | null; colo_code: string | null; issued_at: string | null;
+    expires_at: string | null; first_seen_at: string; last_seen_at: string; request_count: number;
+  }>;
+  plan: null | {
+    tenant_id: string; member_id: string; member_name: string; member_email: string;
+    procedure_summary: string; evidence_reference: string; review_due_at: string;
+    enabled: number; revision: number; updated_at: string;
+  };
+  events: Array<{
+    id: string; member_id: string; member_name: string; access_session_id: string;
+    status: "open" | "reviewed"; classification: "drill" | "incident" | "false_positive" | null;
+    review_note: string | null; reviewer_name: string | null; reviewed_at: string | null;
+    observed_at: string; revision: number; client_label: string;
+    country_code: string | null; colo_code: string | null;
+  }>;
+  eligibleAdmins: Array<{ id: string; display_name: string; email: string }>;
+}
 export interface ValueData {
   totals: { items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number };
   byProcess: Array<Record<string, string | number>>;
@@ -1330,6 +1351,18 @@ export const api = {
       body: JSON.stringify(body),
     }),
   servicePrincipals: () => request<{ data: ServicePrincipal[] }>("/api/service-principals"),
+  accessOperations: () => request<{ data: AccessOperationsData }>("/api/access/operations"),
+  updateEmergencyAccessPlan: (body: {
+    memberId: string; procedureSummary: string; evidenceReference: string;
+    reviewDueAt: string; enabled: boolean; expectedRevision: number;
+  }) => request<{ data: AccessOperationsData }>("/api/access/emergency-plan", {
+    method: "PUT", body: JSON.stringify(body),
+  }),
+  reviewEmergencyAccessEvent: (eventId: string, body: {
+    classification: "drill" | "incident" | "false_positive"; note: string; expectedRevision: number;
+  }) => request<{ data: AccessOperationsData }>(
+    `/api/access/emergency-events/${encodeURIComponent(eventId)}/review`,
+    { method: "POST", body: JSON.stringify(body) }),
   createServicePrincipal: (body: { commonName: string; displayName: string; role: "operator" | "viewer" }) =>
     request<{ id: string; status: string }>("/api/service-principals", {
       method: "POST", body: JSON.stringify(body),

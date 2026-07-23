@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Context, Next } from "hono";
 import type { Env } from "./types";
+import { recordAccessSession, sessionEvidenceId, type AccessEvidence } from "./access-operations";
 
 export const roles = ["admin", "builder", "owner", "operator", "reviewer", "viewer", "consumer"] as const;
 export type Role = (typeof roles)[number];
@@ -21,6 +22,7 @@ interface MemberRow {
   role: Role;
   identity_type: "human" | "service";
 }
+type ResolvedIdentity = MemberRow & { accessEvidence: AccessEvidence };
 
 type AppContext = Context<{ Bindings: Env; Variables: AuthVariables }>;
 
@@ -33,12 +35,19 @@ export async function requireIdentity(c: AppContext, next: Next): Promise<Respon
   c.set("actorName", identity.display_name);
   c.set("role", identity.role);
   const identityTable = identity.identity_type === "service" ? "access_service_principals" : "tenant_members";
-  await c.env.DB.prepare(`UPDATE ${identityTable} SET last_seen_at = ? WHERE id = ?`)
-    .bind(new Date().toISOString(), identity.id).run();
+  const now = new Date().toISOString();
+  c.executionCtx.waitUntil(Promise.all([
+    c.env.DB.prepare(`UPDATE ${identityTable} SET last_seen_at = ? WHERE id = ?
+      AND (last_seen_at IS NULL OR datetime(last_seen_at) <= datetime(?, '-15 minutes'))`)
+      .bind(now, identity.id, now).run(),
+    recordAccessSession(c.env, c.req.raw, identity, identity.accessEvidence)
+  ]).catch((error) => {
+    console.error(JSON.stringify({ event: "access_evidence_write_failed", error: String(error) }));
+  }));
   await next();
 }
 
-async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
+async function resolveIdentity(c: AppContext): Promise<ResolvedIdentity | null> {
   const localDevelopment = c.env.ENVIRONMENT === "development" && c.env.LOCAL_DEV === "true";
   if (c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD && !localDevelopment) {
     const token = c.req.header("cf-access-jwt-assertion");
@@ -49,7 +58,17 @@ async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
         issuer,
         audience: c.env.ACCESS_AUD
       });
-      return resolveAccessPrincipal(c.env, payload);
+      const principal = await resolveAccessPrincipal(c.env, payload);
+      if (!principal) return null;
+      const issuedAt = typeof payload.iat === "number" ? new Date(payload.iat * 1000).toISOString() : null;
+      const expiresAt = typeof payload.exp === "number" ? new Date(payload.exp * 1000).toISOString() : null;
+      const sessionId = await sessionEvidenceId([
+        principal.tenant_id, principal.id, payload.sub, payload.iat,
+        typeof payload.common_name === "string" ? payload.common_name : null, c.env.ACCESS_AUD
+      ]);
+      return { ...principal, accessEvidence: {
+        sessionId, issuedAt, expiresAt, identityType: principal.identity_type
+      } };
     } catch (error) {
       console.warn(JSON.stringify({ event: "access_token_rejected", error: error instanceof Error ? error.message : String(error) }));
       return null;
@@ -59,14 +78,14 @@ async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
   if (c.env.ENVIRONMENT !== "development") return null;
   const email = c.req.header("x-workrr-user") ?? "shawnbure@outlook.com";
   const member = await membershipByEmail(c.env, email);
-  if (member) return member;
+  if (member) return withLocalEvidence(member, c.req.raw);
 
   // Local-only compatibility for a newly bootstrapped developer database.
   const tenantId = c.req.header("x-workrr-tenant") ?? "demo";
   const requestedRole = c.req.header("x-workrr-role");
   const role: Role = requestedRole && roles.includes(requestedRole as Role) ? requestedRole as Role : "admin";
-  return { id: "local-admin", tenant_id: tenantId, email, display_name: "Local Administrator", role,
-    identity_type: "human" };
+  return withLocalEvidence({ id: "local-admin", tenant_id: tenantId, email,
+    display_name: "Local Administrator", role, identity_type: "human" }, c.req.raw);
 }
 
 async function membershipByEmail(env: Env, email: string): Promise<MemberRow | null> {
@@ -88,6 +107,17 @@ export async function resolveAccessPrincipal(env: Env, payload: Record<string, u
 
 function normalizeIssuer(value: string): string {
   return value.startsWith("https://") ? value.replace(/\/$/, "") : `https://${value.replace(/\/$/, "")}`;
+}
+
+async function withLocalEvidence(member: MemberRow, request: Request): Promise<ResolvedIdentity> {
+  return { ...member, accessEvidence: {
+    sessionId: await sessionEvidenceId([
+      "local-development", member.tenant_id, member.id, request.headers.get("user-agent")
+    ]),
+    issuedAt: null,
+    expiresAt: null,
+    identityType: member.identity_type
+  } };
 }
 
 export function requireRoles(...allowed: Role[]) {
