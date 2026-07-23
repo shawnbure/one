@@ -11,6 +11,7 @@ export interface OverviewData {
   completed7d: number;
   failed7d: number;
   processRuns: Record<string, number>;
+  usage7d: { input_tokens: number; output_tokens: number; total_tokens: number };
 }
 
 export interface Approval {
@@ -38,6 +39,9 @@ export interface ApprovalDetail extends Approval {
   input_preview: string;
   output_preview: string | null;
   model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
 }
 
 export interface AuditEvent {
@@ -57,6 +61,9 @@ export interface Execution {
   input_preview: string;
   output_preview: string | null;
   model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
   started_at: string;
   completed_at: string | null;
   error: string | null;

@@ -1,0 +1,130 @@
+/* Accessibility/readability layer. Keep this import last so new product surfaces inherit it. */
+:root {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  --ink: #15201c;
+  --muted: #56645e;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body { color: var(--ink); }
+p, small, dt { color: var(--muted); }
+
+/* The initial visual prototype used 6–9px metadata. Product UI must remain readable at 100% zoom. */
+small,
+label,
+dt,
+.eyebrow,
+.crumb,
+.status,
+.healthy,
+.connection-state,
+.runs-head,
+.members-head,
+.wizard-progress small,
+.topology-step small,
+.release-version small,
+.api-head,
+.webhook-row small {
+  font-size: 11px !important;
+  line-height: 1.45;
+}
+
+button,
+input,
+textarea,
+select,
+.tags i,
+.process-stat small,
+.process-copy small,
+.work-copy em,
+.work-meta small,
+.run-row,
+.run-row small,
+.run-heading p,
+.run-heading code,
+.run-facts strong,
+.payload-card p,
+.trace-line strong,
+.trace-line small,
+.portfolio-card p,
+.portfolio-card dt,
+.portfolio-card dd,
+.open-studio,
+.studio-title p,
+.release-chip strong,
+.section-head p,
+.topology-step strong,
+.configuration dt,
+.configuration dd,
+.configuration h3,
+.authorized-tool,
+.behavior-form label,
+.behavior-form textarea,
+.behavior-form input,
+.behavior-form select,
+.release-copy small,
+.release-copy em,
+.release-row > button,
+.active-label,
+.foundation-card > p,
+.foundation-card dt,
+.foundation-card dd,
+.api-row,
+.api-row button,
+.webhook-row strong,
+.member-row,
+.member-row strong,
+.member-row small,
+.roles-grid strong,
+.roles-grid small,
+.wizard-step > p,
+.wizard-step label,
+.wizard-step input,
+.wizard-step textarea,
+.wizard-step select,
+.template-grid strong,
+.template-grid small,
+.template-grid em,
+.definition-summary small,
+.definition-summary strong {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+
+button,
+input,
+select { min-height: 36px; }
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgba(47, 128, 100, .28);
+  outline-offset: 2px;
+}
+
+.content { max-width: 1600px; }
+.panel { box-shadow: 0 1px 3px rgba(20, 37, 31, .08); }
+.metrics p,
+.health-row,
+.approval > p { font-size: 12px; }
+.process-copy strong,
+.work-copy strong { font-size: 13px; }
+.run-facts { grid-template-columns: repeat(5, 1fr); }
+
+@media (max-width: 1200px) {
+  body { min-width: 980px; }
+  .shell { grid-template-columns: 220px 1fr; }
+  aside { width: 220px; }
+}

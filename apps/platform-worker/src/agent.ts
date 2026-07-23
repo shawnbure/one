@@ -41,7 +41,7 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     this.setState({ ...this.state, blueprintId: bundle.blueprintId, releaseId: bundle.releaseId });
   }
 
-  async execute(input: string, modelProfile: string): Promise<{ output: string; model: string; turnCount: number }> {
+  async execute(input: string, modelProfile: string): Promise<{ output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; turnCount: number }> {
     const row = this.sql<{ bundle_json: string }>`SELECT bundle_json FROM prompt_bundle WHERE release_id = ${this.state.releaseId}`[0];
     if (!row) throw new Error("Prompt release has not been installed on this agent instance");
 

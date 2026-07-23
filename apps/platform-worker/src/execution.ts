@@ -31,7 +31,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   if (blueprint.executionProfile === "instant") {
     const prompt = await requiredPrompt(env, promptReleaseId);
     const result = await runModel(env, blueprint.modelProfile, prompt, request.input);
-    await complete(env, executionId, result.output, result.model);
+    await complete(env, executionId, result);
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", ...result, startedAt };
   }
 
@@ -40,7 +40,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     agent.installPromptBundle(await requiredPrompt(env, promptReleaseId));
   }
   const result = await agent.execute(request.input, blueprint.modelProfile);
-  await complete(env, executionId, result.output, result.model);
+  await complete(env, executionId, result);
   return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output: result.output, model: result.model, startedAt };
 }
 
@@ -54,7 +54,8 @@ async function markStatus(env: Env, id: string, status: string): Promise<void> {
   await env.DB.prepare("UPDATE executions SET status = ? WHERE id = ?").bind(status, id).run();
 }
 
-async function complete(env: Env, id: string, output: string, model: string): Promise<void> {
-  await env.DB.prepare("UPDATE executions SET status = 'completed', output_preview = ?, model = ?, completed_at = ? WHERE id = ?")
-    .bind(output.slice(0, 1000), model, new Date().toISOString(), id).run();
+async function complete(env: Env, id: string, result: { output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number }): Promise<void> {
+  await env.DB.prepare(`UPDATE executions SET status = 'completed', output_preview = ?, model = ?, input_tokens = ?,
+    output_tokens = ?, total_tokens = ?, completed_at = ? WHERE id = ?`)
+    .bind(result.output.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens, new Date().toISOString(), id).run();
 }

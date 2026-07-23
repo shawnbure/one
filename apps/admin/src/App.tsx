@@ -39,6 +39,7 @@ import "./live.css";
 import "./wizard.css";
 import "./team.css";
 import "./export.css";
+import "./readability.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";

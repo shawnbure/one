@@ -11,11 +11,11 @@ export async function runModel(
   prompt: PromptBundle,
   input: string,
   sessionAffinity?: string
-): Promise<{ output: string; model: string }> {
+): Promise<{ output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number }> {
   const selected = modelProfiles[(profile in modelProfiles ? profile : "balanced") as ModelProfileName];
   const system = [prompt.systemPrompt, ...prompt.instructions, ...prompt.guardrails.map((item) => `Guardrail: ${item}`)].join("\n");
   const workersAI = createWorkersAI({ binding: env.AI });
-  const { text } = await generateText({
+  const { text, usage } = await generateText({
     model: workersAI(selected.model, sessionAffinity ? { sessionAffinity } : {}),
     system,
     prompt: input
@@ -23,6 +23,9 @@ export async function runModel(
 
   return {
     output: text || "The model returned no text response.",
-    model: selected.model
+    model: selected.model,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    totalTokens: usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
   };
 }
