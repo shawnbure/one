@@ -12,6 +12,17 @@ export interface OverviewData {
   failed7d: number;
   processRuns: Record<string, number>;
   usage7d: { input_tokens: number; output_tokens: number; total_tokens: number };
+  operationalHealth: {
+    windowDays: number;
+    terminalRuns: number;
+    successRate: number | null;
+    p95ResponseMs: number | null;
+    latencySamples: number;
+    activeDurableWork: number;
+    activeQueueJobs: number;
+    queueAttention: number;
+    status: "healthy" | "attention" | "unobserved";
+  };
 }
 
 export interface Approval {

@@ -6,6 +6,7 @@ import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionIn
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease, rollbackRelease } from "./studio";
+import { getOverviewData } from "./overview";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
@@ -936,27 +937,7 @@ app.post("/api/processes/:id/releases/:releaseId/rollback", requireRoles("admin"
 });
 
 app.get("/api/overview", async (c) => {
-  const tenantId = c.get("tenantId");
-  const [processes, runs, processRuns, approvals, usage] = await Promise.all([
-    c.env.DB.prepare("SELECT COUNT(*) count FROM agent_blueprints WHERE tenant_id = ? AND status = 'active'").bind(tenantId).first<{ count: number }>(),
-    c.env.DB.prepare("SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND started_at >= datetime('now','-7 days') GROUP BY status").bind(tenantId).all(),
-    c.env.DB.prepare("SELECT blueprint_id, COUNT(*) count FROM executions WHERE tenant_id = ? AND started_at >= datetime('now','-7 days') GROUP BY blueprint_id").bind(tenantId).all<{ blueprint_id: string; count: number }>(),
-    c.env.DB.prepare("SELECT COUNT(*) count FROM approvals WHERE tenant_id = ? AND status = 'pending'").bind(tenantId).first<{ count: number }>(),
-    c.env.DB.prepare(`SELECT COALESCE(SUM(input_tokens),0) input_tokens, COALESCE(SUM(output_tokens),0) output_tokens,
-      COALESCE(SUM(total_tokens),0) total_tokens FROM executions WHERE tenant_id = ? AND started_at >= datetime('now','-7 days')`)
-      .bind(tenantId).first<{ input_tokens: number; output_tokens: number; total_tokens: number }>()
-  ]);
-  const byStatus = Object.fromEntries(runs.results.map((row) => [String(row.status), Number(row.count)]));
-  const processRunCounts = Object.fromEntries(processRuns.results.map((row) => [row.blueprint_id, Number(row.count)]));
-  return c.json({
-    activeProcesses: processes?.count ?? 0,
-    pendingApprovals: approvals?.count ?? 0,
-    runs7d: Object.values(byStatus).reduce((total, count) => total + count, 0),
-    completed7d: byStatus.completed ?? 0,
-    failed7d: byStatus.failed ?? 0,
-    processRuns: processRunCounts,
-    usage7d: usage ?? { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
-  });
+  return c.json(await getOverviewData(c.env, c.get("tenantId")));
 });
 
 app.get("/api/executions", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {

@@ -419,11 +419,11 @@ export function App() {
                     <Sparkles size={14} /> YOUR AI OPERATIONS
                   </div>
                   <h1>
-                    Good morning, {session?.user.name.split(" ")[0] ?? "Shawn"}.
+                    Good morning, {session?.user.name.split(" ")[0] ?? "there"}.
                   </h1>
                   <p>
                     {processes.length} processes are configured across your
-                    organization. {overview?.pendingApprovals ?? 1} item needs
+                    organization. {overview?.pendingApprovals ?? 0} item needs
                     review.
                   </p>
                 </div>
@@ -444,7 +444,7 @@ export function App() {
                     </span>
                     <small>ACTIVE PROCESSES</small>
                   </div>
-                  <strong>{overview?.activeProcesses ?? 3}</strong>
+                  <strong>{overview?.activeProcesses ?? "—"}</strong>
                   <p>
                     <b>{processes.length}</b> configured
                   </p>
@@ -456,7 +456,7 @@ export function App() {
                     </span>
                     <small>NEEDS REVIEW</small>
                   </div>
-                  <strong>{overview?.pendingApprovals ?? 1}</strong>
+                  <strong>{overview?.pendingApprovals ?? "—"}</strong>
                   <p>
                     {pending ? "Human decision required" : "Queue is clear"}
                   </p>
@@ -468,16 +468,12 @@ export function App() {
                     </span>
                     <small>RUNS · 7 DAYS</small>
                   </div>
-                  <strong>{(overview?.runs7d ?? 1284).toLocaleString()}</strong>
+                  <strong>{overview ? overview.runs7d.toLocaleString() : "—"}</strong>
                   <p>
                     <b>
-                      {overview
-                        ? `${overview.completed7d} completed`
-                        : "↗ 18%"}
+                      {overview ? `${overview.completed7d} completed` : "Loading evidence"}
                     </b>
-                    {overview
-                      ? ` · ${overview.failed7d} failed`
-                      : " from last week"}
+                      {overview ? ` · ${overview.failed7d} failed` : ""}
                   </p>
                 </article>
                 <article>
@@ -487,8 +483,8 @@ export function App() {
                     </span>
                     <small>TIME RETURNED</small>
                   </div>
-                  <strong>{value ? `${(value.totals.human_minutes_saved / 60).toFixed(1)}h` : "41.2h"}</strong>
-                  <p>{value ? `$${value.totals.estimated_value.toLocaleString()} estimated value` : "Estimated this week"}</p>
+                  <strong>{value ? `${(value.totals.human_minutes_saved / 60).toFixed(1)}h` : "—"}</strong>
+                  <p>{value ? `$${value.totals.estimated_value.toLocaleString()} estimated value` : "Loading evidence"}</p>
                 </article>
               </section>
 
@@ -543,12 +539,7 @@ export function App() {
                         <span className="process-stat">
                           <small>RUNS · 7D</small>
                           <strong>
-                            {overview?.processRuns[process.id] ??
-                              (process.id === "customer-ops"
-                                ? "642"
-                                : process.id === "inbox-triage"
-                                  ? "511"
-                                  : "131")}
+                            {overview ? (overview.processRuns[process.id] ?? 0).toLocaleString() : "—"}
                           </strong>
                         </span>
                         <ArrowUpRight size={17} />
@@ -565,7 +556,7 @@ export function App() {
                         <p>Human control points</p>
                       </div>
                       <span className="count">
-                        {overview?.pendingApprovals ?? 1}
+                        {overview?.pendingApprovals ?? "—"}
                       </span>
                     </div>
                     {pending ? (
@@ -628,38 +619,42 @@ export function App() {
                         <h2>Platform health</h2>
                         <p>Dedicated Cloudflare environment</p>
                       </div>
-                      <span className="healthy">
+                      <span className={overview?.operationalHealth.status === "attention" ? "attention-badge" : "healthy"}>
                         <i />
-                        Healthy
+                        {overview?.operationalHealth.status === "healthy" ? "Healthy" :
+                          overview?.operationalHealth.status === "attention" ? "Needs attention" : "Awaiting evidence"}
                       </span>
                     </div>
                     <div className="health-row">
-                      <span>
+                      <span title={overview ? `${overview.operationalHealth.terminalRuns} terminal runs in the last 7 days` : undefined}>
                         <Activity size={16} />
                         Success rate
                       </span>
-                      <strong>99.4%</strong>
+                      <strong>{overview?.operationalHealth.successRate == null ? "—" :
+                        `${overview.operationalHealth.successRate.toFixed(1)}%`}</strong>
                     </div>
                     <div className="health-row">
-                      <span>
+                      <span title={overview ? `${overview.operationalHealth.latencySamples} completed runs in the p95 sample` : undefined}>
                         <Clock3 size={16} />
                         p95 response
                       </span>
-                      <strong>1.8s</strong>
+                      <strong>{formatLatency(overview?.operationalHealth.p95ResponseMs ?? null)}</strong>
                     </div>
                     <div className="health-row">
                       <span>
                         <GitBranch size={16} />
-                        Durable workflows
+                        Durable work
                       </span>
-                      <strong>8 running</strong>
+                      <strong>{overview ? `${overview.operationalHealth.activeDurableWork} active` : "—"}</strong>
                     </div>
                     <div className="health-row">
                       <span>
                         <Database size={16} />
-                        Data boundary
+                        Queue attention
                       </span>
-                      <strong>Private</strong>
+                      <strong>{overview ? overview.operationalHealth.queueAttention
+                        ? `${overview.operationalHealth.queueAttention} action needed`
+                        : `${overview.operationalHealth.activeQueueJobs} active · clear` : "—"}</strong>
                     </div>
                   </div>
                 </div>
@@ -787,4 +782,10 @@ function exampleFromSchema(schemaJson: string) {
     }
     return JSON.stringify(result, null, 2);
   } catch { return "{}"; }
+}
+
+function formatLatency(value: number | null) {
+  if (value == null) return "—";
+  if (value < 1000) return `${Math.round(value)}ms`;
+  return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}s`;
 }
