@@ -107,6 +107,40 @@ export interface StudioData {
     edges: Array<{ from: string; to: string }>;
   };
 }
+export interface ProcessSchedule {
+  id: string;
+  blueprint_id: string;
+  process_name: string;
+  execution_profile: string;
+  name: string;
+  cadence: "hourly" | "daily" | "weekly";
+  time_utc: string | null;
+  weekday_utc: number | null;
+  identity_key: string | null;
+  status: "active" | "paused";
+  next_run_at: string;
+  last_dispatched_at: string | null;
+  last_execution_id: string | null;
+  dispatch_count: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface ScheduleDispatch {
+  id: string;
+  schedule_id: string;
+  blueprint_id: string;
+  execution_id: string;
+  scheduled_for: string;
+  status: "queued" | "completed" | "failed" | "deferred";
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+export interface ScheduleData {
+  schedules: ProcessSchedule[];
+  dispatches: ScheduleDispatch[];
+}
 
 export interface GovernanceData {
   processes: Array<Record<string, string>>;
@@ -375,6 +409,24 @@ export const api = {
   studio: (id: string) =>
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
+    ),
+  schedules: (processId?: string) =>
+    request<{ data: ScheduleData }>(
+      `/api/process-schedules${processId ? `?process=${encodeURIComponent(processId)}` : ""}`,
+    ),
+  createSchedule: (processId: string, body: {
+    name: string; cadence: string; timeUtc?: string; weekdayUtc?: number; input: string; identityKey?: string;
+  }) => request<{ id: string; status: string; nextRunAt: string }>(
+    `/api/processes/${encodeURIComponent(processId)}/schedules`,
+    { method: "POST", body: JSON.stringify(body) },
+  ),
+  updateSchedule: (id: string, body: { status?: string }) =>
+    request<{ id: string; status?: string }>(`/api/process-schedules/${encodeURIComponent(id)}`, {
+      method: "PATCH", body: JSON.stringify(body),
+    }),
+  runSchedule: (id: string) =>
+    request<{ scheduleId: string; executionId: string; status: string }>(
+      `/api/process-schedules/${encodeURIComponent(id)}/run`, { method: "POST" },
     ),
   createRelease: (
     id: string,

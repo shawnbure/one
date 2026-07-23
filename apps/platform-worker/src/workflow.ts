@@ -38,17 +38,27 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       return { ...rawResult, output: protectedOutput.modelText, outputPreview: protectedOutput.safeText };
     });
     await step.do("record durable result", async () => {
-      await this.env.DB.prepare(`${pricedCompletionSql()} AND tenant_id = ?`)
-        .bind(result.outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
-          result.inputTokens, result.model, result.outputTokens, result.model, new Date().toISOString(), event.instanceId, tenantId).run();
+      const completedAt = new Date().toISOString();
+      await this.env.DB.batch([
+        this.env.DB.prepare(`${pricedCompletionSql()} AND tenant_id = ?`)
+          .bind(result.outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
+            result.inputTokens, result.model, result.outputTokens, result.model, completedAt, event.instanceId, tenantId),
+        this.env.DB.prepare(`UPDATE schedule_dispatches SET status = 'completed', completed_at = ?, error = NULL
+          WHERE execution_id = ? AND tenant_id = ?`).bind(completedAt, event.instanceId, tenantId)
+      ]);
     });
     return { output: result.output };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await step.do("record terminal failure", async () => {
-        await this.env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
-          .bind(isDlpBlocked(error) ? "blocked" : "failed", message.slice(0, 1000),
-            new Date().toISOString(), event.instanceId, tenantId).run();
+        const completedAt = new Date().toISOString();
+        await this.env.DB.batch([
+          this.env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
+            .bind(isDlpBlocked(error) ? "blocked" : "failed", message.slice(0, 1000),
+              completedAt, event.instanceId, tenantId),
+          this.env.DB.prepare(`UPDATE schedule_dispatches SET status = 'failed', error = ?, completed_at = ?
+            WHERE execution_id = ? AND tenant_id = ?`).bind(message.slice(0, 500), completedAt, event.instanceId, tenantId)
+        ]);
       });
       await step.do("notify terminal failure", async () => {
         await emitNotification(this.env, tenantId, { eventType: "execution.failed", title: "Workflow execution failed",

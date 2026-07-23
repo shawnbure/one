@@ -10,7 +10,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Explicit routing for `conversation`, `consumer`, `entity`, `shared_shard`, `temporary_durable`, `instant`, and `workflow` execution profiles.
 - Workers AI model profiles with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations.
 - D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
-- Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and Cron maintenance wiring.
+- Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and bounded Cron dispatch for tenant-configured recurring processes.
 - Signed, idempotent webhook ingestion with a bounded request body and queue handoff.
 - HMAC-signed outbound webhook notifications with public-destination validation, Queue retries, delivery testing, and persisted attempt evidence.
 - Tenant-scoped credential references whose values remain in Cloudflare secrets rather than D1, exports, logs, or browser bundles.
@@ -34,6 +34,8 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 D1 is the source of truth for published process and prompt releases. A durable Agent checks whether its configured release is already installed; D1 is read only when a new release must be copied into that actor's local SQLite database. Later turns use the local copy. The stable Agent identity is also passed to Workers AI as `sessionAffinity`, allowing Cloudflare's model infrastructure to improve prefix-cache locality without KV.
 
 Instant executions deliberately have no durable identity and load their release from D1. Workflow executions use Cloudflare Workflows for retryable, long-lived orchestration. Queues absorb independent bursts; they are not used as a substitute for ordered actor state.
+
+Recurring processes are configured in Process Studio with hourly, daily, or weekly UTC schedules. Cron atomically claims at most 50 due occurrences and returns after handing them to Queue; it never performs AI inference inline. Queue routes each occurrence to the process's declared instant, sticky Agent, temporary actor, or Workflow profile. D1 retains schedule controls and dispatch evidence, while sticky state remains in the target Durable Agent.
 
 DLP rules are tenant-scoped in D1 and loaded at each execution boundary so policy changes affect already-queued Workflow work. Email and phone values redact by default; SSNs, valid payment-card numbers, and API-secret patterns block; IP addresses default to evidence-only inspection. Audit-only content may reach the selected private model, but Workrr still masks it in D1 previews and Durable Object conversation history. DLP evidence stores detector, action, stage, direction, and count—never the matched value.
 

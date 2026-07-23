@@ -14,7 +14,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | --- | --- |
 | Overview | Live process, review, execution, health, and value indicators |
 | Discover | Intake wizard, process templates, baseline capture, and opportunity scoring |
-| Process Studio | Visual topology, explicit execution profile, immutable draft releases, publish, and rollback |
+| Process Studio | Visual topology, explicit execution profile, immutable draft releases, publish/rollback, and recurring process schedules with dispatch history |
 | Work Inbox | Evidence and rationale review, assignment, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, inputs/outputs, failures, and safe replay |
 | Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, and JSON evidence export |
@@ -42,7 +42,7 @@ Every process declares one execution profile:
 
 Durable actors use the Cloudflare Agents SDK and Durable Object SQLite. Many instances of the same agent class are expected; the stable identity key determines stickiness. Worker isolates remain ephemeral and must never be treated as a memory store.
 
-Queues absorb independent bursts and provide retry/DLQ behavior. Workflows provide durable orchestration. Cron performs scheduled maintenance. These primitives are complementary and must not be collapsed into one generic runner.
+Queues absorb independent bursts and provide retry/DLQ behavior. Workflows provide durable orchestration. Cron performs maintenance and atomically claims a bounded set of due tenant schedules, then hands them to Queue without running AI inline. These primitives are complementary and must not be collapsed into one generic runner.
 
 ## Prompt and memory read model
 
@@ -73,7 +73,7 @@ The Worker currently exposes these route groups:
 
 - Session and tenant administration: `/api/session`, `/api/members`, `/api/onboarding`, `/api/onboarding/bootstrap`
 - Discovery and value: `/api/process-templates`, `/api/processes`, `/api/value`
-- Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode
+- Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode, `/api/process-schedules`, create/pause/restore/run-now
 - Portability: `/api/processes/:id/package`, `/api/process-packages/import`
 - Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry
 - Human review: `/api/approvals`, assignment, approve/decline
@@ -115,6 +115,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 23. `0023_service_principals_and_smoke_fixtures.sql`: Access machine identities and disposable live probes.
 24. `0024_governed_rubric_packages.sql`: signed standards review and destination approval evidence.
 25. `0025_rubric_publisher_trust.sql`: tenant publisher keys and manual, automatic, or blocked trust policy.
+26. `0026_process_schedules.sql`: tenant recurring-process controls and per-occurrence dispatch evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -150,7 +151,7 @@ npm run build
 
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
-The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy, containment, or customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, paused inputs are recorded as deferred, tenant drain/emergency stop blocks synchronous and queued admission, incident recovery requires containment evidence, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
+The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy, containment, or customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, paused inputs are recorded as deferred, tenant drain/emergency stop blocks synchronous and queued admission, incident recovery requires containment evidence, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, recurring schedules atomically claim before Queue handoff, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
 
 Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs load up to 100 cases and fan them into parallel, independently retriable Cloudflare Workflow steps before one deterministic aggregation step. They survive browser disconnection and persist their lifecycle separately from case evidence. DLP rules and model pricing are loaded once into prepared Workflow state rather than reread from D1 for every case. Each case can assign a case weight plus assertion weight and quality dimension (groundedness, completeness, safety, clarity, or format); the release evidence includes both the overall gate score and per-dimension scores. Model trials execute the immutable release prompt and identical cases once with the release baseline profile and once with a candidate Cloudflare profile; both arms are costed and scored without changing the live process or release-gate state. Every model call participates in the tenant hard budget.
 

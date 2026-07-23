@@ -16,6 +16,7 @@ import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 import { isDlpBlocked, updateDlpRule } from "./dlp";
+import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -301,6 +302,48 @@ app.delete("/api/smoke-fixtures/:id", requireRoles("admin", "owner", "operator")
 });
 
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
+
+app.get("/api/process-schedules", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await listSchedules(c.env, c.get("tenantId"), c.req.query("process")) }));
+
+app.post("/api/processes/:id/schedules", requireRoles("admin", "builder", "owner"), async (c) => {
+  const processId = c.req.param("id");
+  if (!processId) return c.json({ error: "Process ID is required" }, 400);
+  try {
+    const result = await createSchedule(c.env, c.get("tenantId"), c.get("actorId"), processId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_schedule.created",
+      "process_schedule", result.id, result);
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Schedule could not be created" }, 400);
+  }
+});
+
+app.patch("/api/process-schedules/:id", requireRoles("admin", "builder", "owner"), async (c) => {
+  const scheduleId = c.req.param("id");
+  if (!scheduleId) return c.json({ error: "Schedule ID is required" }, 400);
+  try {
+    const result = await updateSchedule(c.env, c.get("tenantId"), scheduleId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_schedule.updated",
+      "process_schedule", scheduleId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Schedule could not be updated" }, 400);
+  }
+});
+
+app.post("/api/process-schedules/:id/run", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  const scheduleId = c.req.param("id");
+  if (!scheduleId) return c.json({ error: "Schedule ID is required" }, 400);
+  try {
+    const result = await dispatchScheduleNow(c.env, c.get("tenantId"), scheduleId);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_schedule.dispatched",
+      "process_schedule", scheduleId, result);
+    return c.json({ data: result }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Schedule could not be dispatched" }, 400);
+  }
+});
 
 app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, name, description, execution_profile, model_profile, autonomy,
@@ -903,7 +946,11 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       }
       const job: QueueJob = message.body;
       try {
-        await executeRequest(env, job.tenantId ?? "demo", job, job.executionId);
+        const result = await executeRequest(env, job.tenantId ?? "demo", job, job.executionId);
+        await env.DB.prepare(`UPDATE schedule_dispatches SET status = ?, completed_at = CURRENT_TIMESTAMP
+          WHERE tenant_id = ? AND execution_id = ? AND status = 'queued'`)
+          .bind(result.status === "deferred" ? "deferred" : result.status === "completed" ? "completed" : "queued",
+            job.tenantId ?? "demo", job.executionId).run();
         message.ack();
       } catch (error) {
         console.error(JSON.stringify({ event: "queue_job_failed", executionId: job.executionId, error: String(error) }));
@@ -911,24 +958,33 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
         await env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
           .bind(terminal ? "failed" : "queued", error instanceof Error ? error.message : String(error), terminal ? new Date().toISOString() : null,
             job.executionId, job.tenantId ?? "demo").run();
-        if (terminal) await emitNotification(env, job.tenantId ?? "demo", {
-          eventType: "queue.retry_exhausted", title: "Process job exhausted retries",
-          detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: job.executionId
-        });
+        if (terminal) {
+          await env.DB.prepare(`UPDATE schedule_dispatches SET status = 'failed', error = ?, completed_at = CURRENT_TIMESTAMP
+            WHERE tenant_id = ? AND execution_id = ?`).bind(
+              error instanceof Error ? error.message : String(error), job.tenantId ?? "demo", job.executionId).run();
+          await emitNotification(env, job.tenantId ?? "demo", {
+            eventType: "queue.retry_exhausted", title: "Process job exhausted retries",
+            detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: job.executionId
+          });
+        }
         message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
       }
     }
   },
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(env.DB.batch([
-      env.DB.prepare(`DELETE FROM oauth_states WHERE expires_at < ? OR
-        (used_at IS NOT NULL AND used_at < ?)`).bind(
-          new Date().toISOString(), new Date(Date.now() - 24 * 60 * 60_000).toISOString()),
-      env.DB.prepare("DELETE FROM smoke_fixtures WHERE expires_at < ?").bind(new Date().toISOString()),
-      env.DB.prepare(`INSERT INTO audit_events
-        (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
-        VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
-        .bind(crypto.randomUUID(), JSON.stringify({ at: new Date().toISOString() }))
+    const now = new Date();
+    ctx.waitUntil(Promise.all([
+      env.DB.batch([
+        env.DB.prepare(`DELETE FROM oauth_states WHERE expires_at < ? OR
+          (used_at IS NOT NULL AND used_at < ?)`).bind(
+            now.toISOString(), new Date(now.getTime() - 24 * 60 * 60_000).toISOString()),
+        env.DB.prepare("DELETE FROM smoke_fixtures WHERE expires_at < ?").bind(now.toISOString()),
+        env.DB.prepare(`INSERT INTO audit_events
+          (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+          VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
+          .bind(crypto.randomUUID(), JSON.stringify({ at: now.toISOString() }))
+      ]),
+      dispatchDueSchedules(env, now)
     ]));
   }
 };

@@ -20,7 +20,8 @@ import {
   Upload,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type ProcessRelease, type StudioData } from "./api";
+import { api, type ProcessRelease, type ScheduleData, type StudioData } from "./api";
+import "./schedule-studio.css";
 
 interface Props {
   processId: string | null;
@@ -143,7 +144,8 @@ function Studio({
   onNotice: (message: string) => void;
 }) {
   const [data, setData] = useState<StudioData | null>(null);
-  const [tab, setTab] = useState<"design" | "behavior" | "releases">("design");
+  const [scheduleData, setScheduleData] = useState<ScheduleData>({ schedules: [], dispatches: [] });
+  const [tab, setTab] = useState<"design" | "behavior" | "schedules" | "releases">("design");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [instructions, setInstructions] = useState("");
   const [guardrails, setGuardrails] = useState("");
@@ -154,8 +156,12 @@ function Studio({
 
   async function load() {
     try {
-      const result = (await api.studio(processId)).data;
+      const [result, schedules] = await Promise.all([
+        api.studio(processId).then((response) => response.data),
+        api.schedules(processId).then((response) => response.data),
+      ]);
       setData(result);
+      setScheduleData(schedules);
       setSystemPrompt(result.prompt.system_prompt);
       setInstructions(parseList(result.prompt.instructions_json).join("\n"));
       setGuardrails(parseList(result.prompt.guardrails_json).join("\n"));
@@ -250,7 +256,7 @@ function Studio({
         </div></div>
       </div>
       <nav className="studio-tabs">
-        {(["design", "behavior", "releases"] as const).map((value) => (
+        {(["design", "behavior", "schedules", "releases"] as const).map((value) => (
           <button
             className={tab === value ? "active" : ""}
             key={value}
@@ -260,6 +266,8 @@ function Studio({
               <GitBranch size={15} />
             ) : value === "behavior" ? (
               <FileCode2 size={15} />
+            ) : value === "schedules" ? (
+              <Clock3 size={15} />
             ) : (
               <History size={15} />
             )}{" "}
@@ -436,6 +444,10 @@ function Studio({
           </aside>
         </div>
       )}
+      {tab === "schedules" && (
+        <ScheduleStudio processId={processId} executionProfile={executionProfile} data={scheduleData}
+          busy={busy} setBusy={setBusy} onReload={load} onNotice={onNotice}/>
+      )}
       {tab === "releases" && (
         <div className="release-list panel">
           <div className="section-head">
@@ -490,6 +502,95 @@ function Studio({
       )}
     </section>
   );
+}
+
+function ScheduleStudio({ processId, executionProfile, data, busy, setBusy, onReload, onNotice }: {
+  processId: string; executionProfile: string; data: ScheduleData; busy: boolean;
+  setBusy: (value: boolean) => void; onReload: () => Promise<void>; onNotice: (message: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [cadence, setCadence] = useState<"hourly" | "daily" | "weekly">("daily");
+  const [timeUtc, setTimeUtc] = useState("09:00");
+  const [weekdayUtc, setWeekdayUtc] = useState(1);
+  const [input, setInput] = useState("");
+  const [identityKey, setIdentityKey] = useState("");
+  const identityLabel = executionProfile === "conversation" ? "Thread ID" :
+    executionProfile === "consumer" ? "Consumer ID" : executionProfile === "entity" ? "Entity ID" :
+    executionProfile === "shared_shard" ? "Shard key" : null;
+  async function create() {
+    setBusy(true);
+    try {
+      await api.createSchedule(processId, { name, cadence, timeUtc, weekdayUtc, input, identityKey });
+      setName(""); setInput(""); setIdentityKey("");
+      onNotice("Recurring process schedule created."); await onReload();
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Could not create schedule"); }
+    finally { setBusy(false); }
+  }
+  async function mutate(id: string, action: "run" | "pause" | "restore") {
+    setBusy(true);
+    try {
+      if (action === "run") await api.runSchedule(id);
+      else await api.updateSchedule(id, { status: action === "pause" ? "paused" : "active" });
+      onNotice(action === "run" ? "Schedule handed to the process queue." : `Schedule ${action}d.`);
+      await onReload();
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Schedule update failed"); }
+    finally { setBusy(false); }
+  }
+  return <div className="schedule-layout">
+    <article className="schedule-form panel">
+      <div className="section-head"><div><h2>Recurring process</h2>
+        <p>Cron claims due work; Queues dispatch it to the selected execution profile.</p></div>
+        <span><Clock3 size={14}/> UTC</span></div>
+      <label>Schedule name<input value={name} onChange={(event) => setName(event.target.value)}
+        placeholder="Daily intake review"/></label>
+      <div className="schedule-fields">
+        <label>Cadence<select value={cadence} onChange={(event) => setCadence(event.target.value as typeof cadence)}>
+          <option value="hourly">Hourly</option><option value="daily">Daily</option><option value="weekly">Weekly</option>
+        </select></label>
+        {cadence !== "hourly" && <label>Hour (UTC)<select value={timeUtc} onChange={(event) => setTimeUtc(event.target.value)}>
+          {Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`).map((time) =>
+            <option value={time} key={time}>{time}</option>)}</select></label>}
+        {cadence === "weekly" && <label>Weekday<select value={weekdayUtc}
+          onChange={(event) => setWeekdayUtc(Number(event.target.value))}>
+          {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day, index) =>
+            <option value={index} key={day}>{day}</option>)}</select></label>}
+      </div>
+      {identityLabel && <label>{identityLabel}<input value={identityKey} onChange={(event) => setIdentityKey(event.target.value)}
+        placeholder={`Stable ${identityLabel.toLowerCase()} for sticky state`}/></label>}
+      <label>Process input<textarea value={input} onChange={(event) => setInput(event.target.value)}
+        placeholder="Describe the recurring work and the data the process should handle."/></label>
+      <button className="primary" disabled={busy || !name.trim() || !input.trim() || Boolean(identityLabel && !identityKey.trim())}
+        onClick={() => void create()}><Plus size={15}/>Create schedule</button>
+    </article>
+    <section className="schedule-list">
+      <div className="schedule-summary"><div><strong>{data.schedules.length}</strong><span>Schedules</span></div>
+        <div><strong>{data.schedules.reduce((sum, schedule) => sum + Number(schedule.dispatch_count), 0)}</strong><span>Dispatches</span></div>
+        <div><strong>{data.schedules.filter((schedule) => schedule.status === "active").length}</strong><span>Active</span></div></div>
+      {data.schedules.length === 0 && <div className="schedule-empty panel"><Clock3 size={24}/><h2>No schedules yet</h2>
+        <p>Add repeatable work without creating long-running compute.</p></div>}
+      {data.schedules.map((schedule) => {
+        const history = data.dispatches.filter((dispatch) => dispatch.schedule_id === schedule.id).slice(0, 3);
+        return <article className="schedule-card panel" key={schedule.id}>
+          <header><div><span className={`status ${schedule.status}`}><i/>{schedule.status}</span>
+            <h2>{schedule.name}</h2><p>{schedule.cadence}{schedule.time_utc ? ` · ${schedule.time_utc} UTC` : ""}</p></div>
+            <div className="schedule-actions"><button disabled={busy} onClick={() => void mutate(schedule.id, "run")}><Play size={14}/>Run now</button>
+              <button disabled={busy} onClick={() => void mutate(schedule.id, schedule.status === "active" ? "pause" : "restore")}>
+                {schedule.status === "active" ? "Pause" : "Restore"}</button></div></header>
+          <dl><div><dt>Next run</dt><dd>{formatDate(schedule.next_run_at)}</dd></div>
+            <div><dt>Last dispatch</dt><dd>{schedule.last_dispatched_at ? formatDate(schedule.last_dispatched_at) : "Not yet"}</dd></div>
+            {schedule.identity_key && <div><dt>Sticky key</dt><dd>{schedule.identity_key}</dd></div>}</dl>
+          {history.length > 0 && <div className="dispatch-history">{history.map((dispatch) =>
+            <div key={dispatch.id}><span className={`dispatch-status ${dispatch.status}`}>{dispatch.status}</span>
+              <span>{formatDate(dispatch.created_at)}</span><code>{dispatch.execution_id.slice(0, 8)}</code></div>)}</div>}
+          {schedule.last_error && <p className="schedule-error">{schedule.last_error}</p>}
+        </article>;
+      })}
+    </section>
+  </div>;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function nodeIcon(type: string) {

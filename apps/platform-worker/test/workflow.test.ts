@@ -47,6 +47,8 @@ describe("durable workflow accounting", () => {
     await workflow.run({ instanceId: "execution-1", payload: { tenantId: "tenant-1", request: { blueprintId: "renewal-review", input: "review" } } } as never, step as never);
     const completion = writes.find((write) => write.sql.includes("status = 'completed'"));
     expect(completion?.bindings).toEqual(expect.arrayContaining([12, 7, 19, "execution-1", "tenant-1"]));
+    expect(writes.some((write) => write.sql.includes("UPDATE schedule_dispatches SET status = 'completed'") &&
+      write.bindings.includes("execution-1"))).toBe(true);
   });
 
   it("records a terminal failure before rethrowing to Workflow observability", async () => {
@@ -57,6 +59,8 @@ describe("durable workflow accounting", () => {
     await expect(workflow.run({ instanceId: "execution-2", payload: { tenantId: "tenant-1", request: { blueprintId: "renewal-review", input: "review" } } } as never, step as never)).rejects.toThrow("model unavailable");
     expect(writes.some((write) => write.sql.includes("UPDATE executions SET status = ?") &&
       write.bindings.includes("failed") && write.bindings.includes("execution-2"))).toBe(true);
+    expect(writes.some((write) => write.sql.includes("UPDATE schedule_dispatches SET status = 'failed'") &&
+      write.bindings.includes("execution-2"))).toBe(true);
   });
 
   it("rechecks current DLP policy and blocks before the durable model step", async () => {
