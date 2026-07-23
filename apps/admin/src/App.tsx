@@ -48,6 +48,8 @@ import {
   type SessionData,
   type ValueData,
 } from "./api";
+import { CommandCenter } from "./CommandCenter";
+import { authorizedWorkspaceLabels, processVisibleInCommands, type CommandSearchItem } from "./command-search";
 import "./live.css";
 import "./wizard.css";
 import "./team.css";
@@ -228,6 +230,25 @@ const nav = [
   ["Usage & budgets", CircleDollarSign],
 ] as const;
 
+const workspaceSearch: Record<string, { description: string; keywords: string[] }> = {
+  Overview: { description: "Operational health, value, and work requiring attention", keywords: ["home", "health", "value"] },
+  Launchpad: { description: "Run approved employee AI processes and private conversations", keywords: ["employee", "chat", "run"] },
+  Processes: { description: "Design, test, publish, pause, and roll back AI processes", keywords: ["studio", "agents", "releases"] },
+  Opportunities: { description: "Discover and qualify manual work for AI implementation", keywords: ["discovery", "intake", "manual"] },
+  "Work inbox": { description: "Review approvals, assignments, and waiting actions", keywords: ["approval", "review", "waiting"] },
+  Activity: { description: "Inspect executions, evidence, failures, and recovery", keywords: ["runs", "timeline", "errors"] },
+  "API logs": { description: "Trace retained webhook and provider request metadata", keywords: ["webhooks", "http", "integration"] },
+  Connections: { description: "Manage provider credentials, typed tools, and acceptance", keywords: ["oauth", "microsoft", "tools"] },
+  Knowledge: { description: "Govern customer documents, retrieval, and citations", keywords: ["r2", "vectorize", "documents"] },
+  Evaluations: { description: "Run release gates, regression suites, and model trials", keywords: ["tests", "quality", "golden"] },
+  Governance: { description: "Control privacy, memory, incidents, retention, and deployment", keywords: ["security", "privacy", "controls"] },
+  Notifications: { description: "Configure accountable in-app, email, and webhook delivery", keywords: ["alerts", "email", "digest"] },
+  "Usage & budgets": { description: "Review model cost, tokens, limits, and reconciliation", keywords: ["cost", "billing", "tokens"] },
+  "Customer setup": { description: "Provision, measure, and hand off the customer environment", keywords: ["deployment", "onboarding", "fde"] },
+  "Team & roles": { description: "Manage tenant members, roles, and service principals", keywords: ["rbac", "members", "access"] },
+  "Help Center": { description: "Open role-specific guidance, runbooks, and support requests", keywords: ["docs", "training", "support"] },
+};
+
 function Status({ value }: { value: string }) {
   return (
     <span className={`status ${value}`}>
@@ -258,7 +279,9 @@ export function App() {
   const [runInput, setRunInput] = useState("");
   const [runOutput, setRunOutput] = useState<string | null>(null);
   const [studioProcessId, setStudioProcessId] = useState<string | null>(null);
+  const [launchpadProcessId, setLaunchpadProcessId] = useState<string | null>(initialProcessId);
   const [creatingProcess, setCreatingProcess] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const filtered = useMemo(
     () =>
@@ -274,6 +297,26 @@ export function App() {
   const visibleNav = consumerView
     ? nav.filter(([label]) => label === "Overview" || label === "Launchpad")
     : nav;
+  const commandItems = useMemo<CommandSearchItem[]>(() => {
+    const workspaceLabels = authorizedWorkspaceLabels(consumerView);
+    const workspaces = workspaceLabels.map((label) => ({
+      id: `workspace:${label}`,
+      label,
+      description: workspaceSearch[label]?.description ?? "Open this Workrr workspace",
+      keywords: workspaceSearch[label]?.keywords ?? [],
+      kind: "workspace" as const,
+      target: label,
+    }));
+    const authorizedProcesses = processes.filter((process) => processVisibleInCommands(process, consumerView));
+    return [...workspaces, ...authorizedProcesses.map((process) => ({
+      id: `process:${process.id}`,
+      label: process.name,
+      description: process.description || `${process.executionProfile} AI process`,
+      keywords: [process.executionProfile, process.status, process.autonomy, process.modelProfile],
+      kind: "process" as const,
+      target: process.id,
+    }))];
+  }, [consumerView, processes]);
 
   async function refresh() {
     try {
@@ -312,6 +355,32 @@ export function App() {
     if (oauth === "microsoft-error") setNotice("Microsoft authorization did not complete. Review the app registration and try again.");
     if (oauth) window.history.replaceState({}, "", window.location.pathname);
   }, []);
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+
+  function chooseCommand(item: CommandSearchItem) {
+    if (item.kind === "workspace") {
+      setActive(item.target);
+      if (item.target === "Processes") setStudioProcessId(null);
+      return;
+    }
+    if (consumerView) {
+      setLaunchpadProcessId(item.target);
+      setActive("Launchpad");
+    } else {
+      setStudioProcessId(item.target);
+      setActive("Processes");
+    }
+  }
 
   async function decide(id: string, decision: "approved" | "rejected") {
     setBusy(id);
@@ -370,6 +439,8 @@ export function App() {
 
   return (
     <div className={`shell${focusedLaunchpad ? " focused-launchpad" : ""}`}>
+      <CommandCenter open={commandOpen} items={commandItems}
+        onClose={() => setCommandOpen(false)} onChoose={chooseCommand}/>
       <aside>
         <div className="brand">
           <span className="brandmark">
@@ -442,7 +513,7 @@ export function App() {
             OPERATIONS <span>/</span> {active.toUpperCase()}
           </div>
           <div className="header-actions">
-            <button className="search">
+            <button className="search" aria-haspopup="dialog" onClick={() => setCommandOpen(true)}>
               <Search size={17} />
               Search <kbd>⌘ K</kbd>
             </button>
@@ -479,13 +550,13 @@ export function App() {
               <X size={14} />
             </button>
           )}
-          <FeatureBoundary key={active}>
+          <FeatureBoundary key={`${active}:${active === "Launchpad" ? launchpadProcessId ?? "" : ""}`}>
             <Suspense fallback={<FeatureLoading label={active} />}>
           {active === "Launchpad" ? (
             <ProcessLaunchpadView
               processes={processes}
               session={session}
-              initialProcessId={initialProcessId}
+              initialProcessId={launchpadProcessId}
               focused={focusedLaunchpad}
               onNotice={setNotice}
             />
