@@ -254,7 +254,10 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [sampleExecution, setSampleExecution] = useState("");
   const [candidateProfile, setCandidateProfile] = useState("fast");
   const [trialRunning, setTrialRunning] = useState(false);
-  const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "", format: "text" as "text" | "json", maxChars: 2000 });
+  const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "",
+    format: "text" as "text" | "json", maxChars: 2000,
+    dimension: "groundedness" as "groundedness" | "completeness" | "safety" | "clarity" | "format",
+    assertionWeight: 1, caseWeight: 1 });
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
   ).length;
@@ -288,9 +291,11 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       await api.createEvaluationCase(selected, {
         name: caseForm.name, input: caseForm.input,
         expectedPhrases: phrases(caseForm.expected), prohibitedPhrases: phrases(caseForm.prohibited),
-        format: caseForm.format, maxChars: caseForm.maxChars
+        format: caseForm.format, maxChars: caseForm.maxChars, dimension: caseForm.dimension,
+        assertionWeight: caseForm.assertionWeight, caseWeight: caseForm.caseWeight
       });
-      setCaseForm({ name: "", input: "", expected: "", prohibited: "", format: "text", maxChars: 2000 });
+      setCaseForm({ name: "", input: "", expected: "", prohibited: "", format: "text", maxChars: 2000,
+        dimension: "groundedness", assertionWeight: 1, caseWeight: 1 });
       await inspect(selected);
       await onReload();
       onNotice("Golden case added; the scenario must be rerun before release promotion.");
@@ -338,6 +343,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
     finally { setTrialRunning(false); }
   }
   const latest = detail?.runs[0];
+  const rubric = latest ? rubricDimensions(latest.evidence_json) : [];
   const previous = detail?.runs.find((run) => run.release_id !== latest?.release_id) ?? detail?.runs[1];
   const delta = latest && previous ? (Number(latest.score) - Number(previous.score)) * 100 : null;
   return (
@@ -399,11 +405,17 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       </div>
       {selected && <div className="evaluation-lab panel">
         {!detail ? <div className="loading-card">Loading evaluation lab…</div> : <>
-          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span className="evaluation-lab-actions"><span>{detail.cases.length} cases</span><button disabled={suiteRunning} onClick={() => void queueSuite()}><Workflow size={15}/>{suiteRunning ? "Queueing…" : "Run durable suite"}</button></span></div>
+          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span className="evaluation-lab-actions"><span>{detail.cases.length} {detail.cases.length === 1 ? "case" : "cases"}</span><button disabled={suiteRunning} onClick={() => void queueSuite()}><Workflow size={15}/>{suiteRunning ? "Queueing…" : "Run durable suite"}</button></span></div>
           <div className="comparison-strip">
             <article><small>LATEST RELEASE</small><strong>{latest ? `v${latest.release_version ?? "?"} · ${(Number(latest.score) * 100).toFixed(0)}%` : "Not run"}</strong><span className={`connection-state ${latest?.status ?? "attention"}`}><i/>{latest?.status ?? "not run"}</span></article>
             <article><small>PREVIOUS COMPARISON</small><strong>{previous ? `v${previous.release_version ?? "?"} · ${(Number(previous.score) * 100).toFixed(0)}%` : "No baseline"}</strong><span>{delta === null ? "Run another release to compare" : `${delta >= 0 ? "+" : ""}${delta.toFixed(0)} percentage points`}</span></article>
             <article><small>RELEASE COST</small><strong>{latest ? money(Number(latest.estimated_cost_usd)) : "$0.0000"}</strong><span>{latest ? `${number(Number(latest.total_tokens))} model tokens` : "No inference recorded"}</span></article>
+          </div>
+          <div className="rubric-strip">
+            <div><strong>Weighted quality rubric</strong><small>Each assertion contributes to a customer-selected quality dimension.</small></div>
+            {rubric.length ? rubric.map((item) => <article key={item.dimension}><small>{item.dimension}</small>
+              <strong>{(item.score * 100).toFixed(0)}%</strong><span>{item.weight.toFixed(1)} weight</span></article>)
+              : <p className="empty-copy">Run the suite to populate dimension-level evidence.</p>}
           </div>
           <div className="model-trials">
             <div className="section-head"><div><h3>Cloudflare model shadow comparison</h3><p>Run identical release prompts and cases without changing the live process model.</p></div><span className="trial-controls"><select value={candidateProfile} onChange={(event) => setCandidateProfile(event.target.value)}>{detail.modelProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label} · {profile.use}</option>)}</select><button disabled={trialRunning} onClick={() => void compareModels()}><GitCompare size={15}/>{trialRunning ? "Queueing…" : "Compare model"}</button></span></div>
@@ -422,7 +434,9 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <label>Anonymized input<textarea value={caseForm.input} onChange={(event) => setCaseForm({ ...caseForm, input: event.target.value })}/></label>
               <label>Required phrases <small>comma separated</small><input value={caseForm.expected} onChange={(event) => setCaseForm({ ...caseForm, expected: event.target.value })}/></label>
               <label>Prohibited phrases <small>comma separated</small><input value={caseForm.prohibited} onChange={(event) => setCaseForm({ ...caseForm, prohibited: event.target.value })}/></label>
-              <div className="case-fields"><label>Format<select value={caseForm.format} onChange={(event) => setCaseForm({ ...caseForm, format: event.target.value as "text" | "json" })}><option value="text">Text</option><option value="json">Valid JSON</option></select></label><label>Max characters<input type="number" min="1" max="50000" value={caseForm.maxChars} onChange={(event) => setCaseForm({ ...caseForm, maxChars: Number(event.target.value) })}/></label></div>
+              <div className="case-fields"><label>Quality dimension<select value={caseForm.dimension} onChange={(event) => setCaseForm({ ...caseForm, dimension: event.target.value as typeof caseForm.dimension })}><option value="groundedness">Groundedness</option><option value="completeness">Completeness</option><option value="safety">Safety</option><option value="clarity">Clarity</option><option value="format">Format</option></select></label><label>Case weight<input type="number" min="0.1" max="10" step="0.1" value={caseForm.caseWeight} onChange={(event) => setCaseForm({ ...caseForm, caseWeight: Number(event.target.value) })}/></label></div>
+              <div className="case-fields"><label>Format<select value={caseForm.format} onChange={(event) => setCaseForm({ ...caseForm, format: event.target.value as "text" | "json" })}><option value="text">Text</option><option value="json">Valid JSON</option></select></label><label>Assertion weight<input type="number" min="0.1" max="10" step="0.1" value={caseForm.assertionWeight} onChange={(event) => setCaseForm({ ...caseForm, assertionWeight: Number(event.target.value) })}/></label></div>
+              <label>Maximum characters<input type="number" min="1" max="50000" value={caseForm.maxChars} onChange={(event) => setCaseForm({ ...caseForm, maxChars: Number(event.target.value) })}/></label>
               <button className="primary" disabled={savingCase} onClick={() => void addCase()}>{savingCase ? "Adding…" : "Add regression case"}</button>
               <div className="sample-promoter"><strong>Promote a production sample</strong><small>Explicitly reuse only Workrr’s stored, truncated input preview. Required/prohibited assertions above apply.</small><input placeholder="Completed execution ID" value={sampleExecution} onChange={(event) => setSampleExecution(event.target.value)}/><button disabled={!sampleExecution.trim()} onClick={() => void promoteSample()}>Promote redacted preview</button></div>
             </div>
@@ -441,6 +455,13 @@ function assertionLabel(value: string) {
 function redactionLabel(value: string) {
   try { const item = JSON.parse(value) as { count?: number }; return item.count ? `${item.count} sensitive value${item.count === 1 ? "" : "s"} masked` : ""; }
   catch { return ""; }
+}
+function rubricDimensions(value: string) {
+  try {
+    const evidence = JSON.parse(value) as { dimensions?: Array<{ dimension: string; score: number; weight: number }> };
+    return Array.isArray(evidence.dimensions) ? evidence.dimensions.filter((item) =>
+      typeof item.dimension === "string" && Number.isFinite(Number(item.score)) && Number.isFinite(Number(item.weight))) : [];
+  } catch { return []; }
 }
 function money(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value || 0); }
 function number(value: number) { return new Intl.NumberFormat().format(value || 0); }

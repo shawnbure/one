@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { runEvaluation } from "./evaluation";
+import { evaluatePreparedCase, persistEvaluationRun, prepareEvaluationRun, runEvaluation } from "./evaluation";
 import { emitNotification } from "./notifications";
 import type { Env } from "./types";
 
@@ -35,9 +35,14 @@ export class EvaluationWorkflow extends WorkflowEntrypoint<Env, EvaluationWorkfl
         await this.env.DB.prepare(`UPDATE evaluation_suite_runs SET status = 'running', started_at = CURRENT_TIMESTAMP
           WHERE id = ? AND tenant_id = ? AND status = 'queued'`).bind(params.suiteId, params.tenantId).run();
       });
-      const result = await step.do("run exact release regression", {
-        retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }
-      }, () => runEvaluation(this.env, params.tenantId, params.actorId, params.scenarioId, params.releaseId, params.evaluationRunId));
+      const prepared = await step.do("prepare exact release regression", async () =>
+        prepareEvaluationRun(this.env, params.tenantId, params.scenarioId, params.releaseId, undefined, 100));
+      const caseResults = await Promise.all(prepared.cases.map((item, index) =>
+        step.do(`evaluate case ${String(index + 1).padStart(3, "0")} ${item.id.slice(0, 24)}`, {
+          retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }
+        }, () => evaluatePreparedCase(this.env, params.tenantId, params.evaluationRunId, prepared, item))));
+      const result = await step.do("aggregate weighted rubric evidence", async () =>
+        persistEvaluationRun(this.env, params.tenantId, params.actorId, prepared, params.evaluationRunId, caseResults));
       await step.do("record evaluation suite outcome", async () => {
         await this.env.DB.prepare(`UPDATE evaluation_suite_runs SET status = ?, score = ?, evaluation_run_id = ?,
           completed_at = CURRENT_TIMESTAMP, error = NULL WHERE id = ? AND tenant_id = ?`)

@@ -214,7 +214,8 @@ export interface EvaluationDetail {
   scenario: { id: string; name: string; process_name: string; status: string; gate_threshold: number; active_release_id: string | null };
   cases: Array<{ id: string; name: string; input_text: string; assertions_json: string; weight: number; enabled: number; source: string; redaction_json: string; created_at: string }>;
   runs: Array<{ id: string; release_id: string; release_version: number | null; model_profile: string | null; status: string; score: number;
-    passed_assertions: number; assertion_count: number; case_count: number; total_tokens: number; estimated_cost_usd: number; created_at: string }>;
+    passed_assertions: number; assertion_count: number; case_count: number; total_tokens: number; estimated_cost_usd: number;
+    evidence_json: string; created_at: string }>;
   caseResults: Array<{ id: string; run_id: string; case_id: string; status: string; passed_assertions: number; assertion_count: number;
     output_preview: string | null; model: string | null; total_tokens: number; estimated_cost_usd: number; latency_ms: number;
     evidence_json: string; error: string | null }>;
@@ -366,7 +367,9 @@ export const api = {
       `/api/evaluations/${id}/run`, { method: "POST", body: JSON.stringify({ releaseId }) }),
   evaluation: (id: string) => request<{ data: EvaluationDetail }>(`/api/evaluations/${encodeURIComponent(id)}`),
   createEvaluationCase: (id: string, body: { name: string; input: string; expectedPhrases: string[];
-    prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
+    prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number;
+    dimension: "groundedness" | "completeness" | "safety" | "clarity" | "format";
+    assertionWeight: number; caseWeight: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(`/api/evaluations/${encodeURIComponent(id)}/cases`,
       { method: "POST", body: JSON.stringify(body) }),
   queueEvaluationSuite: (id: string, body: { releaseId?: string; mode?: "regression" | "shadow" } = {}) =>

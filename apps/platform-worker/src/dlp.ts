@@ -5,7 +5,7 @@ export type DlpDetector = typeof dlpDetectors[number];
 export type DlpAction = "audit" | "redact" | "block";
 export type DlpDirection = "input" | "output";
 
-interface DlpRule {
+export interface DlpRule {
   detector: DlpDetector;
   action: DlpAction;
   direction: "input" | "output" | "both";
@@ -46,13 +46,17 @@ export async function applyDlp(env: Env, tenantId: string, value: string, contex
   stage: string;
   executionId?: string;
   blueprintId?: string;
-}) {
-  const { results } = await env.DB.prepare(`SELECT detector, action, direction, enabled FROM dlp_rules
-    WHERE tenant_id=? ORDER BY detector`).bind(tenantId).all<DlpRule>();
-  const configured = results.length ? results : defaultRules;
+}, preparedRules?: DlpRule[]) {
+  const configured = preparedRules ?? await loadDlpRules(env, tenantId);
   const active = configured.filter((rule) => Number(rule.enabled) === 1 &&
     (rule.direction === context.direction || rule.direction === "both"));
   return enforceRules(env, tenantId, value, active, context);
+}
+
+export async function loadDlpRules(env: Env, tenantId: string) {
+  const { results } = await env.DB.prepare(`SELECT detector, action, direction, enabled FROM dlp_rules
+    WHERE tenant_id=? ORDER BY detector`).bind(tenantId).all<DlpRule>();
+  return results.length ? results : defaultRules;
 }
 
 export function scanSensitiveText(value: string) {

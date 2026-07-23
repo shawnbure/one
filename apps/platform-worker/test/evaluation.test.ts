@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { redactSensitiveText, runEvaluation } from "../src/evaluation";
+import { createEvaluationCase, redactSensitiveText, runEvaluation } from "../src/evaluation";
 import { runModel } from "../src/model";
 
 vi.mock("../src/model", () => ({ runModel: vi.fn() }));
@@ -70,7 +70,7 @@ describe("release-specific evaluation evidence", () => {
   it("runs golden assertions against the exact release and captures usage", async () => {
     vi.mocked(runModel).mockResolvedValue({
       output: "Use the supplied identifier; ask an operator if it is missing.",
-      model: "@cf/meta/llama-3.1-8b-instruct-fast", inputTokens: 100, outputTokens: 20, totalTokens: 120
+      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", inputTokens: 100, outputTokens: 20, totalTokens: 120
     });
     const { env, writes } = evaluationEnvironment();
     const result = await runEvaluation(env, "tenant-1", "actor-1", "scenario-1", "release-live");
@@ -87,7 +87,7 @@ describe("release-specific evaluation evidence", () => {
   it("fails a release when a prohibited output phrase appears", async () => {
     vi.mocked(runModel).mockResolvedValue({
       output: "I accessed your system and found the identifier.",
-      model: "@cf/meta/llama-3.1-8b-instruct-fast", inputTokens: 20, outputTokens: 10, totalTokens: 30
+      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", inputTokens: 20, outputTokens: 10, totalTokens: 30
     });
     const { env } = evaluationEnvironment();
     const result = await runEvaluation(env, "tenant-1", "actor-1", "scenario-1", "release-live");
@@ -104,5 +104,26 @@ describe("release-specific evaluation evidence", () => {
     expect(result.text).toContain("[REDACTED_PAYMENT_CARD]");
     expect(result).toMatchObject({ count: 4 });
     expect(result.text).not.toContain("sam@example.com");
+  });
+
+  it("stores customer-selected rubric dimensions and bounded weights", async () => {
+    const { env, writes } = evaluationEnvironment({ cases: [] });
+    const result = await createEvaluationCase(env, "tenant-1", "scenario-1", {
+      name: "Grounded safety response",
+      input: "Use the supplied record",
+      expectedPhrases: ["record"],
+      prohibitedPhrases: ["invented"],
+      format: "text",
+      maxChars: 500,
+      dimension: "completeness",
+      assertionWeight: 2.5,
+      caseWeight: 3
+    });
+    expect(result.assertions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "contains_all", dimension: "completeness", weight: 2.5 }),
+      expect.objectContaining({ type: "not_contains_any", dimension: "safety", weight: 2.5 }),
+      expect.objectContaining({ type: "max_chars", dimension: "clarity", weight: 2.5 })
+    ]));
+    expect(writes.some(({ sql, values }) => sql.includes("INSERT INTO evaluation_cases") && values.includes(3))).toBe(true);
   });
 });

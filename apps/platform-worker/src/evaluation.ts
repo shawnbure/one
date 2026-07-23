@@ -2,14 +2,17 @@ import { modelProfiles, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { assertBudgetAvailable } from "./usage";
-import { applyDlp, DlpBlockedError, scanSensitiveText } from "./dlp";
+import { applyDlp, DlpBlockedError, loadDlpRules, scanSensitiveText, type DlpRule } from "./dlp";
 
-type Assertion =
+type RubricDimension = "groundedness" | "completeness" | "safety" | "clarity" | "format";
+type AssertionMetadata = { dimension?: RubricDimension; weight?: number };
+type Assertion = (
   | { type: "contains_all" | "contains_any" | "not_contains_any"; value: string[] }
   | { type: "max_chars"; value: number }
-  | { type: "valid_json"; value: true };
+  | { type: "valid_json"; value: true }
+) & AssertionMetadata;
 
-interface EvaluationCase {
+export interface EvaluationCase {
   id: string;
   name: string;
   input_text: string;
@@ -29,8 +32,39 @@ interface ReleaseRow {
   published_at: string;
 }
 
-export async function runEvaluation(env: Env, tenantId: string, actorId: string, scenarioId: string, requestedReleaseId?: string,
-  requestedRunId?: string, requestedModelProfile?: string, updateScenario = true) {
+export interface PreparedEvaluation {
+  scenario: Record<string, string | number | null>;
+  releaseId: string;
+  modelProfile: string | undefined;
+  controls: Array<{ check: string; passed: boolean }>;
+  prompt: PromptBundle | null;
+  cases: EvaluationCase[];
+  dlpRules: DlpRule[];
+  modelRate: { model: string; input: number; output: number } | null;
+}
+
+export interface EvaluationCaseResult {
+  id: string;
+  caseId: string;
+  name: string;
+  status: "passing" | "failing" | "error";
+  passed: number;
+  total: number;
+  score: number;
+  output: string | null;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost: number;
+  latencyMs: number;
+  evidence: Array<{ assertion: Assertion["type"]; dimension: RubricDimension; weight: number; passed: boolean; detail: string }>;
+  error: string | null;
+  weight: number;
+}
+
+export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioId: string, requestedReleaseId?: string,
+  requestedModelProfile?: string, maxCases = 10): Promise<PreparedEvaluation> {
   await assertBudgetAvailable(env, tenantId);
   const scenario = await env.DB.prepare(`SELECT e.*, b.active_release_id, b.operating_mode, b.prompt_release_id
     FROM evaluation_scenarios e JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
@@ -41,8 +75,10 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
     p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum, p.published_at
     FROM process_releases r JOIN prompt_releases p ON p.id = r.prompt_release_id
     WHERE r.id = ? AND r.tenant_id = ? AND r.blueprint_id = ?`).bind(releaseId, tenantId, String(scenario.blueprint_id)).first<ReleaseRow>() : null;
+  const boundedMaxCases = Math.max(1, Math.min(100, Math.round(maxCases)));
   const cases = await env.DB.prepare(`SELECT id, name, input_text, assertions_json, weight FROM evaluation_cases
-    WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1 ORDER BY created_at, id LIMIT 10`).bind(tenantId, scenarioId).all<EvaluationCase>();
+    WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1 ORDER BY created_at, id LIMIT ?`)
+    .bind(tenantId, scenarioId, boundedMaxCases).all<EvaluationCase>();
   const guardrails = release ? parseList(release.guardrails_json) : [];
   const modelProfile = requestedModelProfile && requestedModelProfile in modelProfiles ? requestedModelProfile : release?.model_profile;
   const controls = [
@@ -51,78 +87,103 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
     { check: "guardrails_defined", passed: guardrails.length > 0 },
     { check: "golden_cases_defined", passed: cases.results.length > 0 }
   ];
-  const runId = requestedRunId ?? crypto.randomUUID();
-  const caseResults: Array<{
-    id: string; caseId: string; name: string; status: "passing" | "failing" | "error"; passed: number; total: number;
-    output: string | null; model: string | null; inputTokens: number; outputTokens: number; totalTokens: number;
-    cost: number; latencyMs: number; evidence: Array<{ assertion: Assertion["type"]; passed: boolean; detail: string }>; error: string | null; weight: number;
-  }> = [];
-  const rates = new Map<string, { input: number; output: number }>();
-  if (release) {
-    const prompt: PromptBundle = {
-      releaseId: release.prompt_release_id,
-      blueprintId: String(scenario.blueprint_id),
-      version: Number(release.version),
-      systemPrompt: release.system_prompt,
-      instructions: parseList(release.instructions_json),
-      guardrails,
-      checksum: release.checksum,
-      publishedAt: release.published_at
+  const prompt: PromptBundle | null = release ? {
+    releaseId: release.prompt_release_id,
+    blueprintId: String(scenario.blueprint_id),
+    version: Number(release.version),
+    systemPrompt: release.system_prompt,
+    instructions: parseList(release.instructions_json),
+    guardrails,
+    checksum: release.checksum,
+    publishedAt: release.published_at
+  } : null;
+  const dlpRules = await loadDlpRules(env, tenantId);
+  const catalogModel = modelProfile && modelProfile in modelProfiles
+    ? modelProfiles[modelProfile as keyof typeof modelProfiles].model
+    : null;
+  const rate = catalogModel ? await env.DB.prepare(`SELECT input_usd_per_million, output_usd_per_million
+    FROM model_catalog WHERE model_id = ?`).bind(catalogModel)
+    .first<{ input_usd_per_million: number; output_usd_per_million: number }>() : null;
+  const modelRate = catalogModel ? {
+    model: catalogModel,
+    input: Number(rate?.input_usd_per_million ?? 0),
+    output: Number(rate?.output_usd_per_million ?? 0)
+  } : null;
+  return { scenario, releaseId, modelProfile, controls, prompt, cases: cases.results, dlpRules, modelRate };
+}
+
+export async function evaluatePreparedCase(env: Env, tenantId: string, runId: string, prepared: PreparedEvaluation,
+  item: EvaluationCase): Promise<EvaluationCaseResult> {
+  const started = performance.now();
+  const assertions = parseAssertions(item.assertions_json);
+  try {
+    if (!prepared.prompt || !prepared.modelProfile) throw new Error("Evaluation release is unavailable");
+    const protectedInput = await applyDlp(env, tenantId, item.input_text, {
+      direction: "input", stage: "evaluation", executionId: `${runId}:${item.id}`,
+      blueprintId: String(prepared.scenario.blueprint_id)
+    }, prepared.dlpRules);
+    if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
+    const rawResult = await runModel(env, prepared.modelProfile, prepared.prompt, protectedInput.modelText,
+      `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`);
+    const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
+      direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`,
+      blueprintId: String(prepared.scenario.blueprint_id)
+    }, prepared.dlpRules);
+    if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
+    const result = { ...rawResult, output: protectedOutput.modelText };
+    const evidence = assertions.map((assertion) => evaluateAssertion(result.output, assertion));
+    const passed = evidence.filter((check) => check.passed).length;
+    const assertionWeight = evidence.reduce((sum, check) => sum + check.weight, 0);
+    const score = assertionWeight
+      ? evidence.reduce((sum, check) => sum + (check.passed ? check.weight : 0), 0) / assertionWeight
+      : 0;
+    const rate = prepared.modelRate?.model === result.model
+      ? prepared.modelRate
+      : { input: 0, output: 0 };
+    return {
+      id: `${runId}:${item.id}`, caseId: item.id, name: item.name,
+      status: score === 1 && assertions.length > 0 ? "passing" : "failing", passed, total: assertions.length, score,
+      output: result.output.slice(0, 2000), model: result.model, inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens, totalTokens: result.totalTokens,
+      cost: (result.inputTokens * rate.input + result.outputTokens * rate.output) / 1_000_000,
+      latencyMs: Math.round(performance.now() - started), evidence, error: null, weight: Number(item.weight) || 1
     };
-    for (const item of cases.results) {
-      const started = performance.now();
-      try {
-        const protectedInput = await applyDlp(env, tenantId, item.input_text, {
-          direction: "input", stage: "evaluation", executionId: `${runId}:${item.id}`, blueprintId: String(scenario.blueprint_id)
-        });
-        if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
-        const rawResult = await runModel(env, modelProfile!, prompt, protectedInput.modelText,
-          `evaluation:${release.id}:${modelProfile}:${item.id}`);
-        const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
-          direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`, blueprintId: String(scenario.blueprint_id)
-        });
-        if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
-        const result = { ...rawResult, output: protectedOutput.modelText };
-        const assertions = parseAssertions(item.assertions_json);
-        const evidence = assertions.map((assertion) => evaluateAssertion(result.output, assertion));
-        const passed = evidence.filter((check) => check.passed).length;
-        if (!rates.has(result.model)) {
-          const rate = await env.DB.prepare(`SELECT input_usd_per_million, output_usd_per_million
-            FROM model_catalog WHERE model_id = ?`).bind(result.model).first<{ input_usd_per_million: number; output_usd_per_million: number }>();
-          rates.set(result.model, { input: Number(rate?.input_usd_per_million ?? 0), output: Number(rate?.output_usd_per_million ?? 0) });
-        }
-        const rate = rates.get(result.model)!;
-        caseResults.push({
-          id: `${runId}:${item.id}`, caseId: item.id, name: item.name, status: passed === assertions.length && assertions.length > 0 ? "passing" : "failing",
-          passed, total: assertions.length, output: result.output.slice(0, 2000), model: result.model,
-          inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens,
-          cost: (result.inputTokens * rate.input + result.outputTokens * rate.output) / 1_000_000,
-          latencyMs: Math.round(performance.now() - started), evidence, error: null, weight: Number(item.weight) || 1
-        });
-      } catch (error) {
-        caseResults.push({
-          id: `${runId}:${item.id}`, caseId: item.id, name: item.name, status: "error", passed: 0,
-          total: Math.max(1, parseAssertions(item.assertions_json).length), output: null, model: null,
-          inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, latencyMs: Math.round(performance.now() - started),
-          evidence: [], error: (error instanceof Error ? error.message : String(error)).slice(0, 500), weight: Number(item.weight) || 1
-        });
-      }
-    }
+  } catch (error) {
+    return {
+      id: `${runId}:${item.id}`, caseId: item.id, name: item.name, status: "error", passed: 0,
+      total: Math.max(1, assertions.length), score: 0, output: null, model: null,
+      inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, latencyMs: Math.round(performance.now() - started),
+      evidence: [], error: (error instanceof Error ? error.message : String(error)).slice(0, 500), weight: Number(item.weight) || 1
+    };
   }
-  const controlPassed = controls.filter((check) => check.passed).length;
-  const controlScore = controlPassed / controls.length;
+}
+
+export async function persistEvaluationRun(env: Env, tenantId: string, actorId: string, prepared: PreparedEvaluation,
+  runId: string, caseResults: EvaluationCaseResult[], updateScenario = true) {
+  const controlPassed = prepared.controls.filter((check) => check.passed).length;
+  const controlScore = controlPassed / prepared.controls.length;
   const weightedTotal = 1 + caseResults.reduce((sum, item) => sum + item.weight, 0);
-  const weightedPassed = controlScore + caseResults.reduce((sum, item) => sum + item.weight * (item.total ? item.passed / item.total : 0), 0);
+  const weightedPassed = controlScore + caseResults.reduce((sum, item) => sum + item.weight * item.score, 0);
   const score = weightedTotal ? weightedPassed / weightedTotal : 0;
-  const assertionCount = controls.length + caseResults.reduce((sum, item) => sum + item.total, 0);
+  const assertionCount = prepared.controls.length + caseResults.reduce((sum, item) => sum + item.total, 0);
   const passedAssertions = controlPassed + caseResults.reduce((sum, item) => sum + item.passed, 0);
-  const threshold = Number(scenario.gate_threshold ?? 1);
+  const threshold = Number(prepared.scenario.gate_threshold ?? 1);
   const status = score >= threshold && caseResults.every((item) => item.status !== "error") ? "passing" : "failing";
   const inputTokens = caseResults.reduce((sum, item) => sum + item.inputTokens, 0);
   const outputTokens = caseResults.reduce((sum, item) => sum + item.outputTokens, 0);
   const totalTokens = caseResults.reduce((sum, item) => sum + item.totalTokens, 0);
   const estimatedCost = caseResults.reduce((sum, item) => sum + item.cost, 0);
-  const evidence = { controls, cases: caseResults.map((item) => ({
+  const dimensionTotals = new Map<RubricDimension, { passed: number; total: number }>();
+  for (const item of caseResults) for (const check of item.evidence) {
+    const current = dimensionTotals.get(check.dimension) ?? { passed: 0, total: 0 };
+    current.total += check.weight;
+    if (check.passed) current.passed += check.weight;
+    dimensionTotals.set(check.dimension, current);
+  }
+  const dimensions = [...dimensionTotals.entries()].map(([dimension, value]) => ({
+    dimension, score: value.total ? value.passed / value.total : 0, weight: value.total
+  }));
+  const evidence = { controls: prepared.controls, dimensions, cases: caseResults.map((item) => ({
     caseId: item.caseId, name: item.name, status: item.status, passed: item.passed, total: item.total, latencyMs: item.latencyMs, error: item.error
   })) };
   const statements = [
@@ -134,9 +195,9 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
         assertion_count = excluded.assertion_count, evidence_json = excluded.evidence_json, score = excluded.score,
         case_count = excluded.case_count, input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
         total_tokens = excluded.total_tokens, estimated_cost_usd = excluded.estimated_cost_usd,
-        model_profile = excluded.model_profile`).bind(runId, tenantId, scenario.id, scenario.blueprint_id,
-        releaseId || null, status, passedAssertions, assertionCount, JSON.stringify(evidence), actorId, score, caseResults.length,
-        inputTokens, outputTokens, totalTokens, estimatedCost, modelProfile ?? null),
+        model_profile = excluded.model_profile`).bind(runId, tenantId, prepared.scenario.id, prepared.scenario.blueprint_id,
+        prepared.releaseId || null, status, passedAssertions, assertionCount, JSON.stringify(evidence), actorId, score, caseResults.length,
+        inputTokens, outputTokens, totalTokens, estimatedCost, prepared.modelProfile ?? null),
     ...caseResults.map((item) => env.DB.prepare(`INSERT INTO evaluation_case_results
       (id, tenant_id, run_id, case_id, release_id, status, passed_assertions, assertion_count, output_preview, model,
        input_tokens, output_tokens, total_tokens, estimated_cost_usd, latency_ms, evidence_json, error)
@@ -145,18 +206,29 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
         assertion_count = excluded.assertion_count, output_preview = excluded.output_preview, model = excluded.model,
         input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens, total_tokens = excluded.total_tokens,
         estimated_cost_usd = excluded.estimated_cost_usd, latency_ms = excluded.latency_ms,
-        evidence_json = excluded.evidence_json, error = excluded.error`).bind(item.id, tenantId, runId, item.caseId, releaseId,
+        evidence_json = excluded.evidence_json, error = excluded.error`).bind(item.id, tenantId, runId, item.caseId, prepared.releaseId,
         item.status, item.passed, item.total, item.output, item.model, item.inputTokens, item.outputTokens, item.totalTokens,
         item.cost, item.latencyMs, JSON.stringify(item.evidence), item.error)),
     ...(updateScenario ? [env.DB.prepare("UPDATE evaluation_scenarios SET status = ?, assertion_count = ?, last_run_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
-      .bind(status, assertionCount, scenario.id, tenantId)] : []),
+      .bind(status, assertionCount, prepared.scenario.id, tenantId)] : []),
     env.DB.prepare(`INSERT OR REPLACE INTO audit_events (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
-      VALUES (?, ?, ?, 'evaluation.run', 'evaluation_scenario', ?, ?)`).bind(`audit-evaluation-${runId}`, tenantId, actorId, scenario.id,
-        JSON.stringify({ runId, releaseId, modelProfile, status, score, threshold, passedAssertions, assertionCount, caseCount: caseResults.length }))
+      VALUES (?, ?, ?, 'evaluation.run', 'evaluation_scenario', ?, ?)`).bind(`audit-evaluation-${runId}`, tenantId, actorId, prepared.scenario.id,
+        JSON.stringify({ runId, releaseId: prepared.releaseId, modelProfile: prepared.modelProfile, status, score, threshold,
+          passedAssertions, assertionCount, caseCount: caseResults.length, dimensions }))
   ];
   await env.DB.batch(statements);
-  return { id: runId, scenarioId, releaseId, modelProfile, status, score, threshold, passedAssertions, assertionCount,
+  return { id: runId, scenarioId: String(prepared.scenario.id), releaseId: prepared.releaseId,
+    modelProfile: prepared.modelProfile, status, score, threshold, passedAssertions, assertionCount,
     caseCount: caseResults.length, inputTokens, outputTokens, totalTokens, estimatedCostUsd: estimatedCost, evidence };
+}
+
+export async function runEvaluation(env: Env, tenantId: string, actorId: string, scenarioId: string, requestedReleaseId?: string,
+  requestedRunId?: string, requestedModelProfile?: string, updateScenario = true) {
+  const runId = requestedRunId ?? crypto.randomUUID();
+  const prepared = await prepareEvaluationRun(env, tenantId, scenarioId, requestedReleaseId, requestedModelProfile, 10);
+  const caseResults: EvaluationCaseResult[] = [];
+  for (const item of prepared.cases) caseResults.push(await evaluatePreparedCase(env, tenantId, runId, prepared, item));
+  return persistEvaluationRun(env, tenantId, actorId, prepared, runId, caseResults, updateScenario);
 }
 
 export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId: string) {
@@ -168,7 +240,7 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
       FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? ORDER BY created_at, id`).bind(tenantId, scenarioId).all(),
     env.DB.prepare(`SELECT r.id, r.release_id, r.model_profile, r.status, r.score, r.passed_assertions, r.assertion_count, r.case_count,
       r.input_tokens, r.output_tokens, r.total_tokens, r.estimated_cost_usd, r.triggered_by, r.created_at,
-      pr.version release_version FROM evaluation_runs r LEFT JOIN process_releases pr ON pr.id = r.release_id
+      r.evidence_json, pr.version release_version FROM evaluation_runs r LEFT JOIN process_releases pr ON pr.id = r.release_id
       WHERE r.tenant_id = ? AND r.scenario_id = ? ORDER BY r.created_at DESC LIMIT 12`).bind(tenantId, scenarioId).all()
   ]);
   if (!scenario) return null;
@@ -196,31 +268,35 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
 }
 
 export async function createEvaluationCase(env: Env, tenantId: string, scenarioId: string, input: {
-  name?: string; input?: string; expectedPhrases?: string[]; prohibitedPhrases?: string[]; format?: "text" | "json"; maxChars?: number;
+  name?: string; input?: string; expectedPhrases?: string[]; prohibitedPhrases?: string[]; format?: "text" | "json";
+  maxChars?: number; dimension?: RubricDimension; assertionWeight?: number; caseWeight?: number;
 }, source = "curated") {
   const scenario = await env.DB.prepare("SELECT id FROM evaluation_scenarios WHERE id = ? AND tenant_id = ?")
     .bind(scenarioId, tenantId).first();
   if (!scenario) throw new Error("Evaluation scenario not found");
   if (!input.name?.trim() || !input.input?.trim()) throw new Error("Case name and anonymized input are required");
   const assertions: Assertion[] = [];
+  const dimension = validDimension(input.dimension) ? input.dimension : "groundedness";
+  const assertionWeight = boundedWeight(input.assertionWeight);
+  const metadata = { dimension, weight: assertionWeight };
   const expected = cleanPhrases(input.expectedPhrases);
   const prohibited = cleanPhrases(input.prohibitedPhrases);
-  if (expected.length) assertions.push({ type: "contains_all", value: expected });
-  if (prohibited.length) assertions.push({ type: "not_contains_any", value: prohibited });
-  if (input.format === "json") assertions.push({ type: "valid_json", value: true });
+  if (expected.length) assertions.push({ type: "contains_all", value: expected, ...metadata });
+  if (prohibited.length) assertions.push({ type: "not_contains_any", value: prohibited, dimension: "safety", weight: assertionWeight });
+  if (input.format === "json") assertions.push({ type: "valid_json", value: true, dimension: "format", weight: assertionWeight });
   if (Number.isFinite(input.maxChars) && Number(input.maxChars) > 0 && Number(input.maxChars) <= 50_000) {
-    assertions.push({ type: "max_chars", value: Number(input.maxChars) });
+    assertions.push({ type: "max_chars", value: Number(input.maxChars), dimension: "clarity", weight: assertionWeight });
   }
   if (!assertions.length) throw new Error("At least one expected, prohibited, JSON, or length assertion is required");
   const count = await env.DB.prepare("SELECT COUNT(*) count FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ?")
     .bind(tenantId, scenarioId).first<{ count: number }>();
-  if (Number(count?.count) >= 10) throw new Error("Evaluation scenarios support up to 10 synchronous curated cases");
+  if (Number(count?.count) >= 100) throw new Error("Evaluation scenarios support up to 100 curated cases per durable suite");
   const id = crypto.randomUUID();
   const redacted = scanSensitiveText(input.input.trim().slice(0, 20_000));
   await env.DB.prepare(`INSERT INTO evaluation_cases
-    (id, tenant_id, scenario_id, name, input_text, assertions_json, source, redaction_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, tenantId, scenarioId, input.name.trim(), redacted.text, JSON.stringify(assertions), source,
-      JSON.stringify({ count: redacted.count, types: redacted.types })).run();
+    (id, tenant_id, scenario_id, name, input_text, assertions_json, weight, source, redaction_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, tenantId, scenarioId, input.name.trim(), redacted.text, JSON.stringify(assertions),
+      boundedWeight(input.caseWeight), source, JSON.stringify({ count: redacted.count, types: redacted.types })).run();
   const rows = await env.DB.prepare("SELECT assertions_json FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1")
     .bind(tenantId, scenarioId).all<{ assertions_json: string }>();
   const assertionCount = 4 + rows.results.reduce((sum, row) => sum + parseAssertions(row.assertions_json).length, 0);
@@ -352,26 +428,29 @@ export async function evaluateReleaseGate(env: Env, tenantId: string, actorId: s
 }
 
 function evaluateAssertion(output: string, assertion: Assertion) {
+  const dimension = validDimension(assertion.dimension) ? assertion.dimension : defaultDimension(assertion.type);
+  const weight = boundedWeight(assertion.weight);
   const normalized = output.toLocaleLowerCase();
   if (assertion.type === "max_chars") {
     const passed = output.length <= assertion.value;
-    return { assertion: assertion.type, passed, detail: `${output.length}/${assertion.value} characters` };
+    return { assertion: assertion.type, dimension, weight, passed, detail: `${output.length}/${assertion.value} characters` };
   }
   if (assertion.type === "valid_json") {
-    try { JSON.parse(output); return { assertion: assertion.type, passed: true, detail: "Valid JSON" }; }
-    catch { return { assertion: assertion.type, passed: false, detail: "Output is not valid JSON" }; }
+    try { JSON.parse(output); return { assertion: assertion.type, dimension, weight, passed: true, detail: "Valid JSON" }; }
+    catch { return { assertion: assertion.type, dimension, weight, passed: false, detail: "Output is not valid JSON" }; }
   }
   const phrases = assertion.value.map((value) => value.toLocaleLowerCase());
   const matches = phrases.filter((value) => normalized.includes(value));
   if (assertion.type === "contains_all") return {
-    assertion: assertion.type, passed: matches.length === phrases.length,
+    assertion: assertion.type, dimension, weight, passed: matches.length === phrases.length,
     detail: `${matches.length}/${phrases.length} expected phrases present`
   };
   if (assertion.type === "contains_any") return {
-    assertion: assertion.type, passed: matches.length > 0,
+    assertion: assertion.type, dimension, weight, passed: matches.length > 0,
     detail: `${matches.length}/${phrases.length} acceptable phrases present`
   };
-  return { assertion: assertion.type, passed: matches.length === 0, detail: `${matches.length} prohibited phrases present` };
+  return { assertion: assertion.type, dimension, weight, passed: matches.length === 0,
+    detail: `${matches.length} prohibited phrases present` };
 }
 
 function parseAssertions(value: string): Assertion[] {
@@ -380,12 +459,32 @@ function parseAssertions(value: string): Assertion[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((item): item is Assertion => {
       if (!item || typeof item !== "object" || typeof item.type !== "string") return false;
+      const metadataValid = (item.dimension === undefined || validDimension(item.dimension)) &&
+        (item.weight === undefined || (Number.isFinite(item.weight) && item.weight > 0 && item.weight <= 10));
+      if (!metadataValid) return false;
       if (item.type === "max_chars") return Number.isFinite(item.value) && item.value > 0;
       if (item.type === "valid_json") return item.value === true;
       return ["contains_all", "contains_any", "not_contains_any"].includes(item.type) &&
         Array.isArray(item.value) && item.value.length > 0 && item.value.every((entry: unknown) => typeof entry === "string");
     });
   } catch { return []; }
+}
+
+function validDimension(value: unknown): value is RubricDimension {
+  return typeof value === "string" &&
+    ["groundedness", "completeness", "safety", "clarity", "format"].includes(value);
+}
+
+function defaultDimension(type: Assertion["type"]): RubricDimension {
+  if (type === "not_contains_any") return "safety";
+  if (type === "max_chars") return "clarity";
+  if (type === "valid_json") return "format";
+  return "groundedness";
+}
+
+function boundedWeight(value: unknown) {
+  const weight = Number(value);
+  return Number.isFinite(weight) && weight > 0 ? Math.min(10, Math.round(weight * 10) / 10) : 1;
 }
 
 function cleanPhrases(value: unknown) {
