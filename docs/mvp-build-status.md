@@ -22,6 +22,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | API Logs | Correlated request history and webhook visibility |
 | Foundations | Connections, knowledge, evaluations, and model profile starting points |
 | Customer setup | Organization profile, readiness checklist, and secret-free portable deployment manifest |
+| Notifications | Tenant-scoped routing policies and persisted delivery evidence for operational events |
 
 ## Execution architecture
 
@@ -88,6 +89,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 7. `0007_evaluation_runs.sql`: persisted deterministic release-gate evidence.
 8. `0008_execution_usage.sql`: per-execution token accounting and model usage reporting.
 9. `0009_customer_onboarding.sql`: customer branding, operating defaults, and bootstrap state.
+10. `0010_notification_policies.sql`: alert routing policies and delivery evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

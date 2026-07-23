@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowUpRight,
   Bot,
+  Bell,
   Boxes,
   Check,
   ChevronDown,
@@ -41,6 +42,7 @@ import "./team.css";
 import "./export.css";
 import "./readability.css";
 import "./setup.css";
+import "./notifications.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";
@@ -49,6 +51,7 @@ import { ApiLogsView } from "./ApiLogsView";
 import { CreateProcessWizard } from "./CreateProcessWizard";
 import { TeamRolesView } from "./TeamRolesView";
 import { CustomerSetupView } from "./CustomerSetupView";
+import { NotificationsView } from "./NotificationsView";
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -102,6 +105,7 @@ const nav = [
   ["Knowledge", Database],
   ["Evaluations", FileCheck2],
   ["Governance", ShieldCheck],
+  ["Notifications", Bell],
 ] as const;
 
 function Status({ value }: { value: string }) {
@@ -329,7 +333,9 @@ export function App() {
               <X size={14} />
             </button>
           )}
-          {active === "Customer setup" ? (
+          {active === "Notifications" ? (
+            <NotificationsView onNotice={setNotice} />
+          ) : active === "Customer setup" ? (
             <CustomerSetupView session={session} onNotice={setNotice} />
           ) : active === "Team & roles" ? (
             <TeamRolesView session={session} onNotice={setNotice} />

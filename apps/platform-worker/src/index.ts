@@ -9,6 +9,7 @@ import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, exportCustomerManifest, getOnboarding } from "./onboarding";
+import { emitNotification } from "./notifications";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -55,6 +56,25 @@ app.get("/api/onboarding/export", requireRoles("admin", "owner"), async (c) => {
   c.header("content-disposition", `attachment; filename="workrr-customer-manifest-${c.get("tenantId")}.json"`);
   c.header("cache-control", "no-store");
   return c.json(await exportCustomerManifest(c.env, c.get("tenantId")));
+});
+
+app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {
+  const [policies, events] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM notification_policies WHERE tenant_id = ? ORDER BY event_type, channel").bind(c.get("tenantId")).all(),
+    c.env.DB.prepare("SELECT * FROM notification_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 100").bind(c.get("tenantId")).all()
+  ]);
+  return c.json({ data: { policies: policies.results, events: events.results } });
+});
+
+app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), async (c) => {
+  const policyId = c.req.param("id");
+  if (!policyId) return c.json({ error: "Notification policy ID is required" }, 400);
+  const body = await c.req.json<{ enabled?: boolean; destination?: string | null }>();
+  const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled), destination = COALESCE(?, destination),
+    updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
+    .bind(typeof body.enabled === "boolean" ? Number(body.enabled) : null, body.destination ?? null, policyId, c.get("tenantId")).run();
+  if (result.meta.changes) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "notification_policy.updated", "notification_policy", policyId, body);
+  return c.json({ updated: result.meta.changes === 1 });
 });
 
 app.get("/api/members", requireRoles("admin", "owner", "viewer"), async (c) => {
@@ -388,6 +408,12 @@ const handler: ExportedHandler<Env, QueueJob> = {
         message.ack();
       } catch (error) {
         console.error(JSON.stringify({ event: "queue_job_failed", executionId: message.body.executionId, error: String(error) }));
+        await env.DB.prepare("UPDATE executions SET status = 'failed', error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
+          .bind(error instanceof Error ? error.message : String(error), new Date().toISOString(), message.body.executionId, message.body.tenantId ?? "demo").run();
+        if (message.attempts >= 4) await emitNotification(env, message.body.tenantId ?? "demo", {
+          eventType: "queue.retry_exhausted", title: "Process job exhausted retries",
+          detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: message.body.executionId
+        });
         message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
       }
     }

@@ -181,6 +181,10 @@ export interface OnboardingData {
   settings: null | { organization_name: string; support_email: string; accent_color: string; default_model_profile: string; data_region: string; initialized_at: string | null };
   checklist: Array<{ id: string; label: string; ready: boolean }>;
 }
+export interface NotificationData {
+  policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string; updated_at: string }>;
+  events: Array<{ id: string; event_type: string; severity: string; title: string; detail: string; delivery_status: string; created_at: string }>;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -319,4 +323,6 @@ export const api = {
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
+  notifications: () => request<{ data: NotificationData }>("/api/notifications"),
+  updateNotificationPolicy: (id: string, body: { enabled: boolean }) => request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 };
