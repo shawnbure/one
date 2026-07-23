@@ -238,7 +238,13 @@ function Status({ value }: { value: string }) {
 }
 
 export function App() {
-  const [active, setActive] = useState("Overview");
+  const launchpadParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const initialProcessId = launchpadParams.get("process");
+  const focusedLaunchpad = launchpadParams.get("workspace") === "launchpad" &&
+    launchpadParams.get("focus") === "1";
+  const [active, setActive] = useState(
+    launchpadParams.get("workspace") === "launchpad" ? "Launchpad" : "Overview",
+  );
   const [selected, setSelected] = useState<AgentBlueprint | null>(null);
   const [search, setSearch] = useState("");
   const [processes, setProcesses] =
@@ -363,7 +369,7 @@ export function App() {
   }
 
   return (
-    <div className="shell">
+    <div className={`shell${focusedLaunchpad ? " focused-launchpad" : ""}`}>
       <aside>
         <div className="brand">
           <span className="brandmark">
@@ -476,7 +482,13 @@ export function App() {
           <FeatureBoundary key={active}>
             <Suspense fallback={<FeatureLoading label={active} />}>
           {active === "Launchpad" ? (
-            <ProcessLaunchpadView processes={processes} session={session} onNotice={setNotice} />
+            <ProcessLaunchpadView
+              processes={processes}
+              session={session}
+              initialProcessId={initialProcessId}
+              focused={focusedLaunchpad}
+              onNotice={setNotice}
+            />
           ) : active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
           ) : active === "Notifications" ? (

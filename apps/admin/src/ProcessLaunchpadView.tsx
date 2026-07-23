@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Bot, Clock3, MessageSquare, Plus, Send, Sparkles, Workflow } from "lucide-react";
+import { Archive, Bot, Clock3, Copy, ExternalLink, MessageSquare, Plus, Send, Sparkles, Workflow } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type LaunchpadMessage, type LaunchpadThread, type SessionData } from "./api";
 import "./process-launchpad.css";
@@ -7,10 +7,14 @@ import "./process-launchpad.css";
 export function ProcessLaunchpadView({
   processes,
   session,
+  initialProcessId,
+  focused = false,
   onNotice,
 }: {
   processes: AgentBlueprint[];
   session: SessionData | null;
+  initialProcessId?: string | null;
+  focused?: boolean;
   onNotice: (message: string) => void;
 }) {
   const available = useMemo(
@@ -19,7 +23,7 @@ export function ProcessLaunchpadView({
       !["entity", "shared_shard"].includes(process.executionProfile)),
     [processes],
   );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialProcessId ?? null);
   const [threads, setThreads] = useState<LaunchpadThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<LaunchpadMessage[]>([]);
@@ -133,12 +137,33 @@ export function ProcessLaunchpadView({
     }
   }
 
+  async function copyEmployeeLink() {
+    if (!selected) return;
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("workspace", "launchpad");
+    url.searchParams.set("process", selected.id);
+    url.searchParams.set("focus", "1");
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      onNotice("Private employee process link copied. Cloudflare Access still controls who can open it.");
+    } catch {
+      onNotice(`Copy this private employee link: ${url.toString()}`);
+    }
+  }
+
   return (
-    <section className="launchpad-page">
+    <section className={`launchpad-page${focused ? " focused" : ""}`}>
       <header className="launchpad-title">
-        <span><Sparkles size={16} /> EMPLOYEE AI WORKSPACE</span>
-        <h1>Process launchpad</h1>
-        <p>Use approved AI processes without needing to understand models, prompts, or infrastructure.</p>
+        <div>
+          <span><Sparkles size={16} /> EMPLOYEE AI WORKSPACE</span>
+          <h1>Process launchpad</h1>
+          <p>Use approved AI processes without needing to understand models, prompts, or infrastructure.</p>
+        </div>
+        <div className="launchpad-link-actions">
+          {selected && <button onClick={() => void copyEmployeeLink()}><Copy size={16} /> Copy employee link</button>}
+          {focused && <a href="/"><ExternalLink size={16} /> Open operations</a>}
+        </div>
       </header>
       <div className="launchpad-layout">
         <aside className="panel launchpad-processes">

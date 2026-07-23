@@ -7,8 +7,8 @@
   --muted: #56645e;
 }
 
-/* Comfortable default for customer-facing administration; dense labels remain at 12–13px below. */
-body { font-size: 15px; }
+/* Comfortable default for customer-facing administration; dense labels remain at 13–14px below. */
+body { font-size: 16px; line-height: 1.6; }
 .hero p,
 .panel-head p,
 .page-title p,
@@ -47,8 +47,8 @@ dt,
 .release-version small,
 .api-head,
 .webhook-row small {
-  font-size: 12px !important;
-  line-height: 1.45;
+  font-size: 13px !important;
+  line-height: 1.5;
 }
 
 button,
@@ -109,8 +109,33 @@ select,
 .template-grid em,
 .definition-summary small,
 .definition-summary strong {
-  font-size: 13px !important;
-  line-height: 1.5;
+  font-size: 14px !important;
+  line-height: 1.55;
+}
+
+/* Employee focus links retain identity and governance while removing admin-only navigation. */
+.shell.focused-launchpad { display: block; min-height: 100vh; }
+.shell.focused-launchpad > aside,
+.shell.focused-launchpad > main > header { display: none; }
+.shell.focused-launchpad > main { display: block; }
+.shell.focused-launchpad .content { max-width: 1280px; padding: clamp(20px, 4vw, 52px); }
+.shell.focused-launchpad .launchpad-page.focused { min-height: calc(100vh - 104px); }
+
+/* Legacy prototype CSS targeted every <aside>; nested page asides are normal grid content. */
+.launchpad-processes,
+.thread-list {
+  position: static;
+  inset: auto;
+  width: auto;
+  padding: 0;
+  overflow-y: visible;
+  z-index: auto;
+  color: inherit;
+}
+
+@media (max-width: 700px) {
+  body:has(.focused-launchpad) { min-width: 0; }
+  .shell.focused-launchpad .content { padding: 18px; }
 }
 
 /* Dense operational surfaces need the same floor as forms and navigation.
