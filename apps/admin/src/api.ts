@@ -229,6 +229,22 @@ export interface EvaluationDetail {
     completed_at: string | null; created_at: string }>;
   modelProfiles: Array<{ id: string; label: string; model: string; use: string }>;
 }
+export interface EvaluationDataset {
+  schema: "workrr-evaluation/v1";
+  exportedAt?: string;
+  scenario: {
+    name?: string;
+    category?: string;
+    gateThreshold: number;
+    cases: Array<{
+      name: string;
+      input: string;
+      assertions: Array<Record<string, unknown>>;
+      weight: number;
+      enabled: boolean;
+    }>;
+  };
+}
 
 export class ApiError extends Error {
   constructor(
@@ -372,6 +388,12 @@ export const api = {
     assertionWeight: number; caseWeight: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(`/api/evaluations/${encodeURIComponent(id)}/cases`,
       { method: "POST", body: JSON.stringify(body) }),
+  exportEvaluationDataset: (id: string) =>
+    request<{ data: EvaluationDataset }>(`/api/evaluations/${encodeURIComponent(id)}/dataset`),
+  importEvaluationDataset: (id: string, body: EvaluationDataset) =>
+    request<{ data: { imported: number; skipped: number; assertionCount: number;
+      gateThreshold: number | null; totalCases: number } }>(
+      `/api/evaluations/${encodeURIComponent(id)}/dataset`, { method: "POST", body: JSON.stringify(body) }),
   queueEvaluationSuite: (id: string, body: { releaseId?: string; mode?: "regression" | "shadow" } = {}) =>
     request<{ data: { id: string; status: string; releaseId: string; mode: string } }>(
       `/api/evaluations/${encodeURIComponent(id)}/suites`, { method: "POST", body: JSON.stringify(body) }),

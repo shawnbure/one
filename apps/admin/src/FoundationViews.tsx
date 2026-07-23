@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Users,
   Workflow,
+  Upload,
   XCircle,
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData } from "./api";
@@ -254,6 +255,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [sampleExecution, setSampleExecution] = useState("");
   const [candidateProfile, setCandidateProfile] = useState("fast");
   const [trialRunning, setTrialRunning] = useState(false);
+  const [datasetBusy, setDatasetBusy] = useState<"export" | "import" | null>(null);
   const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "",
     format: "text" as "text" | "json", maxChars: 2000,
     dimension: "groundedness" as "groundedness" | "completeness" | "safety" | "clarity" | "format",
@@ -342,6 +344,35 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
     } catch (error) { onNotice(error instanceof Error ? error.message : "Model comparison could not be queued"); }
     finally { setTrialRunning(false); }
   }
+  async function exportDataset() {
+    if (!selected || !detail) return;
+    setDatasetBusy("export");
+    try {
+      const result = await api.exportEvaluationDataset(selected);
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${detail.scenario.name.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "evaluation"}-workrr.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      onNotice(`Exported ${result.data.scenario.cases.length} anonymized evaluation cases.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation package could not be exported"); }
+    finally { setDatasetBusy(null); }
+  }
+  async function importDataset(file: File | undefined) {
+    if (!selected || !file) return;
+    setDatasetBusy("import");
+    try {
+      if (file.size > 1_000_000) throw new Error("Evaluation packages must be smaller than 1 MB");
+      const manifest = JSON.parse(await file.text());
+      const result = await api.importEvaluationDataset(selected, manifest);
+      await inspect(selected);
+      await onReload();
+      onNotice(`Imported ${result.data.imported} cases; ${result.data.skipped} existing cases skipped.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation package could not be imported"); }
+    finally { setDatasetBusy(null); }
+  }
   const latest = detail?.runs[0];
   const rubric = latest ? rubricDimensions(latest.evidence_json) : [];
   const previous = detail?.runs.find((run) => run.release_id !== latest?.release_id) ?? detail?.runs[1];
@@ -405,7 +436,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       </div>
       {selected && <div className="evaluation-lab panel">
         {!detail ? <div className="loading-card">Loading evaluation lab…</div> : <>
-          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span className="evaluation-lab-actions"><span>{detail.cases.length} {detail.cases.length === 1 ? "case" : "cases"}</span><button disabled={suiteRunning} onClick={() => void queueSuite()}><Workflow size={15}/>{suiteRunning ? "Queueing…" : "Run durable suite"}</button></span></div>
+          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span className="evaluation-lab-actions"><span>{detail.cases.length} {detail.cases.length === 1 ? "case" : "cases"}</span><button disabled={datasetBusy !== null} onClick={() => void exportDataset()}><Download size={15}/>{datasetBusy === "export" ? "Exporting…" : "Export package"}</button><label className="dataset-import"><Upload size={15}/>{datasetBusy === "import" ? "Importing…" : "Import package"}<input type="file" accept="application/json,.json" disabled={datasetBusy !== null} onChange={(event) => { void importDataset(event.target.files?.[0]); event.target.value = ""; }}/></label><button disabled={suiteRunning} onClick={() => void queueSuite()}><Workflow size={15}/>{suiteRunning ? "Queueing…" : "Run durable suite"}</button></span></div>
           <div className="comparison-strip">
             <article><small>LATEST RELEASE</small><strong>{latest ? `v${latest.release_version ?? "?"} · ${(Number(latest.score) * 100).toFixed(0)}%` : "Not run"}</strong><span className={`connection-state ${latest?.status ?? "attention"}`}><i/>{latest?.status ?? "not run"}</span></article>
             <article><small>PREVIOUS COMPARISON</small><strong>{previous ? `v${previous.release_version ?? "?"} · ${(Number(previous.score) * 100).toFixed(0)}%` : "No baseline"}</strong><span>{delta === null ? "Run another release to compare" : `${delta >= 0 ? "+" : ""}${delta.toFixed(0)} percentage points`}</span></article>

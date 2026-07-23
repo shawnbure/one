@@ -305,6 +305,103 @@ export async function createEvaluationCase(env: Env, tenantId: string, scenarioI
   return { id, assertionCount, assertions, redaction: { count: redacted.count, types: redacted.types } };
 }
 
+export async function exportEvaluationDataset(env: Env, tenantId: string, scenarioId: string) {
+  const scenario = await env.DB.prepare(`SELECT id, name, category, gate_threshold FROM evaluation_scenarios
+    WHERE id = ? AND tenant_id = ?`).bind(scenarioId, tenantId)
+    .first<{ id: string; name: string; category: string; gate_threshold: number }>();
+  if (!scenario) throw new Error("Evaluation scenario not found");
+  const cases = await env.DB.prepare(`SELECT name, input_text, assertions_json, weight, enabled
+    FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? ORDER BY created_at, id`)
+    .bind(tenantId, scenarioId).all<{
+      name: string; input_text: string; assertions_json: string; weight: number; enabled: number;
+    }>();
+  return {
+    schema: "workrr-evaluation/v1",
+    exportedAt: new Date().toISOString(),
+    scenario: {
+      name: scenario.name,
+      category: scenario.category,
+      gateThreshold: Number(scenario.gate_threshold),
+      cases: cases.results.map((item) => ({
+        name: item.name,
+        input: item.input_text,
+        assertions: parseAssertions(item.assertions_json),
+        weight: Number(item.weight) || 1,
+        enabled: Number(item.enabled) === 1
+      }))
+    }
+  };
+}
+
+export async function importEvaluationDataset(env: Env, tenantId: string, scenarioId: string, value: unknown) {
+  if (!value || typeof value !== "object") throw new Error("Evaluation package must be a JSON object");
+  const manifest = value as {
+    schema?: unknown;
+    scenario?: { gateThreshold?: unknown; cases?: unknown };
+  };
+  if (manifest.schema !== "workrr-evaluation/v1" || !manifest.scenario ||
+      !Array.isArray(manifest.scenario.cases) || manifest.scenario.cases.length === 0) {
+    throw new Error("A Workrr evaluation v1 package with at least one case is required");
+  }
+  if (manifest.scenario.cases.length > 100) throw new Error("An evaluation package may contain at most 100 cases");
+  const scenario = await env.DB.prepare(`SELECT id, blueprint_id FROM evaluation_scenarios
+    WHERE id = ? AND tenant_id = ?`).bind(scenarioId, tenantId)
+    .first<{ id: string; blueprint_id: string }>();
+  if (!scenario) throw new Error("Evaluation scenario not found");
+  const existing = await env.DB.prepare(`SELECT name FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ?`)
+    .bind(tenantId, scenarioId).all<{ name: string }>();
+  const existingNames = new Set(existing.results.map((item) => item.name.toLocaleLowerCase()));
+  const remaining = 100 - existingNames.size;
+  const packageNames = new Set<string>();
+  const rules = await loadDlpRules(env, tenantId);
+  const inserts: D1PreparedStatement[] = [];
+  let skipped = 0;
+  for (const raw of manifest.scenario.cases) {
+    if (!raw || typeof raw !== "object") throw new Error("Every imported case must be an object");
+    const item = raw as { name?: unknown; input?: unknown; assertions?: unknown; weight?: unknown; enabled?: unknown };
+    const name = typeof item.name === "string" ? item.name.trim().slice(0, 120) : "";
+    const input = typeof item.input === "string" ? item.input.trim().slice(0, 20_000) : "";
+    if (!name || !input) throw new Error("Every imported case requires a name and anonymized input");
+    const normalizedName = name.toLocaleLowerCase();
+    if (existingNames.has(normalizedName) || packageNames.has(normalizedName)) {
+      skipped += 1;
+      continue;
+    }
+    const assertions = parseAssertions(JSON.stringify(item.assertions));
+    if (!assertions.length || JSON.stringify(assertions).length > 20_000) {
+      throw new Error(`Imported case "${name}" has no valid bounded assertions`);
+    }
+    if (inserts.length >= remaining) throw new Error("Import would exceed the 100-case scenario limit");
+    const protectedInput = await applyDlp(env, tenantId, input, {
+      direction: "input",
+      stage: "evaluation_dataset_import",
+      blueprintId: scenario.blueprint_id
+    }, rules);
+    if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
+    packageNames.add(normalizedName);
+    inserts.push(env.DB.prepare(`INSERT OR IGNORE INTO evaluation_cases
+      (id, tenant_id, scenario_id, name, input_text, assertions_json, weight, enabled, source, redaction_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'imported', ?)`).bind(
+      crypto.randomUUID(), tenantId, scenarioId, name, protectedInput.safeText, JSON.stringify(assertions),
+      boundedWeight(item.weight), item.enabled === false ? 0 : 1,
+      JSON.stringify({ count: protectedInput.count, types: protectedInput.types })
+    ));
+  }
+  if (inserts.length) await env.DB.batch(inserts);
+  const thresholdValue = Number(manifest.scenario.gateThreshold);
+  const gateThreshold = Number.isFinite(thresholdValue) && thresholdValue >= 0.5 && thresholdValue <= 1
+    ? Math.round(thresholdValue * 100) / 100
+    : null;
+  const rows = await env.DB.prepare(`SELECT assertions_json FROM evaluation_cases
+    WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1`).bind(tenantId, scenarioId)
+    .all<{ assertions_json: string }>();
+  const assertionCount = 4 + rows.results.reduce((sum, row) => sum + parseAssertions(row.assertions_json).length, 0);
+  await env.DB.prepare(`UPDATE evaluation_scenarios SET assertion_count = ?, status = 'not_run',
+    gate_threshold = COALESCE(?, gate_threshold) WHERE id = ? AND tenant_id = ?`)
+    .bind(assertionCount, gateThreshold, scenarioId, tenantId).run();
+  return { imported: inserts.length, skipped, assertionCount, gateThreshold, totalCases: existingNames.size + inserts.length };
+}
+
 export async function queueModelTrial(env: Env, tenantId: string, actorId: string, scenarioId: string, candidateProfile: string,
   requestedReleaseId?: string) {
   await assertBudgetAvailable(env, tenantId);

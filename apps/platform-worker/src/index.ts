@@ -11,7 +11,7 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
+import { createEvaluationCase, exportEvaluationDataset, getEvaluationDetail, importEvaluationDataset, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
@@ -482,6 +482,31 @@ app.post("/api/evaluations/:id/cases", requireRoles("admin", "builder", "owner")
     return c.json({ data: result }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Evaluation case could not be created" }, 400);
+  }
+});
+
+app.get("/api/evaluations/:id/dataset", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  try {
+    const data = await exportEvaluationDataset(c.env, c.get("tenantId"), scenarioId);
+    c.header("cache-control", "no-store");
+    return c.json({ data });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Evaluation package could not be exported" }, 404);
+  }
+});
+
+app.post("/api/evaluations/:id/dataset", requireRoles("admin", "builder", "owner"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  try {
+    const result = await importEvaluationDataset(c.env, c.get("tenantId"), scenarioId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_dataset.imported",
+      "evaluation_scenario", scenarioId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Evaluation package could not be imported" }, 400);
   }
 });
 

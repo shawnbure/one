@@ -131,4 +131,15 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("UPDATE dlp_rules"))).toBe(false);
   });
+
+  it("allows viewers to export but not import portable evaluation packages", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/evaluations/scenario-1/dataset", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ schema: "workrr-evaluation/v1", scenario: { cases: [] } })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("INSERT OR IGNORE INTO evaluation_cases"))).toBe(false);
+  });
 });
