@@ -83,7 +83,9 @@ The Cloudflare account is pinned by `account_id` in the Wrangler configuration. 
 
 ## Security gate before production
 
-The API currently models the authenticated boundary with `x-workrr-tenant`, `x-workrr-user`, and `x-workrr-role` headers so the domain layer can be exercised locally. Do not expose it directly. The production slice must validate Cloudflare Access JWTs (or the selected identity provider), derive tenant/user/role server-side, restrict CORS to the admin origin, and add CSRF protection for browser mutations.
+The development domain is protected by Cloudflare Access and the Worker verifies the signed Access JWT against the application's audience before mapping the email to a D1 tenant membership. Tenant and role are derived server-side. Browser mutations enforce same-origin requests; arbitrary CORS is not enabled. The local development environment retains a development-only identity fallback.
+
+Production remains closed until its own Access application, audience, allow policy, and membership records are explicitly configured. Never reuse a development audience for production.
 
 ## Verification
 
