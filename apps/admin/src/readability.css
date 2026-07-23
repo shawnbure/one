@@ -896,3 +896,42 @@ a:focus-visible {
 @media (max-width: 760px) {
   .retirement-active dl { grid-template-columns: 1fr 1fr; }
 }
+
+.retention-operations { margin-top: 18px; padding: 24px; }
+.retention-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.retention-grid label { color: #405149; font-size: 12px; font-weight: 700; }
+.retention-grid label span { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+.retention-grid input { width: 100%; min-width: 0; padding: 9px; border: 1px solid #ccd8d2; border-radius: 7px; }
+.retention-grid em { color: #65766e; font-size: 12px; font-style: normal; }
+.retention-preview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+.retention-preview > span { padding: 14px; border: 1px solid #dfe6e2; border-radius: 10px; background: #f7f9f8; }
+.retention-preview strong,
+.retention-preview small { display: block; }
+.retention-preview strong { color: #21352c; font-size: 14px; }
+.retention-preview small,
+.retention-note { margin-top: 4px; color: #65766e; font-size: 12px; line-height: 1.5; }
+.retention-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.retention-actions input { flex: 1 1 240px; min-width: 0; padding: 9px; border: 1px solid #ccd8d2; border-radius: 7px; }
+@media (max-width: 980px) {
+  .retention-grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+}
+@media (max-width: 640px) {
+  .retention-grid,
+  .retention-preview { grid-template-columns: 1fr; }
+  .retention-actions > * { flex-basis: 100%; }
+}

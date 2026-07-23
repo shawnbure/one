@@ -22,8 +22,8 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type SessionData,
-  type ToolAdapterDefinition, type ToolDefinition } from "./api";
+import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type RetentionOperationsData,
+  type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition } from "./api";
 import "./governed-standards.css";
 
 interface Props {
@@ -53,7 +53,7 @@ export function FoundationView({ section, session, onNotice }: Props) {
   if (section === "Connections") return <Connections data={data} session={session} onReload={load} onNotice={onNotice} />;
   if (section === "Knowledge") return <Knowledge data={data} onReload={load} onNotice={onNotice} />;
   if (section === "Evaluations") return <Evaluations data={data} onReload={load} onNotice={onNotice} />;
-  return <Governance data={data} onReload={load} onNotice={onNotice} />;
+  return <Governance data={data} session={session} onReload={load} onNotice={onNotice} />;
 }
 
 function Connections({ data, session, onReload, onNotice }: { data: GovernanceData; session: SessionData | null;
@@ -972,10 +972,12 @@ function number(value: number) { return new Intl.NumberFormat().format(value || 
 
 function Governance({
   data,
+  session,
   onReload,
   onNotice,
 }: {
   data: GovernanceData;
+  session: SessionData | null;
   onReload: () => Promise<void>;
   onNotice: (message: string) => void;
 }) {
@@ -985,6 +987,50 @@ function Governance({
   const [incidentForm, setIncidentForm] = useState({ title: "", severity: "medium", blueprintId: "", impact: "" });
   const [incidentBusy, setIncidentBusy] = useState(false);
   const [dlpBusy, setDlpBusy] = useState<string | null>(null);
+  const [retention, setRetention] = useState<RetentionOperationsData | null>(null);
+  const [retentionPreview, setRetentionPreview] = useState<RetentionPreview | null>(null);
+  const [retentionBusy, setRetentionBusy] = useState(false);
+  const [holdReason, setHoldReason] = useState("");
+  const [releaseHold, setReleaseHold] = useState("");
+  const [enforceConfirmation, setEnforceConfirmation] = useState("");
+  const [retentionForm, setRetentionForm] = useState({
+    conversationDays: 90, executionDays: 365, approvalDays: 365, notificationDays: 180, apiLogDays: 90
+  });
+  const canManageRetention = session?.user.role === "admin" || session?.user.role === "owner";
+  async function loadRetention() {
+    try {
+      const [operations, preview] = await Promise.all([api.retention(), api.retentionPreview()]);
+      setRetention(operations.data);
+      setRetentionPreview(preview.data);
+      const policy = operations.data.control;
+      setRetentionForm({ conversationDays: policy.conversation_days, executionDays: policy.execution_days,
+        approvalDays: policy.approval_days, notificationDays: policy.notification_days,
+        apiLogDays: policy.api_log_days });
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Retention controls could not be loaded"); }
+  }
+  useEffect(() => { void loadRetention(); }, []);
+  async function saveRetention(legalHold = Boolean(retention?.control.legal_hold)) {
+    setRetentionBusy(true);
+    try {
+      await api.updateRetention({ ...retentionForm, legalHold,
+        legalHoldReason: legalHold ? holdReason || retention?.control.legal_hold_reason || "" : undefined,
+        releaseConfirmation: !legalHold ? releaseHold : undefined });
+      setHoldReason(""); setReleaseHold("");
+      await loadRetention();
+      onNotice(legalHold ? "Tenant legal hold is active." : "Retention policy saved.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Retention policy update failed"); }
+    finally { setRetentionBusy(false); }
+  }
+  async function enforceRetention() {
+    setRetentionBusy(true);
+    try {
+      const result = await api.enforceRetention(enforceConfirmation);
+      setEnforceConfirmation("");
+      await loadRetention();
+      onNotice(result.data.skipped ? "Retention enforcement is blocked by tenant legal hold." : "Retention enforcement completed with audit evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Retention enforcement failed"); }
+    finally { setRetentionBusy(false); }
+  }
   async function mode(processId: string | undefined, nextMode: string) {
     if (!processId) return;
     try {
@@ -1252,6 +1298,44 @@ function Governance({
           ))}
         </article>
       </div>
+      <article className="retention-operations panel">
+        <div className="section-head"><div><span className="eyebrow"><Database size={14}/> DATA LIFECYCLE</span>
+          <h2>Retention operations</h2><p>Expire content on schedule while preserving record identity and audit evidence.</p></div>
+          <span className={retention?.control.legal_hold ? "attention-badge" : "ready-badge"}>
+            {retention?.control.legal_hold ? "LEGAL HOLD" : "ENFORCING"}
+          </span></div>
+        {retention ? <>
+          <div className="retention-grid">
+            {([
+              ["conversationDays", "Agent conversations"], ["executionDays", "Execution content"],
+              ["approvalDays", "Approval content"], ["notificationDays", "Notification detail"],
+              ["apiLogDays", "API logs"]
+            ] as const).map(([field, label]) => <label key={field}>{label}<span><input type="number" min="1" max="2555"
+              disabled={!canManageRetention || retentionBusy} value={retentionForm[field]}
+              onChange={(event) => setRetentionForm({ ...retentionForm, [field]: Number(event.target.value) })}/><em>days</em></span></label>)}
+          </div>
+          <div className="retention-preview">
+            <span><strong>{retentionPreview ? Object.values(retentionPreview.eligible).reduce((sum, value) => sum + value, 0) : "—"}</strong><small>eligible content items / actors</small></span>
+            <span><strong>{retention.control.last_enforced_at || "Not yet"}</strong><small>last enforced</small></span>
+            <span><strong>{retention.runs[0]?.status || "No runs"}</strong><small>latest result</small></span>
+          </div>
+          {canManageRetention && <div className="retention-actions">
+            <button disabled={retentionBusy} onClick={() => void saveRetention()}>Save policy</button>
+            <input placeholder="Type ENFORCE RETENTION to run now" value={enforceConfirmation}
+              onChange={(event) => setEnforceConfirmation(event.target.value)}/>
+            <button disabled={retentionBusy || Boolean(retention.control.legal_hold) ||
+              enforceConfirmation !== "ENFORCE RETENTION"} onClick={() => void enforceRetention()}>Enforce now</button>
+            {!retention.control.legal_hold ? <>
+              <input placeholder="Legal hold reason (minimum 10 characters)" value={holdReason} onChange={(event) => setHoldReason(event.target.value)}/>
+              <button className="danger" disabled={retentionBusy || holdReason.trim().length < 10} onClick={() => void saveRetention(true)}>Apply legal hold</button>
+            </> : <>
+              <input placeholder="Type RELEASE TENANT LEGAL HOLD" value={releaseHold} onChange={(event) => setReleaseHold(event.target.value)}/>
+              <button className="danger" disabled={retentionBusy || releaseHold !== "RELEASE TENANT LEGAL HOLD"} onClick={() => void saveRetention(false)}>Release hold</button>
+            </>}
+          </div>}
+          <p className="retention-note">Audit events and record identifiers are retained. Process-specific legal holds override tenant cleanup. Knowledge sources keep their own review and expiry lifecycle.</p>
+        </> : <p className="empty-copy">Loading retention controls…</p>}
+      </article>
     </section>
   );
 }

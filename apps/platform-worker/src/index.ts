@@ -38,6 +38,8 @@ import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "./
 import { exportSupportBundle, getManagedLifecycle, updateManagedLifecycle } from "./lifecycle";
 import { disposeProcess, enqueueDueProcessDisposals, getProcessRetirement, requestProcessRetirement,
   transitionProcessRetirement } from "./retirement";
+import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperations, previewRetention,
+  updateRetentionControls } from "./retention";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -1003,6 +1005,34 @@ app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "rev
 app.get("/api/governance", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getGovernance(c.env, c.get("tenantId")) }));
 
+app.get("/api/governance/retention", requireRoles("admin", "owner", "viewer"), async (c) =>
+  c.json({ data: await getRetentionOperations(c.env, c.get("tenantId")) }));
+
+app.put("/api/governance/retention", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await updateRetentionControls(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json<Record<string, unknown>>()
+    ) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Retention policy update failed" }, 400);
+  }
+});
+
+app.get("/api/governance/retention/preview", requireRoles("admin", "owner", "viewer"), async (c) =>
+  c.json({ data: await previewRetention(c.env, c.get("tenantId")) }));
+
+app.post("/api/governance/retention/enforce", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const body: { confirmation?: string } = await c.req.json<{ confirmation?: string }>().catch(() => ({}));
+    if (body.confirmation !== "ENFORCE RETENTION") {
+      return c.json({ error: "Manual enforcement requires the exact confirmation" }, 400);
+    }
+    return c.json({ data: await enforceTenantRetention(c.env, c.get("tenantId")) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Retention enforcement failed" }, 409);
+  }
+});
+
 app.post("/api/knowledge-sources", requireRoles("admin", "builder", "owner"), async (c) => {
   try {
     return c.json({ data: await createKnowledgeSource(c.env, c.get("tenantId"), c.get("actorId"),
@@ -1616,7 +1646,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       emitConnectionExpiryAlerts(env, now),
       escalateUnacknowledgedNotifications(env, now),
       enqueueDueNotificationDeliveries(env, now),
-      enqueueDueProcessDisposals(env, now)
+      enqueueDueProcessDisposals(env, now),
+      enforceAllTenantRetention(env, now)
     ]));
   }
 };

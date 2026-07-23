@@ -232,6 +232,8 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
       SELECT ?, ?, 'Agent conversations', 'confidential', 90, 'agent_and_audit_delete'
       WHERE NOT EXISTS (SELECT 1 FROM retention_policies WHERE tenant_id = ? AND data_class = 'confidential')`)
       .bind(`retention-conversation-${suffix}`, tenantId, tenantId),
+    env.DB.prepare(`INSERT OR IGNORE INTO tenant_retention_controls
+      (tenant_id, updated_by) VALUES (?, ?)`).bind(tenantId, actorId),
     env.DB.prepare(`INSERT OR IGNORE INTO tenant_budgets
       (tenant_id, monthly_limit_usd, warning_percent, hard_limit, updated_by) VALUES (?, 25, 80, 0, ?)`)
       .bind(tenantId, actorId),

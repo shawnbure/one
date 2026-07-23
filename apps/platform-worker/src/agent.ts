@@ -94,4 +94,15 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     this.setState(this.initialState);
     return { turns, promptBundles };
   }
+
+  expireConversationBefore(tenantId: string, blueprintId: string, cutoff: string): { deleted: number } {
+    if (!this.state.tenantId && !this.state.blueprintId) return { deleted: 0 };
+    if (this.state.tenantId !== tenantId || this.state.blueprintId !== blueprintId) {
+      throw new Error("Agent retention identity mismatch");
+    }
+    const deleted = this.sql<{ count: number }>`SELECT COUNT(*) count FROM conversation_turn
+      WHERE created_at < ${cutoff}`[0]?.count ?? 0;
+    this.sql`DELETE FROM conversation_turn WHERE created_at < ${cutoff}`;
+    return { deleted };
+  }
 }

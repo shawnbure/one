@@ -327,6 +327,35 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_operating_controls"))).toBe(false);
   });
 
+  it("lets viewers preview retention but prevents policy changes and enforcement", async () => {
+    for (const request of [
+      new Request("http://localhost/api/governance/retention", {
+        method: "PUT", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }),
+      new Request("http://localhost/api/governance/retention/enforce", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      })
+    ]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(request, env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("tenant_retention_controls SET") ||
+        sql.includes("retention_enforcement_runs"))).toBe(false);
+    }
+  });
+
+  it("requires exact confirmation before manual retention enforcement", async () => {
+    const { env, queries } = environment("admin");
+    const response = await app.fetch(new Request("http://localhost/api/governance/retention/enforce", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ confirmation: "run" })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(400);
+    expect(queries.some((sql) => sql.includes("retention_enforcement_runs"))).toBe(false);
+  });
+
   it("allows viewers to inspect Queue evidence but not replay failed work", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/queue-jobs/job-1/replay", {

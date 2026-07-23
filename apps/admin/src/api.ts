@@ -277,6 +277,30 @@ export interface GovernanceData {
   }>;
   dataFlow: string[];
 }
+export interface RetentionControl {
+  tenant_id: string;
+  conversation_days: number;
+  execution_days: number;
+  approval_days: number;
+  notification_days: number;
+  api_log_days: number;
+  legal_hold: number;
+  legal_hold_reason: string | null;
+  updated_by: string;
+  updated_at: string | null;
+  last_enforced_at: string | null;
+}
+export interface RetentionOperationsData {
+  control: RetentionControl;
+  runs: Array<{ id: string; status: "completed" | "failed"; evidence_json: string; error: string | null;
+    started_at: string; completed_at: string }>;
+}
+export interface RetentionPreview {
+  legalHold: boolean;
+  cutoffs: Record<string, string>;
+  eligible: { executions: number; approvals: number; approvalMessages: number; notifications: number;
+    apiLogs: number; durableActors: number };
+}
 export interface KnowledgeCitation {
   sourceId: string;
   sourceName: string;
@@ -737,6 +761,16 @@ export const api = {
       { method: "POST" },
     ),
   governance: () => request<{ data: GovernanceData }>("/api/governance"),
+  retention: () => request<{ data: RetentionOperationsData }>("/api/governance/retention"),
+  retentionPreview: () => request<{ data: RetentionPreview }>("/api/governance/retention/preview"),
+  updateRetention: (body: {
+    conversationDays: number; executionDays: number; approvalDays: number; notificationDays: number;
+    apiLogDays: number; legalHold: boolean; legalHoldReason?: string; releaseConfirmation?: string;
+  }) => request<{ data: RetentionOperationsData }>("/api/governance/retention",
+    { method: "PUT", body: JSON.stringify(body) }),
+  enforceRetention: (confirmation: string) =>
+    request<{ data: { skipped: boolean; reason?: string; runId?: string } }>(
+      "/api/governance/retention/enforce", { method: "POST", body: JSON.stringify({ confirmation }) }),
   createKnowledgeSource: async (form: FormData) => {
     const response = await fetch("/api/knowledge-sources", { method: "POST", body: form });
     const payload = await response.json().catch(() => ({})) as { data?: { id: string; status: string }; error?: string };
