@@ -23,9 +23,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type RetentionOperationsData,
-  type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition,
+  type ProviderAcceptanceData, type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition,
   type WebhookReceipt } from "./api";
 import "./governed-standards.css";
+import "./provider-acceptance.css";
 
 interface Props {
   section: "Connections" | "Knowledge" | "Evaluations" | "Governance";
@@ -65,6 +66,8 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycle, setLifecycle] = useState({ credentialExpiresAt: "", rotationOwner: "", lastRotatedAt: "" });
   const [oauthBusy, setOauthBusy] = useState(false);
+  const [providerAcceptance, setProviderAcceptance] = useState<ProviderAcceptanceData | null>(null);
+  const [acceptanceBusy, setAcceptanceBusy] = useState(false);
   const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [toolAdapters, setToolAdapters] = useState<ToolAdapterDefinition[]>([]);
   const [toolBusy, setToolBusy] = useState(false);
@@ -90,7 +93,11 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
     }
     catch (error) { onNotice(error instanceof Error ? error.message : "Tool catalog could not be loaded"); }
   }
-  useEffect(() => { void loadTools(); }, []);
+  async function loadProviderAcceptance() {
+    try { setProviderAcceptance((await api.microsoftAcceptance()).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Provider acceptance evidence could not be loaded"); }
+  }
+  useEffect(() => { void loadTools(); void loadProviderAcceptance(); }, []);
   async function test(id: string) {
     setChecking(id);
     try {
@@ -147,6 +154,20 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Microsoft 365 could not be disconnected");
     } finally { setOauthBusy(false); }
+  }
+  async function runProviderAcceptance() {
+    setAcceptanceBusy(true);
+    try {
+      const requested: Array<"mail" | "calendar"> = [];
+      if (capabilities.mail) requested.push("mail");
+      if (capabilities.calendar) requested.push("calendar");
+      await api.runMicrosoftAcceptance(requested);
+      await loadProviderAcceptance();
+      await onReload();
+      onNotice("Read-only Microsoft provider acceptance completed with safe operational evidence.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Provider acceptance could not run");
+    } finally { setAcceptanceBusy(false); }
   }
   async function createTypedTool(event: React.FormEvent) {
     event.preventDefault();
@@ -261,6 +282,27 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
           <button className="primary" disabled={oauthBusy} onClick={() => void connectMicrosoft()}>{oauthBusy ? "Working…" : microsoftConnected ? "Reconnect permissions" : "Connect Microsoft 365"}</button>
           {microsoftConnected && <button disabled={oauthBusy} onClick={() => void disconnectMicrosoftConnection()}>Disconnect</button>}
         </div>
+      </article>
+      <article className="provider-acceptance panel">
+        <header><div><span className="provider-proof-icon"><ShieldCheck size={19}/></span><span>
+          <strong>Provider acceptance</strong>
+          <small>Prove the selected delegated reads against fixed Microsoft Graph endpoints. No message, event, or profile content is retained.</small>
+        </span></div><span className={`connection-state ${providerAcceptance?.latest?.status === "passed" ? "healthy" : "attention"}`}><i/>
+          {providerAcceptance?.latest ? providerAcceptance.latest.status : "Not run"}
+        </span></header>
+        {providerAcceptance?.latest ? <div className="provider-proof-results">
+          {providerAcceptance.latest.results.map((result) => <div key={result.capability} className={result.status}>
+            {result.status === "passed" ? <CheckCircle2 size={17}/> : <XCircle size={17}/>}
+            <span><strong>{result.label}</strong><small>{result.scope} · {result.detail}</small></span>
+            <em>{result.latencyMs == null ? result.status.replace("_", " ") : `${result.latencyMs} ms`}</em>
+          </div>)}
+          <footer>Last run {formatDate(providerAcceptance.latest.completedAt)} · metadata-only evidence</footer>
+        </div> : <p>No provider acceptance run has been recorded for this customer environment.</p>}
+        <button disabled={!microsoftConnected || acceptanceBusy ||
+          !session || !["admin", "builder", "owner", "operator"].includes(session.user.role)}
+          onClick={() => void runProviderAcceptance()}>
+          <RefreshCw size={14}/>{acceptanceBusy ? "Running read-only checks…" : "Run selected read checks"}
+        </button>
       </article>
       <div className="foundation-grid">
         {data.connections.map((item) => (
@@ -1570,6 +1612,13 @@ function dateInput(value: unknown) {
   if (!value) return "";
   const parsed = connectionDate(value);
   return Number.isNaN(parsed.valueOf()) ? "" : parsed.toISOString().slice(0, 10);
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit"
+  }).format(date);
 }
 function formatTimestamp(value: unknown) {
   if (!value) return "Never";

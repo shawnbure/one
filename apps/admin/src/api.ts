@@ -745,6 +745,18 @@ export interface ManagedLifecycleData {
   counts: Record<string, number>;
   operatingControl: null | { mode: string; reason: string | null; updated_at: string };
 }
+export interface ProviderAcceptanceData {
+  provider: "microsoft";
+  connected: boolean;
+  connection: null | { id: string; status: string; account: string | null; scopes: string[] };
+  latest: null | {
+    id: string; status: "passed" | "failed"; requested: string[];
+    results: Array<{ capability: string; label: string; scope: string;
+      status: "passed" | "failed" | "not_granted"; httpStatus: number | null;
+      latencyMs: number | null; detail: string }>;
+    startedBy: string; startedAt: string; completedAt: string;
+  };
+}
 export interface NotificationData {
   policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string;
     updated_at: string; credential_name: string | null; credential_configured: number;
@@ -1365,6 +1377,13 @@ export const api = {
   disconnectMicrosoft: () =>
     request<{ data: { disconnected: boolean; connectionId?: string } }>(
       "/api/oauth/microsoft/disconnect", { method: "POST", body: "{}" }),
+  microsoftAcceptance: () =>
+    request<{ data: ProviderAcceptanceData }>("/api/provider-acceptance/microsoft"),
+  runMicrosoftAcceptance: (capabilities: Array<"mail" | "calendar">) =>
+    request<{ data: ProviderAcceptanceData["latest"] & { connectionId: string } }>(
+      "/api/provider-acceptance/microsoft", {
+        method: "POST", body: JSON.stringify({ capabilities })
+      }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
   previewConfigurationRestore: (configurationPackage: unknown) =>
     request<{ data: ConfigurationRestorePreview }>("/api/configuration/restore/preview", {

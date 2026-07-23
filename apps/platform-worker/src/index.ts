@@ -27,6 +27,7 @@ import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOpe
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 import { isDlpBlocked, updateDlpRule } from "./dlp";
 import { getShadowReview, listShadowReviews, reviewShadowExecution, ShadowReviewConflict } from "./shadow";
+import { getProviderAcceptance, runMicrosoftAcceptance } from "./provider-acceptance";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
@@ -323,6 +324,31 @@ app.post("/api/oauth/microsoft/disconnect", requireRoles("admin", "owner"), asyn
     return c.json({ error: error instanceof Error ? error.message : "Microsoft connection could not be disconnected" }, 400);
   }
 });
+
+app.get("/api/provider-acceptance/microsoft",
+  requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+    c.json({ data: await getProviderAcceptance(c.env, c.get("tenantId")) }));
+
+app.post("/api/provider-acceptance/microsoft",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const body = await c.req.json<{ capabilities?: string[] }>();
+      const data = await runMicrosoftAcceptance(
+        c.env, c.get("tenantId"), c.get("actorId"), body.capabilities ?? []
+      );
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+        "connection.provider_acceptance_completed", "connection", data.connectionId, {
+          provider: data.provider, status: data.status, requested: data.requested,
+          resultStatuses: data.results.map((result) => ({
+            capability: result.capability, status: result.status, httpStatus: result.httpStatus
+          }))
+        });
+      return c.json({ data }, 201);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Provider acceptance could not run";
+      return c.json({ error: message }, message.includes("not connected") ? 409 : 400);
+    }
+  });
 
 app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {
   const [policies, events, credentials, microsoftEmail] = await Promise.all([

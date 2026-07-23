@@ -82,6 +82,18 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies"))).toBe(false);
   });
 
+  it("allows provider evidence inspection but prevents viewers from running external probes", async () => {
+    const viewer = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/provider-acceptance/microsoft", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ capabilities: ["mail"] })
+    }), viewer.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("provider_acceptance_runs") &&
+      sql.includes("INSERT"))).toBe(false);
+  });
+
   it("prevents viewers from acknowledging operational alerts", async () => {
     const viewer = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/notifications/events/event-1/acknowledge", {

@@ -972,6 +972,8 @@ Deliverables:
 - a tenant-scoped customer handoff gate that keeps automated Cloudflare preflight evidence distinct
   from attributable customer acceptance, data-owner approval, operator training, support transfer,
   and recovery-exercise sign-off.
+- explicit provider acceptance runs for code-owned read-only endpoints, with capability/scope,
+  HTTP outcome, and latency evidence but no provider payload retention.
 
 Exit criteria: an FDE can configure a new customer without modifying framework core.
 

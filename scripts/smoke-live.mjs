@@ -3,6 +3,12 @@
 const baseUrl = process.env.WORKRR_BASE_URL?.replace(/\/$/, "");
 const clientId = process.env.CF_ACCESS_CLIENT_ID;
 const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET;
+const microsoftCapabilities = (process.env.WORKRR_SMOKE_MICROSOFT ?? "")
+  .split(",").map((value) => value.trim()).filter(Boolean);
+if (microsoftCapabilities.some((value) => !["profile", "mail", "calendar"].includes(value))) {
+  console.error("WORKRR_SMOKE_MICROSOFT accepts only profile,mail,calendar.");
+  process.exit(2);
+}
 if (!baseUrl || !clientId || !clientSecret) {
   console.error("WORKRR_BASE_URL, CF_ACCESS_CLIENT_ID, and CF_ACCESS_CLIENT_SECRET are required.");
   process.exit(2);
@@ -51,6 +57,19 @@ try {
   fixtureId = undefined;
   if (!fixtureCleaned) throw new Error("Smoke fixture cleanup was not confirmed");
   checks.push("fixture-deleted");
+  if (microsoftCapabilities.length) {
+    const requested = microsoftCapabilities.filter((capability) => capability !== "profile");
+    const provider = await request("/api/provider-acceptance/microsoft", {
+      method: "POST", body: JSON.stringify({ capabilities: requested }),
+    });
+    if (provider.data?.status !== "passed") {
+      const failed = (provider.data?.results ?? [])
+        .filter((result) => result.status !== "passed")
+        .map((result) => `${result.capability}:${result.status}`).join(", ");
+      throw new Error(`Microsoft provider acceptance failed${failed ? ` (${failed})` : ""}`);
+    }
+    checks.push(...provider.data.results.map((result) => `microsoft-${result.capability}`));
+  }
   const verification = await request("/api/deployment-verification");
   if (verification.data?.status !== "verified") {
     throw new Error("Deployment verification evidence was not recognized after the smoke cycle");
