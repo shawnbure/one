@@ -18,7 +18,7 @@ function environment(ownerCount = 1) {
           };
           if (sql.includes("(SELECT COUNT(*) FROM agent_blueprints")) return {
             processes: 2, members: 3, connections: 2, knowledge_sources: 1, executions: 10,
-            audit_events: 20, retention_policies: 2
+            audit_events: 20, retention_policies: 2, open_help_requests: 1, overdue_help_requests: 0
           };
           if (sql.includes("tenant_operating_controls")) return { mode: "active", reason: null };
           if (sql.includes("notification_policies p")) return { count: 0 };
@@ -59,7 +59,7 @@ describe("managed lifecycle", () => {
   it("derives a tenant-scoped environment preflight from operating evidence", async () => {
     const { env } = environment();
     const result = await getManagedLifecycle(env, "tenant-1");
-    expect(result.preflight).toMatchObject({ status: "ready", ready: 11, total: 11 });
+    expect(result.preflight).toMatchObject({ status: "ready", ready: 12, total: 12 });
     expect(result.environment).toEqual({
       name: "development", domain: "one-dev.workrr.ai",
       accessTeamDomain: "https://workrr-one.cloudflareaccess.com"

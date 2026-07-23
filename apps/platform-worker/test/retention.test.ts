@@ -7,7 +7,7 @@ function environment(options?: { legalHold?: number; counts?: number }) {
   const writes: Write[] = [];
   const policy = {
     tenant_id: "tenant-1", conversation_days: 90, execution_days: 365, approval_days: 365,
-    notification_days: 180, api_log_days: 90, legal_hold: options?.legalHold ?? 0
+    notification_days: 180, help_request_days: 365, api_log_days: 90, legal_hold: options?.legalHold ?? 0
   };
   const DB = {
     prepare(sql: string) {
@@ -40,12 +40,14 @@ describe("tenant retention controls", () => {
   it("validates bounded periods and exact legal-hold release confirmation", async () => {
     const invalid = environment();
     await expect(updateRetentionControls(invalid.env, "tenant-1", "owner-1", {
-      conversationDays: 0, executionDays: 365, approvalDays: 365, notificationDays: 180, apiLogDays: 90
+      conversationDays: 0, executionDays: 365, approvalDays: 365, notificationDays: 180,
+      helpRequestDays: 365, apiLogDays: 90
     })).rejects.toThrow("Conversation retention");
 
     const held = environment({ legalHold: 1 });
     await expect(updateRetentionControls(held.env, "tenant-1", "owner-1", {
-      conversationDays: 90, executionDays: 365, approvalDays: 365, notificationDays: 180, apiLogDays: 90,
+      conversationDays: 90, executionDays: 365, approvalDays: 365, notificationDays: 180,
+      helpRequestDays: 365, apiLogDays: 90,
       legalHold: false
     })).rejects.toThrow("exact confirmation");
   });
@@ -54,7 +56,8 @@ describe("tenant retention controls", () => {
     const state = environment({ counts: 3 });
     await expect(previewRetention(state.env, "tenant-1", new Date("2026-07-23T00:00:00Z")))
       .resolves.toMatchObject({ legalHold: false, eligible: {
-        executions: 3, approvals: 3, approvalMessages: 3, notifications: 3, apiLogs: 3, durableActors: 3
+        executions: 3, approvals: 3, approvalMessages: 3, notifications: 3, helpRequests: 3,
+        apiLogs: 3, durableActors: 3
       } });
     expect(state.writes).toHaveLength(0);
   });
@@ -70,6 +73,7 @@ describe("tenant retention controls", () => {
       .resolves.toMatchObject({ skipped: false, evidence: { auditRetained: true } });
     expect(active.writes.some(({ sql }) => sql.includes("input_preview='[retention expired]'"))).toBe(true);
     expect(active.writes.some(({ sql }) => sql.includes("DELETE FROM api_logs"))).toBe(true);
+    expect(active.writes.some(({ sql }) => sql.includes("UPDATE help_requests SET subject='[retention expired]'"))).toBe(true);
     expect(active.writes.some(({ sql }) => sql.includes("UPDATE audit_events") || sql.includes("DELETE FROM audit_events"))).toBe(false);
     expect(JSON.stringify(active.writes)).toContain("retention.enforced");
   });

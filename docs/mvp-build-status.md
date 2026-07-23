@@ -183,6 +183,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 48. `0048_billing_reconciliation.sql`: normalized Cloudflare billing evidence, estimate variance, checksum idempotency, and non-destructive correction history.
 49. `0049_rubric_key_rotation.sql`: publisher key validity, predecessor-signed successor proofs, tenant rollover approval, overlap evidence, and expiry state.
 50. `0050_learning_center.sql`: tenant- and actor-scoped, versioned training acknowledgement evidence.
+51. `0051_help_operations.sql`: tenant support-request lifecycle, response ownership, notification policy, training oversight, and help-content retention.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -257,6 +258,8 @@ Rubric libraries export as `workrr-rubrics/v1` packages containing only names, d
 Production inputs are never sampled automatically. An authorized user may explicitly promote only the already-stored, truncated execution preview into a case. Before persistence, Workrr masks common email, phone, SSN, payment-card, and secret-token patterns and records redaction counts/types. This is a safety net, not a substitute for customer data-classification policy or a full DLP engine. Much larger batch datasets should add Workflow fan-out rather than extending one inference step indefinitely.
 
 The Help Center turns the platform's implementation boundaries into customer-operable guidance. Each signed-in user receives a short learning path selected by their server-resolved tenant role, with versioned acknowledgement evidence scoped to that tenant and actor. Administrator, builder, owner, operator, reviewer, viewer, and consumer guidance uses different first actions and escalation paths. Plain-language concepts distinguish instant agents from Agent SDK durable actors, Workflows, Queues, and approval records. Live process runbooks are derived from tenant process/discovery data and state the owner, status, autonomy, operating steps, exception path, and exact memory behavior for that execution profile. Documentation remains code-versioned while D1 stores only compact acknowledgement evidence and dynamic tenant reporting; it does not add a per-request content cache.
+
+Help is also an accountable operating workflow. Any authenticated member can create a bounded how-to, unexpected-result, access, incident, or privacy request and optionally link an exact same-tenant process or execution. Incident and privacy requests are always high priority; high, normal, and low work receives a four-hour, one-day, or three-day due time. New work auto-assigns to the configured support owner when available and emits the tenant's in-app help notification. Builders, operators, owners, and administrators may assign or transition work; resolution requires evidence, uses optimistic revision checks, and becomes immutable. Other roles see only their own requests. Administrators and owners see current-version training completion for active tenant members. Help content has its own configurable retention period, respects tenant legal hold, and is redacted while request identity and audit evidence remain.
 
 ## Remaining aggressive-MVP work
 

@@ -27,8 +27,12 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
       (SELECT COUNT(*) FROM knowledge_sources WHERE tenant_id=? AND status NOT IN ('deleted')) knowledge_sources,
       (SELECT COUNT(*) FROM executions WHERE tenant_id=?) executions,
       (SELECT COUNT(*) FROM audit_events WHERE tenant_id=?) audit_events,
-      (SELECT COUNT(*) FROM retention_policies WHERE tenant_id=?) retention_policies`)
-      .bind(tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId).first<Record<string, number>>(),
+      (SELECT COUNT(*) FROM retention_policies WHERE tenant_id=?) retention_policies,
+      (SELECT COUNT(*) FROM help_requests WHERE tenant_id=? AND status!='resolved') open_help_requests,
+      (SELECT COUNT(*) FROM help_requests WHERE tenant_id=? AND status!='resolved'
+        AND datetime(due_at)<datetime('now')) overdue_help_requests`)
+      .bind(tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId)
+      .first<Record<string, number>>(),
     env.DB.prepare("SELECT mode, reason, updated_at FROM tenant_operating_controls WHERE tenant_id=?")
       .bind(tenantId).first<Record<string, unknown>>(),
     env.DB.prepare(`SELECT COUNT(*) count FROM notification_policies p
@@ -62,6 +66,8 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
     check("retention", "Retention policy", Number(counts?.retention_policies) > 0, "data", "Define lifecycle and deletion behavior for customer data."),
     check("owned_alerts", "Operational alert ownership", Number(unownedAlerts?.count) === 0, "operations",
       `${Number(unownedAlerts?.count)} acknowledgement policies are unowned.`),
+    check("support_sla", "Support response SLA", Number(counts?.overdue_help_requests) === 0, "operations",
+      `${Number(counts?.overdue_help_requests ?? 0)} help requests are overdue.`),
     check("credentials", "Credential lifecycle", Number(expiredCredentials?.count) === 0, "security",
       `${Number(expiredCredentials?.count)} credentials are expired or invalid.`),
     check("external_routes", "Enabled delivery routes", Number(enabledExternal?.count) === 0, "operations",

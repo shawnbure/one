@@ -112,6 +112,7 @@ describe("customer launch bootstrap", () => {
     expect(state().statements.some((item) => item.sql.includes("INSERT OR IGNORE INTO tenant_budgets"))).toBe(true);
     expect(state().statements.some((item) => item.sql.includes("INSERT OR IGNORE INTO tenant_operating_controls"))).toBe(true);
     expect(state().statements.some((item) => item.sql.includes("'incident.emergency_stop'"))).toBe(true);
+    expect(state().statements.some((item) => item.sql.includes("'help.request.created'"))).toBe(true);
     expect(state().statements.filter((item) => item.sql.includes("INSERT OR IGNORE INTO dlp_rules"))).toHaveLength(6);
 
     const retry = await bootstrapCustomer(env as never, "tenant-1", "member-admin", manifest);

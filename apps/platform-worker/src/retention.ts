@@ -7,6 +7,7 @@ const defaults = {
   execution_days: 365,
   approval_days: 365,
   notification_days: 180,
+  help_request_days: 365,
   api_log_days: 90,
   legal_hold: 0,
   legal_hold_reason: null,
@@ -30,6 +31,7 @@ export async function updateRetentionControls(env: Env, tenantId: string, actorI
     execution: boundedDays(input.executionDays, "Execution"),
     approval: boundedDays(input.approvalDays, "Approval"),
     notification: boundedDays(input.notificationDays, "Notification"),
+    helpRequest: boundedDays(input.helpRequestDays, "Help request"),
     apiLog: boundedDays(input.apiLogDays, "API log")
   };
   const legalHold = Boolean(input.legalHold);
@@ -43,15 +45,16 @@ export async function updateRetentionControls(env: Env, tenantId: string, actorI
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO tenant_retention_controls
-      (tenant_id, conversation_days, execution_days, approval_days, notification_days, api_log_days,
+      (tenant_id, conversation_days, execution_days, approval_days, notification_days, help_request_days, api_log_days,
        legal_hold, legal_hold_reason, updated_by, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id) DO UPDATE SET conversation_days=excluded.conversation_days,
        execution_days=excluded.execution_days, approval_days=excluded.approval_days,
-       notification_days=excluded.notification_days, api_log_days=excluded.api_log_days,
+       notification_days=excluded.notification_days, help_request_days=excluded.help_request_days,
+       api_log_days=excluded.api_log_days,
        legal_hold=excluded.legal_hold, legal_hold_reason=excluded.legal_hold_reason,
        updated_by=excluded.updated_by, updated_at=excluded.updated_at`)
-      .bind(tenantId, days.conversation, days.execution, days.approval, days.notification, days.apiLog,
+      .bind(tenantId, days.conversation, days.execution, days.approval, days.notification, days.helpRequest, days.apiLog,
         Number(legalHold), legalHold ? reason.slice(0, 2000) : null, actorId, now),
     audit(env, tenantId, actorId, legalHold ? "retention.legal_hold_applied" : "retention.policy_updated", {
       ...days, legalHold, reason: legalHold ? reason : null
@@ -63,7 +66,7 @@ export async function updateRetentionControls(env: Env, tenantId: string, actorI
 export async function previewRetention(env: Env, tenantId: string, now = new Date()) {
   const policy = await control(env, tenantId);
   const cutoffs = cutoffMap(policy, now);
-  const [executions, approvals, messages, notifications, logs, actors] = await Promise.all([
+  const [executions, approvals, messages, notifications, helpRequests, logs, actors] = await Promise.all([
     count(env, `SELECT COUNT(*) count FROM executions WHERE tenant_id=? AND datetime(started_at)<datetime(?)
       AND input_preview!='[retention expired]' AND NOT EXISTS (SELECT 1 FROM process_retirements r
         WHERE r.tenant_id=executions.tenant_id AND r.blueprint_id=executions.blueprint_id AND r.legal_hold=1
@@ -81,6 +84,8 @@ export async function previewRetention(env: Env, tenantId: string, now = new Dat
             AND r.status IN ('requested','approved','failed')))`, tenantId, cutoffs.approval, tenantId),
     count(env, `SELECT COUNT(*) count FROM notification_events WHERE tenant_id=? AND datetime(created_at)<datetime(?)
       AND detail!='[retention expired]'`, tenantId, cutoffs.notification),
+    count(env, `SELECT COUNT(*) count FROM help_requests WHERE tenant_id=? AND datetime(created_at)<datetime(?)
+      AND detail!='[retention expired]'`, tenantId, cutoffs.helpRequest),
     count(env, `SELECT COUNT(*) count FROM api_logs WHERE tenant_id=? AND datetime(created_at)<datetime(?)`,
       tenantId, cutoffs.apiLog),
     env.DB.prepare(`SELECT COUNT(DISTINCT instance_key) count FROM executions WHERE tenant_id=?
@@ -91,7 +96,7 @@ export async function previewRetention(env: Env, tenantId: string, now = new Dat
       .bind(tenantId, cutoffs.conversation).first<{ count: number }>()
   ]);
   return { legalHold: Boolean(policy.legal_hold), cutoffs,
-    eligible: { executions, approvals, approvalMessages: messages, notifications, apiLogs: logs,
+    eligible: { executions, approvals, approvalMessages: messages, notifications, helpRequests, apiLogs: logs,
       durableActors: Number(actors?.count ?? 0) } };
 }
 
@@ -141,6 +146,11 @@ export async function enforceTenantRetention(env: Env, tenantId: string, now = n
       env.DB.prepare(`UPDATE notification_events SET detail='[retention expired]'
         WHERE tenant_id=? AND datetime(created_at)<datetime(?) AND detail!='[retention expired]'`)
         .bind(tenantId, cutoffs.notification),
+      env.DB.prepare(`UPDATE help_requests SET subject='[retention expired]', detail='[retention expired]',
+        resolution=CASE WHEN resolution IS NULL THEN NULL ELSE '[retention expired]' END,
+        updated_at=CURRENT_TIMESTAMP
+        WHERE tenant_id=? AND datetime(created_at)<datetime(?) AND detail!='[retention expired]'`)
+        .bind(tenantId, cutoffs.helpRequest),
       env.DB.prepare(`DELETE FROM api_logs WHERE tenant_id=? AND datetime(created_at)<datetime(?)`)
         .bind(tenantId, cutoffs.apiLog)
     ];
@@ -150,7 +160,8 @@ export async function enforceTenantRetention(env: Env, tenantId: string, now = n
       executionContent: Number(results[0]?.meta.changes ?? 0),
       approvalContent: Number(results[1]?.meta.changes ?? 0) + Number(results[2]?.meta.changes ?? 0),
       notificationContent: Number(results[3]?.meta.changes ?? 0),
-      apiLogs: Number(results[4]?.meta.changes ?? 0),
+      helpRequestContent: Number(results[4]?.meta.changes ?? 0),
+      apiLogs: Number(results[5]?.meta.changes ?? 0),
       auditRetained: true,
       enforcedAt: startedAt
     };
@@ -193,7 +204,7 @@ function cutoffMap(policy: Record<string, unknown>, now: Date) {
   return {
     conversation: cutoff(policy.conversation_days), execution: cutoff(policy.execution_days),
     approval: cutoff(policy.approval_days), notification: cutoff(policy.notification_days),
-    apiLog: cutoff(policy.api_log_days)
+    helpRequest: cutoff(policy.help_request_days), apiLog: cutoff(policy.api_log_days)
   };
 }
 async function count(env: Env, sql: string, ...bindings: unknown[]) {

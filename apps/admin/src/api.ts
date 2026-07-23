@@ -49,6 +49,20 @@ export interface HelpCenterData {
     steps: string[]; acknowledgedAt: string | null;
   }>;
   concepts: Array<{ name: string; detail: string }>;
+  supportAccess: { canManage: boolean; canViewTeamProgress: boolean };
+  supportOwners: Array<{ id: string; display_name: string; role: string }>;
+  supportRequests: Array<{
+    id: string; category: "how_to" | "unexpected_result" | "access" | "incident" | "privacy";
+    priority: "low" | "normal" | "high"; subject: string; detail: string;
+    blueprint_id: string | null; execution_id: string | null; status: "open" | "in_progress" | "resolved";
+    assigned_to: string | null; due_at: string; resolution: string | null; revision: number;
+    created_at: string; updated_at: string; requester_name: string | null; assignee_name: string | null;
+    process_name: string | null;
+  }>;
+  teamProgress: Array<{
+    id: string; display_name: string; email: string; role: string; last_seen_at: string | null;
+    last_acknowledged_at: string | null; completed: number; total: number;
+  }>;
   processRunbooks: Array<{
     id: string; name: string; execution_profile: string; autonomy: string; status: string;
     business_owner: string; department: string; risk_level: string; purpose: string;
@@ -298,6 +312,7 @@ export interface RetentionControl {
   execution_days: number;
   approval_days: number;
   notification_days: number;
+  help_request_days: number;
   api_log_days: number;
   legal_hold: number;
   legal_hold_reason: string | null;
@@ -314,7 +329,7 @@ export interface RetentionPreview {
   legalHold: boolean;
   cutoffs: Record<string, string>;
   eligible: { executions: number; approvals: number; approvalMessages: number; notifications: number;
-    apiLogs: number; durableActors: number };
+    helpRequests: number; apiLogs: number; durableActors: number };
 }
 export interface KnowledgeCitation {
   sourceId: string;
@@ -693,6 +708,18 @@ export const api = {
     request<{ data: { moduleId: string; version: number; acknowledgedAt: string; recorded: boolean } }>(
       `/api/help-center/modules/${encodeURIComponent(moduleId)}/acknowledge`,
       { method: "POST", body: JSON.stringify({ version }) }),
+  createHelpRequest: (body: {
+    category: string; priority: string; subject: string; detail: string;
+    blueprintId?: string; executionId?: string;
+  }) => request<{ data: { id: string; status: string; category: string; priority: string;
+    assignedTo: string | null; dueAt: string; revision: number } }>("/api/help-center/requests",
+      { method: "POST", body: JSON.stringify(body) }),
+  updateHelpRequest: (id: string, body: {
+    status: "open" | "in_progress" | "resolved"; assignedTo?: string; resolution?: string;
+    expectedRevision: number;
+  }) => request<{ data: { id: string; from: string; status: string; assignedTo: string | null; revision: number } }>(
+    `/api/help-center/requests/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   session: () => request<SessionData>("/api/session"),
   processes: () => request<{ data: AgentBlueprint[] }>("/api/processes"),
   overview: () => request<OverviewData>("/api/overview"),
@@ -815,6 +842,7 @@ export const api = {
   retentionPreview: () => request<{ data: RetentionPreview }>("/api/governance/retention/preview"),
   updateRetention: (body: {
     conversationDays: number; executionDays: number; approvalDays: number; notificationDays: number;
+    helpRequestDays: number;
     apiLogDays: number; legalHold: boolean; legalHoldReason?: string; releaseConfirmation?: string;
   }) => request<{ data: RetentionOperationsData }>("/api/governance/retention",
     { method: "PUT", body: JSON.stringify(body) }),

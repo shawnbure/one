@@ -44,7 +44,7 @@ import { disposeProcess, enqueueDueProcessDisposals, getProcessRetirement, reque
   transitionProcessRetirement } from "./retirement";
 import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperations, previewRetention,
   updateRetentionControls } from "./retention";
-import { acknowledgeLearning, getHelpCenter } from "./help-center";
+import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConflict, updateHelpRequest } from "./help-center";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -112,6 +112,40 @@ app.post("/api/help-center/modules/:moduleId/acknowledge", async (c) => {
     return c.json({ data }, data.recorded ? 201 : 200);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Training acknowledgement failed" }, 400);
+  }
+});
+
+app.post("/api/help-center/requests", async (c) => {
+  try {
+    const data = await createHelpRequest(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "help.request.created",
+      "help_request", data.id, { category: data.category, priority: data.priority, dueAt: data.dueAt });
+    await emitNotification(c.env, c.get("tenantId"), {
+      eventType: "help.request.created",
+      title: `${data.priority === "high" ? "High-priority" : "New"} help request`,
+      detail: `A ${data.category.replaceAll("_", " ")} request is due ${data.dueAt}.`,
+      targetType: "help_request",
+      targetId: data.id
+    });
+    return c.json({ data }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Help request could not be created" }, 400);
+  }
+});
+
+app.patch("/api/help-center/requests/:requestId", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  try {
+    const requestId = c.req.param("requestId");
+    if (!requestId) return c.json({ error: "Help request ID is required" }, 400);
+    const data = await updateHelpRequest(
+      c.env, c.get("tenantId"), c.get("actorId"), requestId, await c.req.json()
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "help.request.updated",
+      "help_request", requestId, data);
+    return c.json({ data });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Help request could not be updated" },
+      error instanceof HelpRequestConflict ? 409 : 400);
   }
 });
 

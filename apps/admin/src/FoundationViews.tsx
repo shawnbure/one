@@ -1042,7 +1042,8 @@ function Governance({
   const [releaseHold, setReleaseHold] = useState("");
   const [enforceConfirmation, setEnforceConfirmation] = useState("");
   const [retentionForm, setRetentionForm] = useState({
-    conversationDays: 90, executionDays: 365, approvalDays: 365, notificationDays: 180, apiLogDays: 90
+    conversationDays: 90, executionDays: 365, approvalDays: 365, notificationDays: 180,
+    helpRequestDays: 365, apiLogDays: 90
   });
   const canManageRetention = session?.user.role === "admin" || session?.user.role === "owner";
   async function loadRetention() {
@@ -1053,7 +1054,7 @@ function Governance({
       const policy = operations.data.control;
       setRetentionForm({ conversationDays: policy.conversation_days, executionDays: policy.execution_days,
         approvalDays: policy.approval_days, notificationDays: policy.notification_days,
-        apiLogDays: policy.api_log_days });
+        helpRequestDays: policy.help_request_days, apiLogDays: policy.api_log_days });
     } catch (error) { onNotice(error instanceof Error ? error.message : "Retention controls could not be loaded"); }
   }
   useEffect(() => { void loadRetention(); }, []);
@@ -1357,6 +1358,7 @@ function Governance({
             {([
               ["conversationDays", "Agent conversations"], ["executionDays", "Execution content"],
               ["approvalDays", "Approval content"], ["notificationDays", "Notification detail"],
+              ["helpRequestDays", "Help request content"],
               ["apiLogDays", "API logs"]
             ] as const).map(([field, label]) => <label key={field}>{label}<span><input type="number" min="1" max="2555"
               disabled={!canManageRetention || retentionBusy} value={retentionForm[field]}

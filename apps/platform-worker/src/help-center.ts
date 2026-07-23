@@ -104,8 +104,22 @@ type ProcessRow = {
   business_owner: string; department: string; risk_level: string; purpose: string | null; current_steps: string | null;
 };
 
+type HelpRequestRow = {
+  id: string; category: string; priority: string; subject: string; detail: string;
+  blueprint_id: string | null; execution_id: string | null; status: string; assigned_to: string | null;
+  due_at: string; resolution: string | null; revision: number; created_at: string; updated_at: string;
+  requester_name: string | null; assignee_name: string | null; process_name: string | null;
+};
+
+type TeamProgressRow = {
+  id: string; display_name: string; email: string; role: Role; last_seen_at: string | null;
+  acknowledged_modules: string | null; last_acknowledged_at: string | null;
+};
+
 export async function getHelpCenter(env: Env, tenantId: string, actorId: string, role: Role) {
-  const [processResult, acknowledgementResult] = await Promise.all([
+  const staffView = ["admin", "builder", "owner", "operator"].includes(role);
+  const teamView = ["admin", "owner"].includes(role);
+  const [processResult, acknowledgementResult, requestResult, teamResult, ownerResult] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.description, b.execution_profile, b.autonomy, b.status,
       b.business_owner, b.department, b.risk_level, d.purpose, d.current_steps
       FROM agent_blueprints b LEFT JOIN process_discovery d
@@ -113,7 +127,31 @@ export async function getHelpCenter(env: Env, tenantId: string, actorId: string,
       WHERE b.tenant_id = ? ORDER BY b.name`).bind(tenantId).all<ProcessRow>(),
     env.DB.prepare(`SELECT module_id, module_version, acknowledged_at FROM learning_acknowledgements
       WHERE tenant_id = ? AND actor_id = ? ORDER BY acknowledged_at DESC`)
-      .bind(tenantId, actorId).all<{ module_id: string; module_version: number; acknowledged_at: string }>()
+      .bind(tenantId, actorId).all<{ module_id: string; module_version: number; acknowledged_at: string }>(),
+    env.DB.prepare(`SELECT h.id, h.category, h.priority, h.subject, h.detail, h.blueprint_id, h.execution_id,
+      h.status, h.assigned_to, h.due_at, h.resolution, h.revision, h.created_at, h.updated_at,
+      requester.display_name requester_name, assignee.display_name assignee_name, b.name process_name
+      FROM help_requests h
+      LEFT JOIN tenant_members requester ON requester.id = h.created_by AND requester.tenant_id = h.tenant_id
+      LEFT JOIN tenant_members assignee ON assignee.id = h.assigned_to AND assignee.tenant_id = h.tenant_id
+      LEFT JOIN agent_blueprints b ON b.id = h.blueprint_id AND b.tenant_id = h.tenant_id
+      WHERE h.tenant_id = ? ${staffView ? "" : "AND h.created_by = ?"}
+      ORDER BY CASE h.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,
+        CASE h.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, h.created_at DESC LIMIT 50`)
+      .bind(...(staffView ? [tenantId] : [tenantId, actorId])).all<HelpRequestRow>(),
+    teamView ? env.DB.prepare(`SELECT m.id, m.display_name, m.email, m.role, m.last_seen_at,
+      GROUP_CONCAT(DISTINCT CASE WHEN a.module_version = ? THEN a.module_id END) acknowledged_modules,
+      MAX(CASE WHEN a.module_version = ? THEN a.acknowledged_at END) last_acknowledged_at
+      FROM tenant_members m LEFT JOIN learning_acknowledgements a
+        ON a.tenant_id = m.tenant_id AND a.actor_id = m.id
+      WHERE m.tenant_id = ? AND m.status = 'active'
+      GROUP BY m.id ORDER BY m.display_name LIMIT 100`)
+      .bind(MODULE_VERSION, MODULE_VERSION, tenantId).all<TeamProgressRow>() : Promise.resolve({ results: [] as TeamProgressRow[] }),
+    staffView ? env.DB.prepare(`SELECT id, display_name, role FROM tenant_members
+      WHERE tenant_id = ? AND status = 'active' AND role IN ('admin','builder','owner','operator')
+      ORDER BY display_name LIMIT 100`).bind(tenantId)
+      .all<{ id: string; display_name: string; role: Role }>() :
+      Promise.resolve({ results: [] as Array<{ id: string; display_name: string; role: Role }> })
   ]);
   const acknowledgements = new Map(acknowledgementResult.results.map((row) =>
     [`${row.module_id}:${row.module_version}`, row.acknowledged_at]));
@@ -127,6 +165,15 @@ export async function getHelpCenter(env: Env, tenantId: string, actorId: string,
       total: available.length
     },
     modules: available,
+    supportRequests: requestResult.results,
+    supportAccess: { canManage: staffView, canViewTeamProgress: teamView },
+    supportOwners: ownerResult.results,
+    teamProgress: teamResult.results.map((member) => {
+      const applicable = modules.filter((module) => module.roles.includes(member.role));
+      const acknowledged = new Set((member.acknowledged_modules ?? "").split(",").filter(Boolean));
+      const completed = applicable.filter((module) => acknowledged.has(module.id)).length;
+      return { ...member, completed, total: applicable.length };
+    }),
     concepts: [
       { name: "Instant agent", detail: "One request, no sticky conversational identity. Best for classification, extraction, and burst processing." },
       { name: "Durable actor", detail: "A named Agent SDK actor with strongly consistent, thread- or entity-scoped state. Many instances of the same agent definition may serve different consumers." },
@@ -145,6 +192,83 @@ export async function getHelpCenter(env: Env, tenantId: string, actorId: string,
       exception: "Stop, preserve the execution ID, and escalate to the business owner when evidence, policy, or data handling is uncertain."
     }))
   };
+}
+
+export async function createHelpRequest(
+  env: Env, tenantId: string, actorId: string, input: Record<string, unknown>, now = new Date()
+) {
+  const category = enumValue(input.category, ["how_to", "unexpected_result", "access", "incident", "privacy"], "category");
+  const requestedPriority = enumValue(input.priority, ["low", "normal", "high"], "priority");
+  const priority = ["incident", "privacy"].includes(category) ? "high" : requestedPriority;
+  const subject = boundedText(input.subject, "Subject", 5, 120);
+  const detail = boundedText(input.detail, "Detail", 10, 2000);
+  const blueprintId = optionalId(input.blueprintId);
+  const executionId = optionalId(input.executionId);
+  const [context, defaultOwner] = await Promise.all([
+    blueprintId || executionId ? env.DB.prepare(`SELECT b.id blueprint_id, e.id execution_id
+      FROM tenants t
+      LEFT JOIN agent_blueprints b ON b.tenant_id = t.id AND b.id = ?
+      LEFT JOIN executions e ON e.tenant_id = t.id AND e.id = ?
+      WHERE t.id = ? LIMIT 1`).bind(blueprintId, executionId, tenantId)
+      .first<{ blueprint_id: string | null; execution_id: string | null }>() : Promise.resolve(null),
+    env.DB.prepare(`SELECT m.id FROM tenant_lifecycle_settings l JOIN tenant_members m
+      ON m.id = l.support_owner_id AND m.tenant_id = l.tenant_id
+      WHERE l.tenant_id = ? AND m.status = 'active' AND m.role IN ('admin','builder','owner','operator') LIMIT 1`)
+      .bind(tenantId).first<{ id: string }>()
+  ]);
+  if (blueprintId || executionId) {
+    if ((blueprintId && context?.blueprint_id !== blueprintId) ||
+      (executionId && context?.execution_id !== executionId)) {
+      throw new Error("Linked process or execution does not belong to this organization");
+    }
+  }
+  const id = crypto.randomUUID();
+  const dueHours = priority === "high" ? 4 : priority === "normal" ? 24 : 72;
+  const dueAt = new Date(now.getTime() + dueHours * 60 * 60_000).toISOString();
+  await env.DB.prepare(`INSERT INTO help_requests
+    (id, tenant_id, created_by, category, priority, subject, detail, blueprint_id, execution_id, assigned_to, due_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, tenantId, actorId, category, priority, subject, detail, blueprintId, executionId,
+      defaultOwner?.id ?? null, dueAt).run();
+  return { id, status: "open", category, priority, assignedTo: defaultOwner?.id ?? null, dueAt, revision: 1 };
+}
+
+export async function updateHelpRequest(
+  env: Env, tenantId: string, actorId: string, requestId: string, input: Record<string, unknown>
+) {
+  const expectedRevision = Number(input.expectedRevision);
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error("Current request revision is required");
+  const status = enumValue(input.status, ["open", "in_progress", "resolved"], "status");
+  const assignedTo = optionalId(input.assignedTo);
+  const resolution = typeof input.resolution === "string" ? input.resolution.trim() : "";
+  if (status === "resolved" && (resolution.length < 10 || resolution.length > 2000)) {
+    throw new Error("Resolution evidence must be between 10 and 2000 characters");
+  }
+  if (status !== "resolved" && resolution) throw new Error("Resolution evidence is only accepted when resolving a request");
+  if (assignedTo) {
+    const assignee = await env.DB.prepare(`SELECT id FROM tenant_members WHERE id = ? AND tenant_id = ?
+      AND status = 'active' AND role IN ('admin','builder','owner','operator') LIMIT 1`)
+      .bind(assignedTo, tenantId).first<{ id: string }>();
+    if (!assignee) throw new Error("Support owner must be an active administrator, builder, owner, or operator");
+  }
+  const existing = await env.DB.prepare(`SELECT status FROM help_requests WHERE id = ? AND tenant_id = ? LIMIT 1`)
+    .bind(requestId, tenantId).first<{ status: string }>();
+  if (!existing) throw new Error("Help request was not found");
+  if (existing.status === "resolved") {
+    throw new Error("Resolved help requests are immutable; create a follow-up request");
+  }
+  const result = await env.DB.prepare(`UPDATE help_requests SET status = ?, assigned_to = ?,
+    resolution = ?, resolved_by = ?, resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE NULL END,
+    revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND tenant_id = ? AND revision = ?`)
+    .bind(status, assignedTo, status === "resolved" ? resolution : null,
+      status === "resolved" ? actorId : null, status, requestId, tenantId, expectedRevision).run();
+  if (Number(result.meta.changes ?? 0) !== 1) throw new HelpRequestConflict();
+  return { id: requestId, from: existing.status, status, assignedTo, revision: expectedRevision + 1 };
+}
+
+export class HelpRequestConflict extends Error {
+  constructor() { super("This help request changed while you were reviewing it. Refresh and try again."); }
 }
 
 export async function acknowledgeLearning(
@@ -169,4 +293,22 @@ function memoryDescription(profile: string): string {
   }
   if (profile === "workflow") return "Workflow state · durable orchestration checkpoints, not an always-running Worker.";
   return "Instant · no sticky agent conversation state is created.";
+}
+
+function boundedText(value: unknown, label: string, min: number, max: number): string {
+  if (typeof value !== "string" || value.trim().length < min || value.trim().length > max) {
+    throw new Error(`${label} must be between ${min} and ${max} characters`);
+  }
+  return value.trim();
+}
+
+function optionalId(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || value.trim().length > 120) throw new Error("Linked identifier is invalid");
+  return value.trim();
+}
+
+function enumValue<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
+  if (typeof value !== "string" || !allowed.includes(value as T)) throw new Error(`Invalid ${label}`);
+  return value as T;
 }

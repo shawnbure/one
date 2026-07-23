@@ -165,6 +165,26 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("INSERT OR IGNORE INTO learning_acknowledgements"))).toBe(false);
   });
 
+  it("lets viewers request help but not manage the tenant support queue", async () => {
+    const viewer = environment("viewer");
+    const created = await app.fetch(new Request("http://localhost/api/help-center/requests", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ category: "how_to", priority: "normal", subject: "Need operating guidance",
+        detail: "Please explain the safe next action for this process." })
+    }), viewer.env as never, executionCtx as never);
+    expect(created.status).toBe(201);
+    expect(viewer.queries.some((sql) => sql.includes("INSERT INTO help_requests"))).toBe(true);
+
+    const updated = await app.fetch(new Request("http://localhost/api/help-center/requests/request-1", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ expectedRevision: 1, status: "resolved", resolution: "Unauthorized resolution." })
+    }), viewer.env as never, executionCtx as never);
+    expect(updated.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("UPDATE help_requests"))).toBe(false);
+  });
+
   it("lets viewers inspect opportunities but not capture, qualify, or convert them", async () => {
     const viewer = environment("viewer");
     const list = await app.fetch(new Request("http://localhost/api/opportunities", {

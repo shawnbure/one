@@ -257,6 +257,12 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
       (id, tenant_id, event_type, channel, destination, enabled, severity)
       VALUES (?, ?, 'incident.emergency_stop', 'in_app', NULL, 1, 'critical')`).bind(`notify-incident-${suffix}`, tenantId),
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity, owner_id,
+       acknowledgement_required, escalation_minutes)
+      VALUES (?, ?, 'help.request.created', 'in_app', NULL, 1, 'warning',
+        (SELECT support_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?), 1, 1440)`)
+      .bind(`notify-help-request-${suffix}`, tenantId, tenantId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity, credential_ref_id)
       VALUES (?, ?, 'execution.failed', 'webhook', NULL, 0, 'critical', ?)`)
       .bind(`notify-execution-webhook-${suffix}`, tenantId, credentialId),
