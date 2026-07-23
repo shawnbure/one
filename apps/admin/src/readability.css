@@ -1180,6 +1180,13 @@ nav button em,
   .webhook-create > div, .webhook-receipts { grid-column: 1; }
   .webhook-receipts > span { grid-template-columns: 1fr; }
 }
+
+/* Handoff decisions are customer-facing evidence, not dense telemetry. */
+.handoff-gate > header small,
+.handoff-copy small {
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
 .retention-actions {
   display: flex;
   flex-wrap: wrap;

@@ -737,6 +737,10 @@ export interface ManagedLifecycleData {
   members: Array<{ id: string; display_name: string; email: string; role: string }>;
   preflight: { status: "ready" | "action_required"; ready: number; total: number;
     checks: Array<{ id: string; label: string; ready: boolean; category: string; detail: string }> };
+  handoff: { status: "ready" | "action_required"; automatedReady: boolean; confirmed: number; total: number;
+    checks: Array<{ id: string; label: string; detail: string; status: "open" | "confirmed";
+      evidence: string | null; confirmedBy: string | null; confirmedByName: string | null;
+      confirmedAt: string | null; revision: number; updatedAt: string | null }> };
   environment: { name: string; domain: string; accessTeamDomain: string };
   counts: Record<string, number>;
   operatingControl: null | { mode: string; reason: string | null; updated_at: string };
@@ -1376,6 +1380,11 @@ export const api = {
     maintenanceDayUtc: number; maintenanceHourUtc: number; recoveryReviewDueAt: string | null;
     supportNotes: string }) =>
     request<{ data: ManagedLifecycleData }>("/api/lifecycle", { method: "PUT", body: JSON.stringify(body) }),
+  updateHandoffCheck: (checkId: string, body: {
+    status: "open" | "confirmed"; evidence: string; revision: number;
+  }) => request<{ data: ManagedLifecycleData }>(`/api/lifecycle/handoff/${encodeURIComponent(checkId)}`, {
+    method: "PATCH", body: JSON.stringify(body)
+  }),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
   bootstrapCustomer: (body: {

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, Circle, Download, FileDown, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, Upload, UserPlus } from "lucide-react";
+import { CalendarClock, CheckCircle2, Circle, ClipboardCheck, Download, FileDown, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, Upload, UserPlus } from "lucide-react";
 import { api, type ConfigurationRestorePreview, type ManagedLifecycleData, type OnboardingData, type ProcessTemplate, type SessionData } from "./api";
 import "./configuration-backup.css";
+import "./handoff.css";
 
 export function CustomerSetupView({ session, onNotice }: { session: SessionData | null; onNotice: (message: string) => void }) {
   const [data, setData] = useState<OnboardingData | null>(null);
@@ -14,6 +15,8 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
   const [restoreReason, setRestoreReason] = useState("");
   const [restoreConfirmation, setRestoreConfirmation] = useState("");
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [handoffDrafts, setHandoffDrafts] = useState<Record<string, string>>({});
+  const [handoffBusy, setHandoffBusy] = useState<string | null>(null);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [form, setForm] = useState({ organizationName: "", supportEmail: "", accentColor: "#1f7a5b", defaultModelProfile: "balanced", dataRegion: "Cloudflare global network" });
   const [launch, setLaunch] = useState({
@@ -89,6 +92,29 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
       onNotice("Managed lifecycle ownership and recovery review saved.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "Lifecycle settings could not be saved"); }
     finally { setSaving(false); }
+  }
+  async function updateHandoff(checkId: string, status: "open" | "confirmed") {
+    const check = lifecycle?.handoff.checks.find((item) => item.id === checkId);
+    if (!check) return;
+    setHandoffBusy(checkId);
+    try {
+      const result = await api.updateHandoffCheck(checkId, {
+        status,
+        evidence: handoffDrafts[checkId] ?? check.evidence ?? "",
+        revision: check.revision
+      });
+      setLifecycle(result.data);
+      setHandoffDrafts((current) => {
+        const next = { ...current };
+        delete next[checkId];
+        return next;
+      });
+      onNotice(status === "confirmed"
+        ? "Customer handoff evidence confirmed and audited."
+        : "Handoff confirmation reopened with audit evidence.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Handoff evidence could not be saved");
+    } finally { setHandoffBusy(null); }
   }
   async function chooseRestoreFile(file?: File) {
     setRestorePreview(null);
@@ -220,9 +246,40 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
           {["admin","owner","operator"].includes(session?.user.role ?? "") && <a className="export-button" href="/api/lifecycle/support-bundle">
             <FileDown size={15}/>Download redacted support bundle</a>}</div>
         <small className="bundle-boundary">The support bundle excludes credentials, destinations, prompts, knowledge content, execution payloads, member emails, and API bodies.</small>
-      </section><section className="preflight-list"><h3>Environment preflight</h3>{lifecycle.preflight.checks.map((item) =>
+      </section><section className="preflight-list"><h3>Automated environment preflight</h3>{lifecycle.preflight.checks.map((item) =>
         <div key={item.id} className={item.ready ? "ready" : "pending"}>{item.ready ? <CheckCircle2 size={17}/> : <Circle size={17}/>}
           <span><strong>{item.label}</strong><small>{item.detail}</small></span><em>{item.category}</em></div>)}</section></div>
+      <section className="handoff-gate">
+        <header><div><span className="handoff-icon"><ClipboardCheck size={20}/></span><span>
+          <strong>Customer handoff gate</strong>
+          <small>Human acceptance is separate from automated health. Every confirmation records who certified what and when.</small>
+        </span></div><span className={`connection-state ${lifecycle.handoff.status === "ready" ? "healthy" : "attention"}`}><i/>
+          {lifecycle.handoff.confirmed}/{lifecycle.handoff.total} confirmed
+        </span></header>
+        {!lifecycle.handoff.automatedReady && <p className="handoff-warning">
+          Complete the automated preflight before treating this environment as ready for customer handoff.
+        </p>}
+        <div className="handoff-checks">{lifecycle.handoff.checks.map((check) => {
+          const evidence = handoffDrafts[check.id] ?? check.evidence ?? "";
+          const canEdit = ["admin", "owner"].includes(session?.user.role ?? "");
+          return <article key={check.id} className={check.status}>
+            <div className="handoff-copy">{check.status === "confirmed"
+              ? <CheckCircle2 size={18}/> : <Circle size={18}/>}<span><strong>{check.label}</strong>
+                <small>{check.detail}</small></span></div>
+            <textarea maxLength={1500} value={evidence} disabled={!canEdit}
+              placeholder="Record the review, participant, date, and supporting ticket or document."
+              onChange={(event) => setHandoffDrafts({ ...handoffDrafts, [check.id]: event.target.value })}/>
+            <footer><small>{check.status === "confirmed"
+              ? `Confirmed by ${check.confirmedByName ?? "authorized owner"} · ${formatDate(check.confirmedAt)}`
+              : "Open · specific evidence is required to confirm"}</small>
+              {canEdit && <button disabled={handoffBusy === check.id ||
+                (check.status === "open" && evidence.trim().length < 10)}
+                onClick={() => void updateHandoff(check.id, check.status === "confirmed" ? "open" : "confirmed")}>
+                {handoffBusy === check.id ? "Saving…" : check.status === "confirmed" ? "Reopen" : "Confirm evidence"}
+              </button>}</footer>
+          </article>;
+        })}</div>
+      </section>
     </article>}
   </section>;
 }

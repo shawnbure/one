@@ -46,7 +46,8 @@ import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpp
   OpportunityRevisionConflict, qualifyOpportunity, updateOpportunity, updateOpportunityReadiness } from "./opportunities";
 import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
 import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "./notification-response";
-import { exportSupportBundle, getManagedLifecycle, updateManagedLifecycle } from "./lifecycle";
+import { exportSupportBundle, getManagedLifecycle, HandoffConflict, updateHandoffCheck,
+  updateManagedLifecycle } from "./lifecycle";
 import { disposeProcess, enqueueDueProcessDisposals, getProcessRetirement, requestProcessRetirement,
   transitionProcessRetirement } from "./retirement";
 import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperations, previewRetention,
@@ -244,6 +245,19 @@ app.put("/api/lifecycle", requireRoles("admin", "owner"), async (c) => {
     ) });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Lifecycle settings could not be saved" }, 400);
+  }
+});
+
+app.patch("/api/lifecycle/handoff/:checkId", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const checkId = c.req.param("checkId");
+    if (!checkId) return c.json({ error: "Handoff check ID is required" }, 400);
+    return c.json({ data: await updateHandoffCheck(
+      c.env, c.get("tenantId"), c.get("actorId"), checkId, await c.req.json()
+    ) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Handoff evidence could not be saved" },
+      error instanceof HandoffConflict ? 409 : 400);
   }
 });
 

@@ -10,9 +10,23 @@ export interface LifecycleInput {
   supportNotes: string;
 }
 
+export interface HandoffCheckInput {
+  status: "open" | "confirmed";
+  evidence: string;
+  revision: number;
+}
+
+const handoffDefinitions = [
+  ["customer_acceptance", "Customer acceptance", "Customer owner reviewed the process purpose, boundaries, and expected outcome."],
+  ["data_owner_approval", "Data owner approval", "The accountable owner approved data sources, sensitivity, retention, and permitted use."],
+  ["operator_training", "Operator training", "Named operators completed the approval, pause, recovery, and escalation walkthrough."],
+  ["support_handoff", "Support handoff", "Support ownership, escalation route, maintenance window, and runbooks were transferred."],
+  ["recovery_exercise", "Recovery exercise", "The team exercised a failed run from diagnosis through verified recovery."],
+] as const;
+
 export async function getManagedLifecycle(env: Env, tenantId: string) {
   const [settings, counts, controls, enabledExternal, expiredCredentials, unownedAlerts, activeRelease,
-    openCritical, members] = await Promise.all([
+    openCritical, members, handoffRows] = await Promise.all([
     env.DB.prepare(`SELECT l.*, s.organization_name, s.support_email,
       so.display_name support_owner_name, ro.display_name recovery_owner_name
       FROM tenant_lifecycle_settings l
@@ -55,6 +69,12 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
       AND status NOT IN ('resolved','closed')`).bind(tenantId).first<{ count: number }>(),
     env.DB.prepare(`SELECT id, display_name, email, role FROM tenant_members WHERE tenant_id=? AND status='active'
       AND role IN ('admin','owner','operator') ORDER BY display_name`).bind(tenantId).all()
+    ,
+    env.DB.prepare(`SELECT h.check_id, h.status, h.evidence, h.confirmed_by, h.confirmed_at,
+      h.revision, h.updated_at, m.display_name confirmed_by_name
+      FROM tenant_handoff_checks h
+      LEFT JOIN tenant_members m ON m.tenant_id=h.tenant_id AND m.id=h.confirmed_by
+      WHERE h.tenant_id=?`).bind(tenantId).all<Record<string, unknown>>()
   ]);
   const checks = [
     check("profile", "Customer profile", Boolean(settings), "identity", "Organization and support configuration are persisted."),
@@ -79,6 +99,22 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
     check("access", "Cloudflare Access boundary", Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), "security",
       "Configure the Access team domain and application audience.")
   ];
+  const handoffById = new Map(handoffRows.results.map((row) => [String(row.check_id), row]));
+  const handoffChecks = handoffDefinitions.map(([id, label, detail]) => {
+    const row = handoffById.get(id);
+    return {
+      id, label, detail,
+      status: row?.status === "confirmed" ? "confirmed" as const : "open" as const,
+      evidence: row?.evidence ? String(row.evidence) : null,
+      confirmedBy: row?.confirmed_by ? String(row.confirmed_by) : null,
+      confirmedByName: row?.confirmed_by_name ? String(row.confirmed_by_name) : null,
+      confirmedAt: row?.confirmed_at ? String(row.confirmed_at) : null,
+      revision: Number(row?.revision ?? 0),
+      updatedAt: row?.updated_at ? String(row.updated_at) : null
+    };
+  });
+  const automatedReady = checks.every((item) => item.ready);
+  const humanReady = handoffChecks.every((item) => item.status === "confirmed");
   return {
     settings: settings ?? null,
     members: members.results,
@@ -88,11 +124,62 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
       total: checks.length,
       checks
     },
+    handoff: {
+      status: automatedReady && humanReady ? "ready" as const : "action_required" as const,
+      automatedReady,
+      confirmed: handoffChecks.filter((item) => item.status === "confirmed").length,
+      total: handoffChecks.length,
+      checks: handoffChecks
+    },
     environment: { name: env.ENVIRONMENT, domain: env.APP_DOMAIN, accessTeamDomain: env.ACCESS_TEAM_DOMAIN },
     counts: counts ?? {},
     operatingControl: controls ?? null
   };
 }
+
+export async function updateHandoffCheck(
+  env: Env, tenantId: string, actorId: string, checkId: string, input: HandoffCheckInput,
+) {
+  if (!handoffDefinitions.some(([id]) => id === checkId)) throw new Error("Unknown handoff check");
+  if (!["open", "confirmed"].includes(input.status)) throw new Error("Handoff status must be open or confirmed");
+  if (!Number.isInteger(input.revision) || input.revision < 0) throw new Error("A valid handoff revision is required");
+  const evidence = input.evidence?.trim() ?? "";
+  if (evidence.length > 1500) throw new Error("Handoff evidence must be 1,500 characters or fewer");
+  if (input.status === "confirmed" && evidence.length < 10) {
+    throw new Error("Confirmed handoff checks require specific evidence");
+  }
+  const now = new Date().toISOString();
+  const existing = await env.DB.prepare(`SELECT revision FROM tenant_handoff_checks
+    WHERE tenant_id=? AND check_id=?`).bind(tenantId, checkId).first<{ revision: number }>();
+  if (Number(existing?.revision ?? 0) !== input.revision) {
+    throw new HandoffConflict("This handoff evidence changed. Reload before updating it.");
+  }
+  const nextRevision = input.revision + 1;
+  const result = existing
+    ? await env.DB.prepare(`UPDATE tenant_handoff_checks SET status=?, evidence=?,
+        confirmed_by=?, confirmed_at=?, revision=?, updated_at=?
+        WHERE tenant_id=? AND check_id=? AND revision=?`)
+      .bind(input.status, evidence || null, input.status === "confirmed" ? actorId : null,
+        input.status === "confirmed" ? now : null, nextRevision, now, tenantId, checkId, input.revision).run()
+    : await env.DB.prepare(`INSERT INTO tenant_handoff_checks
+        (tenant_id, check_id, status, evidence, confirmed_by, confirmed_at, revision, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(tenantId, checkId, input.status, evidence || null,
+        input.status === "confirmed" ? actorId : null, input.status === "confirmed" ? now : null,
+        nextRevision, now).run();
+  if (Number(result.meta.changes ?? 0) !== 1) {
+    throw new HandoffConflict("This handoff evidence changed. Reload before updating it.");
+  }
+  await env.DB.prepare(`INSERT INTO audit_events
+    (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+    VALUES (?, ?, ?, 'lifecycle.handoff_updated', 'handoff_check', ?, ?)`)
+    .bind(crypto.randomUUID(), tenantId, actorId, checkId, JSON.stringify({
+      status: input.status, evidenceRecorded: Boolean(evidence), revision: nextRevision
+    })).run();
+  return getManagedLifecycle(env, tenantId);
+}
+
+export class HandoffConflict extends Error {}
 
 export async function updateManagedLifecycle(
   env: Env, tenantId: string, actorId: string, input: LifecycleInput,
@@ -170,6 +257,7 @@ export async function exportSupportBundle(env: Env, tenantId: string) {
     generatedAt: new Date().toISOString(),
     environment: lifecycle.environment,
     preflight: lifecycle.preflight,
+    handoff: lifecycle.handoff,
     lifecycle: lifecycle.settings,
     counts: lifecycle.counts,
     operatingControl: lifecycle.operatingControl,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { exportSupportBundle, getManagedLifecycle, updateManagedLifecycle } from "../src/lifecycle";
+import { exportSupportBundle, getManagedLifecycle, HandoffConflict, updateHandoffCheck,
+  updateManagedLifecycle } from "../src/lifecycle";
 
 type Write = { sql: string; bindings: unknown[] };
 
@@ -85,6 +86,42 @@ describe("managed lifecycle", () => {
     expect(invalid.writes).toHaveLength(0);
   });
 
+  it("requires meaningful, attributable, revision-protected customer handoff evidence", async () => {
+    const { env, writes } = environment();
+    await expect(updateHandoffCheck(env, "tenant-1", "owner-1", "operator_training", {
+      status: "confirmed", evidence: "done", revision: 0
+    })).rejects.toThrow("specific evidence");
+    await expect(updateHandoffCheck(env, "tenant-1", "owner-1", "unknown", {
+      status: "confirmed", evidence: "Operator training completed with the customer.", revision: 0
+    })).rejects.toThrow("Unknown handoff");
+
+    const result = await updateHandoffCheck(env, "tenant-1", "owner-1", "operator_training", {
+      status: "confirmed",
+      evidence: "Operators completed the approval, pause, and recovery walkthrough on July 23.",
+      revision: 0
+    });
+    expect(result.handoff).toMatchObject({ status: "action_required", confirmed: 0, total: 5 });
+    expect(writes.some(({ sql, bindings }) => sql.includes("INSERT INTO tenant_handoff_checks") &&
+      bindings.includes("owner-1"))).toBe(true);
+    expect(JSON.stringify(writes)).toContain("lifecycle.handoff_updated");
+  });
+
+  it("rejects stale handoff revisions before writing evidence", async () => {
+    const fixture = environment();
+    const originalFirst = fixture.env.DB.prepare.bind(fixture.env.DB);
+    fixture.env.DB.prepare = ((sql: string) => {
+      const statement = originalFirst(sql);
+      if (sql.includes("SELECT revision FROM tenant_handoff_checks")) {
+        statement.first = async () => ({ revision: 3 });
+      }
+      return statement;
+    }) as typeof fixture.env.DB.prepare;
+    await expect(updateHandoffCheck(fixture.env, "tenant-1", "owner-1", "support_handoff", {
+      status: "confirmed", evidence: "Support handoff recorded in customer ticket OPS-42.", revision: 2
+    })).rejects.toBeInstanceOf(HandoffConflict);
+    expect(fixture.writes).toHaveLength(0);
+  });
+
   it("exports operational evidence without destinations, member emails, prompts, or payloads", async () => {
     const { env } = environment();
     const bundle = await exportSupportBundle(env, "tenant-1");
@@ -95,6 +132,7 @@ describe("managed lifecycle", () => {
       !Object.prototype.hasOwnProperty.call(policy, "destination"))).toBe(true);
     expect(serialized).not.toContain("system_prompt");
     expect(serialized).not.toContain("input_preview");
+    expect(bundle.preflight).toBeDefined();
     expect(bundle.exclusions).toContain("credentials and tokens");
   });
 });

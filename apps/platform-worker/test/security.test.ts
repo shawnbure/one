@@ -105,6 +105,14 @@ describe("control-plane security boundary", () => {
       headers: { "x-workrr-user": "operator@example.com" }
     }), viewer.env as never, executionCtx as never);
     expect(bundle.status).toBe(403);
+    const handoff = await app.fetch(new Request("http://localhost/api/lifecycle/handoff/operator_training", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ status: "confirmed", evidence: "Unauthorized evidence", revision: 0 })
+    }), viewer.env as never, executionCtx as never);
+    expect(handoff.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("tenant_handoff_checks") &&
+      (sql.includes("INSERT") || sql.includes("UPDATE")))).toBe(false);
   });
 
   it("separates retirement requests from irreversible disposal approval", async () => {

@@ -969,6 +969,9 @@ Deliverables:
 - tenant onboarding wizard;
 - CLI for initialization, validation, provisioning, and seed data;
 - FDE discovery, build, test, deployment, and handoff guides.
+- a tenant-scoped customer handoff gate that keeps automated Cloudflare preflight evidence distinct
+  from attributable customer acceptance, data-owner approval, operator training, support transfer,
+  and recovery-exercise sign-off.
 
 Exit criteria: an FDE can configure a new customer without modifying framework core.
 
