@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bootstrapCustomer, BootstrapConflict, exportAccessHandoff, type CustomerBootstrapManifest } from "../src/onboarding";
+import { bootstrapCustomer, BootstrapConflict, exportAccessHandoff, implementationMilestones,
+  type CustomerBootstrapManifest } from "../src/onboarding";
 
 const template = {
   id: "template-customer-ops",
@@ -147,6 +148,29 @@ describe("customer launch bootstrap", () => {
     await expect(bootstrapCustomer(env as never, "tenant-1", "member-admin", {
       ...manifest, firstProcess: { ...manifest.firstProcess, name: "Different Process" }
     })).rejects.toBeInstanceOf(BootstrapConflict);
+  });
+});
+
+describe("implementation journey evidence", () => {
+  it("derives elapsed milestones from tenant evidence without manufacturing pending timestamps", () => {
+    const milestones = implementationMilestones({
+      started_at: "2026-07-01T08:00:00.000Z",
+      completed_at: "2026-07-01T08:42:01.000Z",
+      first_run_at: "2026-07-01T09:15:00.000Z",
+      first_readonly_connection_at: null,
+      first_shadow_at: "2026-07-04T10:00:00.000Z"
+    });
+    expect(milestones).toMatchObject([
+      { id: "baseline", targetMinutes: 60, elapsedMinutes: 43, status: "achieved" },
+      { id: "first_run", targetMinutes: 120, elapsedMinutes: 75, status: "achieved" },
+      { id: "readonly_connection", targetMinutes: 1440, elapsedMinutes: null, achievedAt: null, status: "pending" },
+      { id: "shadow", targetMinutes: 10080, elapsedMinutes: 4440, status: "achieved" }
+    ]);
+  });
+
+  it("keeps every milestone pending when customer implementation has not started", () => {
+    expect(implementationMilestones(null).every((item) =>
+      item.status === "pending" && item.achievedAt === null && item.elapsedMinutes === null)).toBe(true);
   });
 });
 

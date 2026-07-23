@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, Circle, ClipboardCheck, Download, FileDown, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, Upload, UserPlus } from "lucide-react";
+import { CalendarClock, CheckCircle2, Circle, ClipboardCheck, Clock3, Download, FileDown, KeyRound, LifeBuoy, RotateCcw, Rocket, Settings2, ShieldCheck, Upload, UserPlus } from "lucide-react";
 import { api, type ConfigurationRestorePreview, type ManagedLifecycleData, type OnboardingData, type ProcessTemplate, type SessionData } from "./api";
 import "./configuration-backup.css";
 import "./handoff.css";
@@ -192,6 +192,21 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
       <span><strong>Cloudflare Access member handoff</strong><small>Export the active Workrr member allowlist for review and idempotent application by an FDE. No API token or customer secret is included.</small></span>
       <a className="export-button" href="/api/onboarding/access-handoff"><Download size={15}/>Download Access handoff</a>
     </article>
+    <article className="implementation-journey panel">
+      <div className="section-head"><div><h2><Clock3 size={18}/> Implementation journey</h2>
+        <p>Actual tenant evidence against the aggressive MVP targets. Missing evidence remains pending.</p></div>
+        <span>{data.implementationJourney.filter((item) => item.status === "achieved").length}/{data.implementationJourney.length} achieved</span>
+      </div>
+      <div className="implementation-milestones">{data.implementationJourney.map((item) =>
+        <section key={item.id} className={item.status}>
+          <span>{item.status === "achieved" ? <CheckCircle2 size={18}/> : <Circle size={18}/>}</span>
+          <div><strong>{item.label}</strong><small>{item.achievedAt
+            ? `${formatElapsed(item.elapsedMinutes)} from implementation start · ${formatDate(item.achievedAt)}`
+            : "No qualifying tenant evidence yet"}</small></div>
+          <em>Target {formatTarget(item.targetMinutes)}</em>
+        </section>)}</div>
+      <p className="implementation-boundary">This view adds one bounded reporting read when Customer Setup opens. It is never consulted during an agent request and does not copy prompts, memory, credentials, or business payloads.</p>
+    </article>
     {["admin","owner"].includes(session?.user.role ?? "") && <article className="configuration-backup panel">
       <div className="section-head"><div><h2><RotateCcw size={18}/> Configuration backup & restore</h2>
         <p>Move reviewed operating controls without moving credentials, content, identities, processes, legal holds, or audit history.</p></div>
@@ -283,6 +298,19 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
     </article>}
   </section>;
 }
+function formatElapsed(minutes: number | null) {
+  if (minutes === null) return "Elapsed time unavailable";
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return `${Math.floor(minutes / (24 * 60))}d ${Math.floor((minutes % (24 * 60)) / 60)}h`;
+}
+
+function formatTarget(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 24 * 60) return `${minutes / 60} hours`;
+  return `${minutes / (24 * 60)} ${minutes === 24 * 60 ? "day" : "days"}`;
+}
+
 function formatDate(value: string | null) {
   if (!value) return "recorded";
   const date = new Date(value.endsWith("Z") ? value : `${value.replace(" ", "T")}Z`);

@@ -718,6 +718,14 @@ export interface OnboardingData {
   checklist: Array<{ id: string; label: string; ready: boolean }>;
   bootstrap: null | { status: "started" | "completed" | "failed"; member_id: string | null; process_id: string | null;
     started_at: string; completed_at: string | null; last_error: string | null };
+  implementationJourney: Array<{
+    id: "baseline" | "first_run" | "readonly_connection" | "shadow";
+    label: string;
+    targetMinutes: number;
+    achievedAt: string | null;
+    elapsedMinutes: number | null;
+    status: "achieved" | "pending";
+  }>;
 }
 export interface ConfigurationRestorePreview {
   checksum: string;

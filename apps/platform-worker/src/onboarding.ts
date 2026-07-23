@@ -27,21 +27,49 @@ interface BootstrapRow {
   last_error: string | null;
 }
 
+interface ImplementationEvidenceRow {
+  started_at: string;
+  completed_at: string | null;
+  first_run_at: string | null;
+  first_readonly_connection_at: string | null;
+  first_shadow_at: string | null;
+}
+
+export interface ImplementationMilestone {
+  id: "baseline" | "first_run" | "readonly_connection" | "shadow";
+  label: string;
+  targetMinutes: number;
+  achievedAt: string | null;
+  elapsedMinutes: number | null;
+  status: "achieved" | "pending";
+}
+
 export class BootstrapConflict extends Error {}
 
 export async function getOnboarding(env: Env, tenantId: string) {
-  const [settings, members, processes, connections, policies, bootstrap] = await Promise.all([
+  const [settings, members, processes, connections, policies, bootstrap, implementationEvidence] = await Promise.all([
     env.DB.prepare("SELECT * FROM tenant_settings WHERE tenant_id = ?").bind(tenantId).first(),
     env.DB.prepare("SELECT COUNT(*) count FROM tenant_members WHERE tenant_id = ? AND status = 'active'").bind(tenantId).first<{ count: number }>(),
     env.DB.prepare("SELECT COUNT(*) count FROM agent_blueprints WHERE tenant_id = ?").bind(tenantId).first<{ count: number }>(),
     env.DB.prepare("SELECT COUNT(*) count FROM connections WHERE tenant_id = ?").bind(tenantId).first<{ count: number }>(),
     env.DB.prepare("SELECT COUNT(*) count FROM retention_policies WHERE tenant_id = ?").bind(tenantId).first<{ count: number }>(),
     env.DB.prepare(`SELECT tenant_id, status, member_id, process_id, started_at, completed_at, last_error
-      FROM tenant_bootstrap_runs WHERE tenant_id = ?`).bind(tenantId).first()
+      FROM tenant_bootstrap_runs WHERE tenant_id = ?`).bind(tenantId).first(),
+    env.DB.prepare(`SELECT b.started_at, b.completed_at,
+        (SELECT MIN(e.started_at) FROM executions e
+          WHERE e.tenant_id=b.tenant_id AND e.blueprint_id=b.process_id AND e.started_at >= b.started_at) first_run_at,
+        (SELECT MIN(c.last_checked_at) FROM connections c
+          WHERE c.tenant_id=b.tenant_id AND c.kind != 'model_provider' AND c.status='healthy'
+            AND c.secret_configured=1 AND c.access_mode IN ('read','read_write')
+            AND c.last_checked_at IS NOT NULL AND c.last_checked_at >= b.started_at) first_readonly_connection_at,
+        (SELECT MIN(s.created_at) FROM execution_shadow_reviews s
+          WHERE s.tenant_id=b.tenant_id AND s.blueprint_id=b.process_id AND s.created_at >= b.started_at) first_shadow_at
+      FROM tenant_bootstrap_runs b WHERE b.tenant_id = ?`).bind(tenantId).first<ImplementationEvidenceRow>()
   ]);
   return {
     settings,
     bootstrap,
+    implementationJourney: implementationMilestones(implementationEvidence),
     checklist: [
       { id: "organization", label: "Organization profile", ready: Boolean(settings) },
       { id: "members", label: "Administrator membership", ready: Number(members?.count) > 0 },
@@ -50,6 +78,36 @@ export async function getOnboarding(env: Env, tenantId: string) {
       { id: "retention", label: "Retention controls", ready: Number(policies?.count) > 0 }
     ]
   };
+}
+
+export function implementationMilestones(evidence: ImplementationEvidenceRow | null): ImplementationMilestone[] {
+  const definitions: Array<{
+    id: ImplementationMilestone["id"];
+    label: string;
+    targetMinutes: number;
+    achievedAt: string | null;
+  }> = [
+    { id: "baseline", label: "Customer baseline established", targetMinutes: 60, achievedAt: evidence?.completed_at ?? null },
+    { id: "first_run", label: "First governed process run", targetMinutes: 120, achievedAt: evidence?.first_run_at ?? null },
+    { id: "readonly_connection", label: "First verified read-only integration", targetMinutes: 24 * 60,
+      achievedAt: evidence?.first_readonly_connection_at ?? null },
+    { id: "shadow", label: "First shadow-mode execution", targetMinutes: 7 * 24 * 60,
+      achievedAt: evidence?.first_shadow_at ?? null }
+  ];
+  return definitions.map((definition) => {
+    const elapsedMinutes = elapsedFrom(evidence?.started_at ?? null, definition.achievedAt);
+    return {
+      ...definition,
+      elapsedMinutes,
+      status: definition.achievedAt ? "achieved" : "pending"
+    };
+  });
+}
+
+function elapsedFrom(startedAt: string | null, achievedAt: string | null) {
+  if (!startedAt || !achievedAt) return null;
+  const elapsed = new Date(achievedAt).getTime() - new Date(startedAt).getTime();
+  return Number.isFinite(elapsed) && elapsed >= 0 ? Math.ceil(elapsed / 60_000) : null;
 }
 
 export async function bootstrapCustomer(env: Env, tenantId: string, actorId: string, input: CustomerBootstrapManifest) {
