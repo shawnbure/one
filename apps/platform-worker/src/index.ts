@@ -406,9 +406,11 @@ const handler: ExportedHandler<Env, QueueJob> = {
         message.ack();
       } catch (error) {
         console.error(JSON.stringify({ event: "queue_job_failed", executionId: message.body.executionId, error: String(error) }));
-        await env.DB.prepare("UPDATE executions SET status = 'failed', error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
-          .bind(error instanceof Error ? error.message : String(error), new Date().toISOString(), message.body.executionId, message.body.tenantId ?? "demo").run();
-        if (message.attempts >= 4) await emitNotification(env, message.body.tenantId ?? "demo", {
+        const terminal = message.attempts >= 5;
+        await env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
+          .bind(terminal ? "failed" : "queued", error instanceof Error ? error.message : String(error), terminal ? new Date().toISOString() : null,
+            message.body.executionId, message.body.tenantId ?? "demo").run();
+        if (terminal) await emitNotification(env, message.body.tenantId ?? "demo", {
           eventType: "queue.retry_exhausted", title: "Process job exhausted retries",
           detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: message.body.executionId
         });

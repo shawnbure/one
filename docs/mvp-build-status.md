@@ -127,7 +127,7 @@ npm run build
 
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
-The Worker HTTP security suite currently proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, and viewer memberships cannot change administrative policies. These tests run locally with no Workers AI calls.
+The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewer memberships cannot change administrative policies, signed webhooks reject invalid/unapproved input and deduplicate delivery, Workflows persist token usage and terminal failures, and durable identity keys remain sticky only within the intended scope. These tests run locally with no Workers AI calls.
 
 ## Remaining aggressive-MVP work
 
@@ -139,6 +139,6 @@ The foundation is usable, but these are the highest-value next slices:
 4. Convert token accounting into a priced cost ledger once customer model pricing policy is selected.
 5. Add authenticated delivery workers for email/webhook notification channels; in-app policy routing is implemented.
 6. Production Access bootstrap and a scripted, reviewable environment promotion command.
-7. Expand end-to-end tests from identity/tenant/role/package gates to durable stickiness, workflow retries, and webhook deduplication.
+7. Expand the current identity, tenant, role, package, durable-stickiness, Workflow accounting, and webhook-deduplication tests into live-environment smoke tests with disposable customer fixtures.
 
 Each slice should preserve the core boundary: D1 controls configuration and reporting, durable actors own sticky conversational state, Workflows own long-running orchestration, and Queues own burst absorption.

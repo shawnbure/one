@@ -28,11 +28,16 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   const executionId = crypto.randomUUID();
   const request: ExecutionRequest = { blueprintId: endpoint.blueprint_id, input: payload.input ?? JSON.stringify(payload.data ?? payload), idempotencyKey };
   const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: endpoint.tenant_id };
-  await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO webhook_receipts (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id)
-      VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null, executionId),
-    c.env.DB.prepare("UPDATE webhook_endpoints SET last_received_at = ? WHERE id = ?").bind(new Date().toISOString(), endpoint.id)
-  ]);
+  const receipt = await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
+    (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null, executionId).run();
+  if (receipt.meta.changes !== 1) {
+    const concurrent = await c.env.DB.prepare("SELECT execution_id FROM webhook_receipts WHERE endpoint_id = ? AND idempotency_key = ?")
+      .bind(endpoint.id, idempotencyKey).first<{ execution_id: string | null }>();
+    return c.json({ duplicate: true, executionId: concurrent?.execution_id ?? null }, 200);
+  }
+  await c.env.DB.prepare("UPDATE webhook_endpoints SET last_received_at = ? WHERE id = ?")
+    .bind(new Date().toISOString(), endpoint.id).run();
   await c.env.PROCESS_QUEUE.send(job, { contentType: "json" });
   return c.json({ accepted: true, executionId }, 202);
 }
