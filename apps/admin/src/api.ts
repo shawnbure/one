@@ -836,6 +836,11 @@ export interface ManagedLifecycleData {
   environment: { name: string; domain: string; accessTeamDomain: string };
   counts: Record<string, number>;
   operatingControl: null | { mode: string; reason: string | null; updated_at: string };
+  maintenanceRuns: Array<{
+    id: string; startedAt: string; completedAt: string | null;
+    status: "running" | "healthy" | "degraded"; taskCount: number; failedCount: number;
+    tasks: Array<{ name: string; status: "healthy" | "failed"; durationMs: number; error?: string }>;
+  }>;
 }
 export interface PlatformVersionData {
   applicationRelease: string;

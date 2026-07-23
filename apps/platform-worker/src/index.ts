@@ -74,6 +74,7 @@ import { createActorReleaseRollout, listActorReleaseRollouts } from "./actor-rel
 import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
   setLaunchpadThreadArchived } from "./launchpad";
+import { runScheduledMaintenance } from "./maintenance";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -2252,8 +2253,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
   },
   async scheduled(_controller, env, ctx) {
     const now = new Date();
-    ctx.waitUntil(Promise.all([
-      env.DB.batch([
+    ctx.waitUntil(runScheduledMaintenance(env, [
+      { name: "housekeeping", run: () => env.DB.batch([
         env.DB.prepare(`DELETE FROM oauth_states WHERE expires_at < ? OR
           (used_at IS NOT NULL AND used_at < ?)`).bind(
             now.toISOString(), new Date(now.getTime() - 24 * 60 * 60_000).toISOString()),
@@ -2264,25 +2265,27 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
         env.DB.prepare(`DELETE FROM process_queue_jobs
           WHERE status IN ('dead_lettered','enqueue_failed') AND completed_at < ?`).bind(
             new Date(now.getTime() - 90 * 24 * 60 * 60_000).toISOString()),
+        env.DB.prepare(`DELETE FROM platform_maintenance_runs
+          WHERE started_at < ?`).bind(new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString()),
         env.DB.prepare(`INSERT INTO audit_events
           (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
           VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
           .bind(crypto.randomUUID(), JSON.stringify({ at: now.toISOString() }))
-      ]),
-      dispatchDueSchedules(env, now),
-      enqueueRecoverableToolActions(env),
-      expireKnowledgeSources(env, now),
-      emitConnectionExpiryAlerts(env, now),
-      escalateUnacknowledgedNotifications(env, now),
-      escalateOverdueApprovals(env, now),
-      enqueueDueNotificationDeliveries(env, now),
-      enqueueDueProcessDisposals(env, now),
-      enforceAllTenantRetention(env, now),
-      expireRubricPublisherKeys(env, now),
-      evaluateAllAutonomySafety(env, now),
-      expireAccessSessions(env, now),
-      emitValueTargetReviewAlerts(env, now)
-    ]));
+      ]).then(() => undefined) },
+      { name: "process_schedules", run: () => dispatchDueSchedules(env, now) },
+      { name: "tool_action_recovery", run: () => enqueueRecoverableToolActions(env) },
+      { name: "knowledge_expiry", run: () => expireKnowledgeSources(env, now) },
+      { name: "connection_expiry_alerts", run: () => emitConnectionExpiryAlerts(env, now) },
+      { name: "notification_escalation", run: () => escalateUnacknowledgedNotifications(env, now) },
+      { name: "approval_escalation", run: () => escalateOverdueApprovals(env, now) },
+      { name: "notification_delivery", run: () => enqueueDueNotificationDeliveries(env, now) },
+      { name: "process_disposal", run: () => enqueueDueProcessDisposals(env, now) },
+      { name: "tenant_retention", run: () => enforceAllTenantRetention(env, now) },
+      { name: "rubric_key_expiry", run: () => expireRubricPublisherKeys(env, now) },
+      { name: "autonomy_safety", run: () => evaluateAllAutonomySafety(env, now) },
+      { name: "access_session_expiry", run: () => expireAccessSessions(env, now) },
+      { name: "value_target_reviews", run: () => emitValueTargetReviewAlerts(env, now) }
+    ], now));
   }
 };
 

@@ -289,6 +289,27 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
       </section><section className="preflight-list"><h3>Automated environment preflight</h3>{lifecycle.preflight.checks.map((item) =>
         <div key={item.id} className={item.ready ? "ready" : "pending"}>{item.ready ? <CheckCircle2 size={17}/> : <Circle size={17}/>}
           <span><strong>{item.label}</strong><small>{item.detail}</small></span><em>{item.category}</em></div>)}</section></div>
+      <section className="maintenance-evidence">
+        <header><div><span className="handoff-icon"><Clock3 size={20}/></span><span>
+          <strong>Hourly maintenance evidence</strong>
+          <small>Each control runs independently. A failed task cannot prevent the remaining safety and lifecycle work.</small>
+        </span></div>{lifecycle.maintenanceRuns[0] && <span className={`connection-state ${
+          lifecycle.maintenanceRuns[0].status === "healthy" ? "healthy" : "attention"}`}><i/>
+          {lifecycle.maintenanceRuns[0].status}</span>}</header>
+        {lifecycle.maintenanceRuns.length ? <div className="maintenance-runs">
+          {lifecycle.maintenanceRuns.slice(0, 6).map((run) => <article key={run.id}>
+            <span className={run.status === "healthy" ? "ready" : "pending"}>
+              {run.status === "healthy" ? <CheckCircle2 size={17}/> : <TriangleAlert size={17}/>}
+            </span><span><strong>{formatDate(run.startedAt)}</strong>
+              <small>{run.taskCount - run.failedCount}/{run.taskCount} controls completed · {
+                run.completedAt ? `${Math.max(0, new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime())}ms total` : "still running"
+              }</small>
+              {run.tasks.filter((task) => task.status === "failed").map((task) =>
+                <em key={task.name}>{task.name.replaceAll("_", " ")} · {task.error ?? "Task failed"}</em>)}
+            </span><b>{run.status}</b>
+          </article>)}
+        </div> : <p className="maintenance-empty">The next hourly Cron run will create the first durable maintenance receipt.</p>}
+      </section>
       <section className="handoff-gate">
         <header><div><span className="handoff-icon"><ClipboardCheck size={20}/></span><span>
           <strong>Customer handoff gate</strong>

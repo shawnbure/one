@@ -31,6 +31,10 @@ function environment(ownerCount = 1) {
           return null;
         },
         async all() {
+          if (sql.includes("FROM platform_maintenance_runs")) return { results: [{
+            id: "maintenance-1", started_at: new Date().toISOString(), completed_at: new Date().toISOString(),
+            status: "healthy", task_count: 14, failed_count: 0, task_results_json: "[]"
+          }] };
           if (sql.includes("FROM tenant_members")) return { results: [
             { id: "owner-1", display_name: "Owner", email: "owner@example.com", role: "owner" }
           ] };
@@ -60,7 +64,8 @@ describe("managed lifecycle", () => {
   it("derives a tenant-scoped environment preflight from operating evidence", async () => {
     const { env } = environment();
     const result = await getManagedLifecycle(env, "tenant-1");
-    expect(result.preflight).toMatchObject({ status: "ready", ready: 12, total: 12 });
+    expect(result.preflight).toMatchObject({ status: "ready", ready: 13, total: 13 });
+    expect(result.maintenanceRuns[0]).toMatchObject({ status: "healthy", taskCount: 14, failedCount: 0 });
     expect(result.environment).toEqual({
       name: "development", domain: "one-dev.workrr.ai",
       accessTeamDomain: "https://workrr-one.cloudflareaccess.com"

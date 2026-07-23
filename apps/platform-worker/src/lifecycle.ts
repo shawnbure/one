@@ -26,7 +26,7 @@ const handoffDefinitions = [
 
 export async function getManagedLifecycle(env: Env, tenantId: string) {
   const [settings, counts, controls, enabledExternal, expiredCredentials, unownedAlerts, activeRelease,
-    openCritical, members, handoffRows] = await Promise.all([
+    openCritical, members, handoffRows, maintenanceRows] = await Promise.all([
     env.DB.prepare(`SELECT l.*, s.organization_name, s.support_email,
       so.display_name support_owner_name, ro.display_name recovery_owner_name
       FROM tenant_lifecycle_settings l
@@ -75,7 +75,18 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
       FROM tenant_handoff_checks h
       LEFT JOIN tenant_members m ON m.tenant_id=h.tenant_id AND m.id=h.confirmed_by
       WHERE h.tenant_id=?`).bind(tenantId).all<Record<string, unknown>>()
+    ,
+    env.DB.prepare(`SELECT id, started_at, completed_at, status, task_count, failed_count, task_results_json
+      FROM platform_maintenance_runs ORDER BY started_at DESC LIMIT 12`).all<{
+        id: string; started_at: string; completed_at: string | null; status: "running" | "healthy" | "degraded";
+        task_count: number; failed_count: number; task_results_json: string;
+      }>()
   ]);
+  const latestMaintenance = maintenanceRows.results[0];
+  const maintenanceCurrent = latestMaintenance ? (
+    new Date(String(latestMaintenance.started_at)).getTime() >= Date.now() - 2 * 60 * 60_000 &&
+    latestMaintenance.status === "healthy"
+  ) : false;
   const checks = [
     check("profile", "Customer profile", Boolean(settings), "identity", "Organization and support configuration are persisted."),
     check("support_owner", "Named support owner", Boolean(settings?.support_owner_id), "ownership", "Assign the person accountable for day-to-day operation."),
@@ -92,6 +103,10 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
       `${Number(expiredCredentials?.count)} credentials are expired or invalid.`),
     check("external_routes", "Enabled delivery routes", Number(enabledExternal?.count) === 0, "operations",
       `${Number(enabledExternal?.count)} enabled routes lack a destination or ready credential.`),
+    check("maintenance", "Scheduled maintenance", maintenanceCurrent, "operations",
+      latestMaintenance
+        ? `${Number(latestMaintenance.failed_count)} of ${Number(latestMaintenance.task_count)} tasks failed in the latest run.`
+        : "No completed hourly maintenance evidence is available yet."),
     check("active_release", "Published operating process", Number(activeRelease?.count) > 0, "release",
       "Publish and activate at least one evaluated process before handoff."),
     check("incidents", "No unresolved critical incident", Number(openCritical?.count) === 0, "recovery",
@@ -133,8 +148,32 @@ export async function getManagedLifecycle(env: Env, tenantId: string) {
     },
     environment: { name: env.ENVIRONMENT, domain: env.APP_DOMAIN, accessTeamDomain: env.ACCESS_TEAM_DOMAIN },
     counts: counts ?? {},
-    operatingControl: controls ?? null
+    operatingControl: controls ?? null,
+    maintenanceRuns: maintenanceRows.results.map((row) => ({
+      id: row.id,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      status: row.status,
+      taskCount: Number(row.task_count),
+      failedCount: Number(row.failed_count),
+      tasks: parseMaintenanceTasks(row.task_results_json)
+    }))
   };
+}
+
+function parseMaintenanceTasks(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(0, 20).map((item) => ({
+      name: String(item?.name ?? "unknown").slice(0, 80),
+      status: item?.status === "failed" ? "failed" as const : "healthy" as const,
+      durationMs: Math.max(0, Number(item?.durationMs ?? 0)),
+      error: item?.status === "failed" ? String(item?.error ?? "Task failed").slice(0, 300) : undefined
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function updateHandoffCheck(
