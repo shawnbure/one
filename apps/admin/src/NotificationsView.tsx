@@ -15,6 +15,7 @@ export function NotificationsView({ session, onNotice }: {
   }>>({});
   const [deliveryPolicies, setDeliveryPolicies] = useState<Record<string, {
     quietHoursEnabled: boolean; quietStartHourUtc: number; quietEndHourUtc: number; criticalBypass: boolean;
+    digestMode: "immediate" | "hourly" | "daily"; digestHourUtc: number;
   }>>({});
   const [acknowledgementNotes, setAcknowledgementNotes] = useState<Record<string, string>>({});
   const canConfigure = session?.user.role === "admin" || session?.user.role === "owner";
@@ -34,7 +35,9 @@ export function NotificationsView({ session, onNotice }: {
       quietHoursEnabled: Boolean(policy.quiet_hours_enabled),
       quietStartHourUtc: Number(policy.quiet_start_hour_utc),
       quietEndHourUtc: Number(policy.quiet_end_hour_utc),
-      criticalBypass: Boolean(policy.critical_bypass)
+      criticalBypass: Boolean(policy.critical_bypass),
+      digestMode: policy.digest_mode,
+      digestHourUtc: Number(policy.digest_hour_utc)
     }])));
   } catch (error) { onNotice(error instanceof Error ? error.message : "Notification center could not load"); } }
   useEffect(() => { void load(); }, []);
@@ -94,7 +97,8 @@ export function NotificationsView({ session, onNotice }: {
     <div className="notification-layout"><article className="policy-list panel"><div className="section-head"><div><h2>Routing policies</h2><p>In-app alerts are owned response tasks. Webhook and Microsoft email rows are provider-delivery evidence.</p></div></div>{data.policies.map((policy) => {
       const response = responsePolicies[policy.id] ?? { ownerId: "", acknowledgementRequired: false, escalationMinutes: 0 };
       const deliveryPolicy = deliveryPolicies[policy.id] ?? {
-        quietHoursEnabled: false, quietStartHourUtc: 22, quietEndHourUtc: 7, criticalBypass: true
+        quietHoursEnabled: false, quietStartHourUtc: 22, quietEndHourUtc: 7, criticalBypass: true,
+        digestMode: "immediate", digestHourUtc: 8
       };
       return <div className={`policy-row ${policy.channel !== "in_app" ? "external-policy" : ""}`} key={policy.id}><span className={`severity ${policy.severity}`}><AlertTriangle size={16}/></span><span><strong>{policy.event_type.replaceAll("_", " ").replaceAll(".", " · ")}</strong><small>{policy.channel.replaceAll("_", " ")} · {policy.destination ?? "Workrr notification center"}</small>
         {policy.channel === "in_app" && canConfigure && <span className="response-policy-editor"><label>Owner<select value={response.ownerId} onChange={(event) =>
@@ -115,11 +119,21 @@ export function NotificationsView({ session, onNotice }: {
               setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy, quietEndHourUtc: Number(event.target.value) } })}/></label>
             <label><input type="checkbox" checked={deliveryPolicy.criticalBypass} onChange={(event) =>
               setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy, criticalBypass: event.target.checked } })}/>Critical bypass</label>
+            {policy.channel === "email" && <label>Delivery<select value={deliveryPolicy.digestMode} onChange={(event) =>
+              setDeliveryPolicies({ ...deliveryPolicies, [policy.id]: { ...deliveryPolicy,
+                digestMode: event.target.value as "immediate" | "hourly" | "daily" } })}>
+              <option value="immediate">Immediate</option><option value="hourly">Hourly digest</option>
+              <option value="daily">Daily digest</option></select></label>}
+            {policy.channel === "email" && deliveryPolicy.digestMode === "daily" && <label>Digest UTC<input type="number" min="0" max="23"
+              value={deliveryPolicy.digestHourUtc} onChange={(event) => setDeliveryPolicies({ ...deliveryPolicies,
+                [policy.id]: { ...deliveryPolicy, digestHourUtc: Number(event.target.value) } })}/></label>}
             <button disabled={busy === policy.id} onClick={() => void saveDeliveryPolicy(policy.id)}>Save schedule</button></span></>}</span><span className={`delivery ${policy.enabled ? "enabled" : "disabled"}`}>{policy.enabled ? "Enabled" : "Disabled"}</span>{canConfigure && <button disabled={busy === policy.id} onClick={() => void toggle(policy.id, !policy.enabled)}>{policy.enabled ? "Disable" : "Enable"}</button>}</div>;
     })}</article>
       <aside className="event-list panel"><div className="section-head"><div><h2>Recent events</h2><p>Human response and external delivery remain separate evidence.</p></div></div>{data.events.length ? data.events.map((event) => <div className={`event-row ${event.delivery_status} ${event.escalated_at ? "escalated" : ""}`} key={event.id}>{event.acknowledged_at || event.delivery_status === "delivered" ? <CheckCircle2 size={16}/> : <ShieldCheck size={16}/>}<span><strong>{event.title}</strong><small>{event.detail}</small><em>{event.channel === "in_app" ? `owner ${event.owner_name ?? "unassigned"} · ${event.acknowledged_at ? `acknowledged by ${event.acknowledged_by_name ?? "operator"}` : event.escalated_at ? "escalated" : `acknowledge within ${event.escalation_minutes} minutes`}` : `${event.delivery_status === "delivered" && event.response_status === 202 ? "accepted by provider" : event.delivery_status} · ${event.attempt_count ? `${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"} · ` : ""}`}{formatDate(event.created_at)}</em>
         {event.channel !== "in_app" && event.delivery_status === "pending" && event.delivery_scheduled_for &&
-          !event.delivery_queued_at && <small className="delivery-scheduled">Quiet hours · releases by hourly maintenance after {formatDate(event.delivery_scheduled_for)}</small>}
+          !event.delivery_queued_at && <small className="delivery-scheduled">Scheduled · releases by hourly maintenance after {formatDate(event.delivery_scheduled_for)}</small>}
+        {event.digest_batch_id && event.event_type !== "notification.digest" &&
+          <small className="delivery-scheduled">Included in email digest · {event.delivery_status}</small>}
         {event.acknowledgement_note && <small className="acknowledgement-note">{event.acknowledgement_note}</small>}
         {event.last_error && <small className="delivery-error">{event.last_error}</small>}
         {event.channel === "in_app" && Boolean(event.acknowledgement_required) && !event.acknowledged_at && canAcknowledge && <span className="acknowledgement-editor">

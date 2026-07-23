@@ -92,6 +92,7 @@ export interface NotificationDeliveryJob {
   tenantId: string;
   eventId: string;
   channel?: "webhook" | "email";
+  digestBatchId?: string;
 }
 
 export interface KnowledgeIndexJob {

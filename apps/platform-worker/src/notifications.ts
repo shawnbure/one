@@ -15,6 +15,8 @@ interface DeliveryRow {
   destination: string;
   channel: string;
   secret_binding: string | null;
+  digest_batch_id?: string | null;
+  digest_item_count?: number | null;
 }
 
 interface DeliveryPolicy {
@@ -25,6 +27,8 @@ interface DeliveryPolicy {
   quiet_start_hour_utc: number;
   quiet_end_hour_utc: number;
   critical_bypass: number;
+  digest_mode?: "immediate" | "hourly" | "daily";
+  digest_hour_utc?: number;
 }
 
 export async function emitNotification(env: Env, tenantId: string, event: {
@@ -49,7 +53,9 @@ export async function emitNotification(env: Env, tenantId: string, event: {
         event.targetType ?? null, event.targetId ?? null, status, status === "delivered" ? now.toISOString() : null,
         scheduledFor?.toISOString() ?? null).run();
     if (channel === "webhook" || channel === "email") {
-      if (!scheduledFor || scheduledFor <= now) {
+      const bypassesSchedule = String(policy.severity) === "critical" && Number(policy.critical_bypass);
+      if ((!scheduledFor || scheduledFor <= now) &&
+          (String(policy.digest_mode ?? "immediate") === "immediate" || bypassesSchedule)) {
         await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId: id, channel }, { contentType: "json" });
         await env.DB.prepare(`UPDATE notification_events SET delivery_queued_at=?
           WHERE id=? AND tenant_id=?`).bind(now.toISOString(), id, tenantId).run();
@@ -60,12 +66,13 @@ export async function emitNotification(env: Env, tenantId: string, event: {
 }
 
 export function nextDeliveryTime(policy: DeliveryPolicy, now: Date): Date {
-  if (!Number(policy.quiet_hours_enabled) ||
-      (policy.severity === "critical" && Number(policy.critical_bypass))) return now;
+  if (policy.severity === "critical" && Number(policy.critical_bypass)) return now;
+  let candidate = digestTime(policy, now);
+  if (!Number(policy.quiet_hours_enabled)) return candidate;
   const start = Number(policy.quiet_start_hour_utc);
   const end = Number(policy.quiet_end_hour_utc);
-  if (start === end || !inQuietHours(now.getUTCHours(), start, end)) return now;
-  const candidate = new Date(now);
+  if (start === end || !inQuietHours(candidate.getUTCHours(), start, end)) return candidate;
+  candidate = new Date(candidate);
   candidate.setUTCMinutes(0, 0, 0);
   for (let hour = 0; hour < 24; hour += 1) {
     candidate.setUTCHours(candidate.getUTCHours() + 1);
@@ -75,16 +82,25 @@ export function nextDeliveryTime(policy: DeliveryPolicy, now: Date): Date {
 }
 
 export async function enqueueDueNotificationDeliveries(env: Env, now = new Date()) {
-  const { results } = await env.DB.prepare(`SELECT e.id, e.tenant_id, p.channel
+  const { results } = await env.DB.prepare(`SELECT e.id, e.tenant_id, e.policy_id, e.title, e.detail,
+      e.event_type, e.severity, e.target_type, e.target_id, p.channel, p.digest_mode
     FROM notification_events e JOIN notification_policies p
       ON p.id=e.policy_id AND p.tenant_id=e.tenant_id
     WHERE e.delivery_status='pending' AND e.delivery_queued_at IS NULL
       AND e.delivery_scheduled_for IS NOT NULL AND datetime(e.delivery_scheduled_for) <= datetime(?)
       AND p.enabled=1 AND p.channel IN ('email','webhook')
     ORDER BY e.delivery_scheduled_for LIMIT 100`).bind(now.toISOString())
-    .all<{ id: string; tenant_id: string; channel: "email" | "webhook" }>();
+    .all<{ id: string; tenant_id: string; policy_id: string; title: string; detail: string;
+      event_type: string; severity: string; target_type: string | null; target_id: string | null;
+      channel: "email" | "webhook"; digest_mode: "immediate" | "hourly" | "daily" }>();
   let queued = 0;
+  const digestGroups = new Map<string, typeof results>();
   for (const event of results) {
+    if (event.channel === "email" && event.digest_mode !== "immediate") {
+      const key = `${event.tenant_id}:${event.policy_id}`;
+      digestGroups.set(key, [...(digestGroups.get(key) ?? []), event]);
+      continue;
+    }
     const claim = await env.DB.prepare(`UPDATE notification_events SET delivery_queued_at=?
       WHERE id=? AND tenant_id=? AND delivery_status='pending' AND delivery_queued_at IS NULL`)
       .bind(now.toISOString(), event.id, event.tenant_id).run();
@@ -99,11 +115,80 @@ export async function enqueueDueNotificationDeliveries(env: Env, now = new Date(
         .bind((error instanceof Error ? error.message : String(error)).slice(0, 500), event.id, event.tenant_id).run();
     }
   }
+  for (const events of digestGroups.values()) {
+    queued += await enqueueEmailDigest(env, events, now);
+  }
   return { queued };
 }
 
 function inQuietHours(hour: number, start: number, end: number) {
   return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
+function digestTime(policy: DeliveryPolicy, now: Date) {
+  if (policy.digest_mode === "hourly") {
+    const next = new Date(now);
+    next.setUTCMinutes(0, 0, 0);
+    next.setUTCHours(next.getUTCHours() + 1);
+    return next;
+  }
+  if (policy.digest_mode === "daily") {
+    const next = new Date(now);
+    next.setUTCHours(Number(policy.digest_hour_utc ?? 8), 0, 0, 0);
+    if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+    return next;
+  }
+  return now;
+}
+
+async function enqueueEmailDigest(
+  env: Env,
+  events: Array<{ id: string; tenant_id: string; policy_id: string; title: string; detail: string;
+    event_type: string; severity: string; target_type: string | null; target_id: string | null;
+    channel: "email" | "webhook"; digest_mode: "immediate" | "hourly" | "daily" }>,
+  now: Date,
+) {
+  if (!events.length) return 0;
+  const first = events[0]!;
+  const batchId = crypto.randomUUID();
+  const deliveryEventId = crypto.randomUUID();
+  const placeholders = events.map(() => "?").join(",");
+  const claimed = await env.DB.prepare(`UPDATE notification_events
+    SET digest_batch_id=?, delivery_status='recorded', delivery_queued_at=?
+    WHERE id IN (${placeholders}) AND tenant_id=? AND delivery_status='pending'
+      AND delivery_queued_at IS NULL AND digest_batch_id IS NULL`)
+    .bind(batchId, now.toISOString(), ...events.map((event) => event.id), first.tenant_id).run();
+  if (claimed.meta.changes !== events.length) {
+    await env.DB.prepare(`UPDATE notification_events SET digest_batch_id=NULL, delivery_status='pending',
+      delivery_queued_at=NULL WHERE tenant_id=? AND digest_batch_id=? AND delivery_status='recorded'`)
+      .bind(first.tenant_id, batchId).run();
+    return 0;
+  }
+  const detail = events.map((event, index) =>
+    `${index + 1}. [${event.severity}] ${event.title}: ${event.detail}`).join("\n").slice(0, 8000);
+  await env.DB.prepare(`INSERT INTO notification_events
+    (id, tenant_id, policy_id, event_type, severity, title, detail, target_type, target_id,
+     delivery_status, delivery_scheduled_for, delivery_queued_at, digest_batch_id, digest_item_count)
+    VALUES (?, ?, ?, 'notification.digest', 'warning', ?, ?, 'notification_digest', ?,
+      'pending', ?, ?, ?, ?)`)
+    .bind(deliveryEventId, first.tenant_id, first.policy_id,
+      `Workrr digest · ${events.length} notification${events.length === 1 ? "" : "s"}`,
+      detail, batchId, now.toISOString(), now.toISOString(), batchId, events.length).run();
+  try {
+    await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId: first.tenant_id,
+      eventId: deliveryEventId, channel: "email", digestBatchId: batchId }, { contentType: "json" });
+    return 1;
+  } catch (error) {
+    await env.DB.batch([
+      env.DB.prepare(`DELETE FROM notification_events WHERE id=? AND tenant_id=?`)
+        .bind(deliveryEventId, first.tenant_id),
+      env.DB.prepare(`UPDATE notification_events SET digest_batch_id=NULL, delivery_status='pending',
+        delivery_queued_at=NULL, last_error=? WHERE tenant_id=? AND digest_batch_id=? AND delivery_status='recorded'`)
+        .bind((error instanceof Error ? error.message : String(error)).slice(0, 500),
+          first.tenant_id, batchId)
+    ]);
+    return 0;
+  }
 }
 
 export async function deliverNotificationWebhook(env: Env, tenantId: string, eventId: string) {
@@ -189,7 +274,8 @@ export async function deliverNotificationEmail(
   fetcher: typeof fetch = fetch,
 ) {
   const delivery = await env.DB.prepare(`SELECT e.id, e.tenant_id, e.event_type, e.severity, e.title, e.detail,
-    e.target_type, e.target_id, e.delivery_status, e.created_at, p.destination, p.channel, NULL secret_binding
+    e.target_type, e.target_id, e.delivery_status, e.created_at, e.digest_batch_id, e.digest_item_count,
+    p.destination, p.channel, NULL secret_binding
     FROM notification_events e JOIN notification_policies p ON p.id = e.policy_id AND p.tenant_id = e.tenant_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(eventId, tenantId).first<DeliveryRow>();
   if (!delivery) throw new Error("Notification delivery was not found");
@@ -232,6 +318,11 @@ export async function deliverNotificationEmail(
     attempt_count = attempt_count + 1, last_attempt_at = ?, last_error = NULL, response_status = 202
     WHERE id = ? AND tenant_id = ? AND delivery_status <> 'delivered'`)
     .bind(now, now, eventId, tenantId).run();
+  if (delivery.event_type === "notification.digest" && delivery.digest_batch_id) {
+    await env.DB.prepare(`UPDATE notification_events SET delivery_status='delivered', delivered_at=?
+      WHERE tenant_id=? AND digest_batch_id=? AND id<>? AND delivery_status='recorded'`)
+      .bind(now, tenantId, delivery.digest_batch_id, eventId).run();
+  }
   return { delivered: true, duplicate: false, status: 202 };
 }
 
@@ -240,6 +331,15 @@ export async function failNotificationDelivery(env: Env, tenantId: string, event
     last_attempt_at = COALESCE(last_attempt_at, ?)
     WHERE id = ? AND tenant_id = ? AND delivery_status <> 'delivered'`)
     .bind((error instanceof Error ? error.message : String(error)).slice(0, 500), new Date().toISOString(), eventId, tenantId).run();
+  const digest = await env.DB.prepare(`SELECT digest_batch_id FROM notification_events
+    WHERE id=? AND tenant_id=? AND event_type='notification.digest'`).bind(eventId, tenantId)
+    .first<{ digest_batch_id: string | null }>();
+  if (digest?.digest_batch_id) {
+    await env.DB.prepare(`UPDATE notification_events SET delivery_status='failed', last_error=?
+      WHERE tenant_id=? AND digest_batch_id=? AND id<>? AND delivery_status='recorded'`)
+      .bind((error instanceof Error ? error.message : String(error)).slice(0, 500),
+        tenantId, digest.digest_batch_id, eventId).run();
+  }
 }
 
 export function safeWebhookDestination(value: string | null | undefined): string {

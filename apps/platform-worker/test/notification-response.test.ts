@@ -77,6 +77,10 @@ describe("notification quiet hours", () => {
       .toBe("2026-07-24T07:00:00.000Z");
     expect(nextDeliveryTime({ ...policy, severity: "critical" }, new Date("2026-07-23T23:34:00Z")).toISOString())
       .toBe("2026-07-23T23:34:00.000Z");
+    expect(nextDeliveryTime({ ...policy, quiet_hours_enabled: 0, digest_mode: "hourly", digest_hour_utc: 8 },
+      new Date("2026-07-23T12:34:00Z")).toISOString()).toBe("2026-07-23T13:00:00.000Z");
+    expect(nextDeliveryTime({ ...policy, quiet_hours_enabled: 0, digest_mode: "daily", digest_hour_utc: 8 },
+      new Date("2026-07-23T12:34:00Z")).toISOString()).toBe("2026-07-24T08:00:00.000Z");
   });
 
   it("claims a due external delivery before queueing it", async () => {
@@ -85,7 +89,9 @@ describe("notification quiet hours", () => {
       prepare(sql: string) {
         const statement = {
           bind() { return statement; },
-          async all() { return { results: [{ id: "event-1", tenant_id: "tenant-1", channel: "email" }] }; },
+          async all() { return { results: [{ id: "event-1", tenant_id: "tenant-1", policy_id: "policy-1",
+            title: "Failure", detail: "Reason", event_type: "execution.failed", severity: "critical",
+            target_type: "execution", target_id: "run-1", channel: "email", digest_mode: "immediate" }] }; },
           async run() { return { meta: { changes: sql.includes("delivery_queued_at=?") ? 1 : 0 } }; }
         };
         return statement;
@@ -96,5 +102,39 @@ describe("notification quiet hours", () => {
       .resolves.toEqual({ queued: 1 });
     expect(sends).toEqual([{ kind: "notification_delivery", tenantId: "tenant-1",
       eventId: "event-1", channel: "email" }]);
+  });
+
+  it("combines due email events into one attributable digest delivery", async () => {
+    const writes: Write[] = [];
+    const sends: Array<Record<string, unknown>> = [];
+    const rows = ["one", "two"].map((id) => ({ id, tenant_id: "tenant-1", policy_id: "policy-1",
+      title: `Alert ${id}`, detail: `Detail ${id}`, event_type: "execution.failed", severity: "warning",
+      target_type: "execution", target_id: id, channel: "email", digest_mode: "hourly" }));
+    const DB = {
+      prepare(sql: string) {
+        let bindings: unknown[] = [];
+        const statement = {
+          bind(...values: unknown[]) { bindings = values; return statement; },
+          async all() { return { results: rows }; },
+          async run() {
+            writes.push({ sql, bindings });
+            return { meta: { changes: sql.includes("SET digest_batch_id=?") ? 2 : 1 } };
+          }
+        };
+        return statement;
+      },
+      async batch(statements: Array<{ run(): Promise<unknown> }>) {
+        return Promise.all(statements.map((statement) => statement.run()));
+      }
+    };
+    const env = { DB, PROCESS_QUEUE: { async send(value: Record<string, unknown>) { sends.push(value); } } } as never;
+    await expect(enqueueDueNotificationDeliveries(env, new Date("2026-07-23T12:00:00Z")))
+      .resolves.toEqual({ queued: 1 });
+    expect(writes.some(({ sql, bindings }) => sql.includes("'notification.digest'") &&
+      bindings.includes("Workrr digest · 2 notifications"))).toBe(true);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]).toMatchObject({ kind: "notification_delivery", tenantId: "tenant-1",
+      channel: "email" });
+    expect(sends[0]?.digestBatchId).toBeTruthy();
   });
 });

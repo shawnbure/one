@@ -176,15 +176,18 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
   if (!policyId) return c.json({ error: "Notification policy ID is required" }, 400);
   const body = await c.req.json<{ enabled?: boolean; destination?: string | null; ownerId?: string | null;
     acknowledgementRequired?: boolean; escalationMinutes?: number; quietHoursEnabled?: boolean;
-    quietStartHourUtc?: number; quietEndHourUtc?: number; criticalBypass?: boolean }>();
+    quietStartHourUtc?: number; quietEndHourUtc?: number; criticalBypass?: boolean;
+    digestMode?: "immediate" | "hourly" | "daily"; digestHourUtc?: number }>();
   const policy = await c.env.DB.prepare(`SELECT p.channel, p.destination, p.owner_id,
     p.acknowledgement_required, p.escalation_minutes, p.quiet_hours_enabled,
-    p.quiet_start_hour_utc, p.quiet_end_hour_utc, p.critical_bypass, r.secret_binding
+    p.quiet_start_hour_utc, p.quiet_end_hour_utc, p.critical_bypass, p.digest_mode,
+    p.digest_hour_utc, r.secret_binding
     FROM notification_policies p LEFT JOIN integration_credential_refs r ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
     WHERE p.id = ? AND p.tenant_id = ?`).bind(policyId, c.get("tenantId"))
     .first<{ channel: string; destination: string | null; owner_id: string | null;
       acknowledgement_required: number; escalation_minutes: number; quiet_hours_enabled: number;
       quiet_start_hour_utc: number; quiet_end_hour_utc: number; critical_bypass: number;
+      digest_mode: "immediate" | "hourly" | "daily"; digest_hour_utc: number;
       secret_binding: string | null }>();
   if (!policy) return c.json({ error: "Notification policy not found" }, 404);
   const destination = body.destination === undefined ? policy.destination : body.destination?.trim() || null;
@@ -248,6 +251,15 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
       (quietHoursEnabled && quietStartHourUtc === quietEndHourUtc)) {
     return c.json({ error: "Quiet-hour start and end must be different UTC hours from 0–23" }, 400);
   }
+  const digestMode = body.digestMode ?? policy.digest_mode;
+  const digestHourUtc = body.digestHourUtc === undefined ? Number(policy.digest_hour_utc) : Number(body.digestHourUtc);
+  if (!["immediate", "hourly", "daily"].includes(digestMode) ||
+      !Number.isInteger(digestHourUtc) || digestHourUtc < 0 || digestHourUtc > 23) {
+    return c.json({ error: "Digest mode and UTC delivery hour are invalid" }, 400);
+  }
+  if (policy.channel !== "email" && (body.digestMode !== undefined || body.digestHourUtc !== undefined)) {
+    return c.json({ error: "Digest aggregation applies only to email delivery" }, 400);
+  }
   const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled),
     destination = CASE WHEN ? = 1 THEN ? ELSE destination END,
     owner_id = CASE WHEN ? = 1 THEN ? ELSE owner_id END,
@@ -257,6 +269,8 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
     quiet_start_hour_utc = CASE WHEN ? = 1 THEN ? ELSE quiet_start_hour_utc END,
     quiet_end_hour_utc = CASE WHEN ? = 1 THEN ? ELSE quiet_end_hour_utc END,
     critical_bypass = CASE WHEN ? = 1 THEN ? ELSE critical_bypass END,
+    digest_mode = CASE WHEN ? = 1 THEN ? ELSE digest_mode END,
+    digest_hour_utc = CASE WHEN ? = 1 THEN ? ELSE digest_hour_utc END,
     updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
     .bind(typeof body.enabled === "boolean" ? Number(body.enabled) : null, Number(body.destination !== undefined),
       destination, Number(body.ownerId !== undefined), ownerId,
@@ -266,11 +280,13 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
       Number(body.quietStartHourUtc !== undefined), quietStartHourUtc,
       Number(body.quietEndHourUtc !== undefined), quietEndHourUtc,
       Number(body.criticalBypass !== undefined), Number(criticalBypass),
+      Number(body.digestMode !== undefined), digestMode,
+      Number(body.digestHourUtc !== undefined), digestHourUtc,
       policyId, c.get("tenantId")).run();
   if (result.meta.changes) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "notification_policy.updated",
     "notification_policy", policyId, { enabled: body.enabled, destinationConfigured: Boolean(destination),
       ownerId, acknowledgementRequired, escalationMinutes, quietHoursEnabled, quietStartHourUtc,
-      quietEndHourUtc, criticalBypass });
+      quietEndHourUtc, criticalBypass, digestMode, digestHourUtc });
   return c.json({ updated: result.meta.changes === 1 });
 });
 
