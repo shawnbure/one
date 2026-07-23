@@ -167,6 +167,7 @@
   margin-top: 12px;
 }
 .knowledge-upload-row > span { flex: 1; color: #68776f; font-size: 13px; }
+.knowledge-conversion-note { margin: 2px 0 0; padding: 11px 13px; border-radius: 8px; background: #eef5f2; color: #4f675d; font-size: 13px; line-height: 1.55; }
 .file-picker {
   display: flex !important;
   grid-auto-flow: column;

@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { chunkText, expireKnowledgeSources, persistKnowledgeCitations } from "../src/knowledge";
+import { chunkText, expireKnowledgeSources, extractKnowledgeUpload, persistKnowledgeCitations } from "../src/knowledge";
 
 describe("knowledge chunking", () => {
+  it("keeps native text local and sends supported business documents through Cloudflare conversion", async () => {
+    const calls: unknown[] = [];
+    const env = { AI: { async toMarkdown(document: unknown) {
+      calls.push(document);
+      return { id: "converted-1", name: "policy.pdf", mimeType: "application/pdf",
+        format: "markdown", tokens: 20, data: "# Approved policy\n\nCustomer requests require review." };
+    } } } as never;
+    await expect(extractKnowledgeUpload(env, new File(["plain policy"], "policy.md", { type: "text/markdown" })))
+      .resolves.toMatchObject({ content: "plain policy", sourceType: "document" });
+    expect(calls).toHaveLength(0);
+    await expect(extractKnowledgeUpload(env,
+      new File([new Uint8Array([37, 80, 68, 70])], "policy.pdf", { type: "application/pdf" })))
+      .resolves.toMatchObject({ content: "# Approved policy\n\nCustomer requests require review.",
+        mimeType: "application/pdf", sourceType: "cloudflare_markdown" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("rejects unsupported binaries and failed or empty Cloudflare extraction", async () => {
+    const binary = new File([new Uint8Array([1, 2, 3])], "archive.zip", { type: "application/zip" });
+    await expect(extractKnowledgeUpload({ AI: {} } as never, binary)).rejects.toThrow("Use PDF");
+    const pdf = new File([new Uint8Array([37, 80, 68, 70])], "policy.pdf", { type: "application/pdf" });
+    await expect(extractKnowledgeUpload({ AI: { async toMarkdown() {
+      return { id: "failed", name: "policy.pdf", mimeType: "application/pdf",
+        format: "error", error: "encrypted document" };
+    } } } as never, pdf)).rejects.toThrow("encrypted document");
+    await expect(extractKnowledgeUpload({ AI: { async toMarkdown() {
+      return { id: "empty", name: "policy.pdf", mimeType: "application/pdf",
+        format: "markdown", tokens: 0, data: "  " };
+    } } } as never, pdf)).rejects.toThrow("no readable");
+  });
+
   it("keeps chunks bounded with overlap for retrieval continuity", () => {
     const text = Array.from({ length: 80 }, (_, index) =>
       `Policy paragraph ${index}. Customers must receive an attributable answer before the case is closed.`).join("\n\n");

@@ -623,7 +623,9 @@ Loops and arbitrary cycles remain unavailable in v1.
 - `knowledge_chunks`
 - `knowledge_releases`
 
-Original files and extracted payloads live in R2. D1 stores metadata and lifecycle. Vectorize records include tenant, knowledge-base, document, release, and authorization metadata for filtering.
+Customer-managed ingestion connectors may retain original files in R2 only when that retention is explicitly configured. Direct operator uploads keep the raw binary only for the bounded Workers AI conversion request; Workrr retains only DLP-protected extracted text in R2. D1 stores metadata, extraction method, size evidence, and lifecycle. Vectorize records include tenant, knowledge-base, document, release, and authorization metadata for filtering.
+
+Direct knowledge onboarding accepts native text or supported PDF, Word, PowerPoint, Excel, HTML, and OpenDocument files. Uploads are bounded to 4 MB, converted output is bounded to 2 MB, and failed, empty, unsupported, or DLP-blocked input creates neither a source record nor retained input bytes. Queue performs chunking and embedding after admission so the interactive Worker remains short-lived and retryable.
 
 ### 6.6 Observability
 

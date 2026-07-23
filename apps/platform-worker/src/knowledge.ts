@@ -4,6 +4,7 @@ import type { Env } from "./types";
 
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5" as const;
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 const MAX_CHUNKS = 120;
 const CHUNK_SIZE = 1200;
 const CHUNK_OVERLAP = 180;
@@ -51,11 +52,11 @@ export async function createKnowledgeSource(env: Env, tenantId: string, actorId:
   const text = typeof form.get("text") === "string" ? String(form.get("text")).trim() : "";
   let content: string;
   let mimeType: string;
+  let sourceType = "document";
+  let originalSizeBytes = 0;
   if (upload instanceof File && upload.size) {
-    if (upload.size > MAX_SOURCE_BYTES) throw new Error("Source exceeds the 2 MB limit");
-    mimeType = upload.type || "text/plain";
-    if (!isTextMime(mimeType, upload.name)) throw new Error("Use a text, Markdown, CSV, or JSON file");
-    content = await upload.text();
+    const extracted = await extractKnowledgeUpload(env, upload);
+    ({ content, mimeType, sourceType, originalSizeBytes } = extracted);
   } else {
     content = text;
     mimeType = "text/plain";
@@ -76,17 +77,38 @@ export async function createKnowledgeSource(env: Env, tenantId: string, actorId:
     await env.DB.prepare(`INSERT INTO knowledge_sources
       (id, tenant_id, name, source_type, owner, sensitivity, status, provenance,
        allowed_processes_json, reviewed_at, expires_at, object_key, mime_type, size_bytes, checksum)
-      VALUES (?, ?, ?, 'document', ?, ?, 'indexing', ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)`)
-      .bind(id, tenantId, name, owner, sensitivity, provenance, JSON.stringify(allowedProcesses),
+      VALUES (?, ?, ?, ?, ?, ?, 'indexing', ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)`)
+      .bind(id, tenantId, name, sourceType, owner, sensitivity, provenance, JSON.stringify(allowedProcesses),
         expiresAt, objectKey, mimeType, bytes.byteLength, checksum).run();
     await env.PROCESS_QUEUE.send({ kind: "knowledge_index", tenantId, sourceId: id }, { contentType: "json" });
     await audit(env, tenantId, actorId, "knowledge_source.created", id,
-      { name, sensitivity, processCount: allowedProcesses.length, sizeBytes: bytes.byteLength });
+      { name, sensitivity, processCount: allowedProcesses.length, sizeBytes: bytes.byteLength,
+        originalSizeBytes, extraction: sourceType === "cloudflare_markdown" ? "workers_ai_markdown" : "native_text" });
   } catch (error) {
     await env.KNOWLEDGE_BUCKET.delete(objectKey);
     throw error;
   }
   return { id, status: "indexing" };
+}
+
+export async function extractKnowledgeUpload(env: Pick<Env, "AI">, upload: File) {
+  if (upload.size > MAX_UPLOAD_BYTES) throw new Error("File exceeds the 4 MB upload limit");
+  const mimeType = upload.type || mimeFromName(upload.name);
+  if (isTextMime(mimeType, upload.name)) {
+    return { content: await upload.text(), mimeType, sourceType: "document", originalSizeBytes: upload.size };
+  }
+  if (!isConvertibleDocument(mimeType, upload.name)) {
+    throw new Error("Use PDF, Word, PowerPoint, Excel, HTML, OpenDocument, text, Markdown, CSV, or JSON");
+  }
+  const safeName = safeDocumentName(upload.name);
+  const result = await env.AI.toMarkdown({
+    name: safeName,
+    blob: new Blob([await upload.arrayBuffer()], { type: mimeType })
+  });
+  if (result.format === "error") throw new Error(`Cloudflare could not extract this document: ${result.error}`);
+  const content = result.data.trim();
+  if (!content) throw new Error("Cloudflare extracted no readable document content");
+  return { content, mimeType, sourceType: "cloudflare_markdown", originalSizeBytes: upload.size };
 }
 
 export async function indexKnowledgeSource(env: Env, job: KnowledgeIndexJob) {
@@ -291,6 +313,30 @@ function optionalReviewDate(value: FormDataEntryValue | string | null) {
 function isTextMime(type: string, name: string) {
   return type.startsWith("text/") || ["application/json", "application/csv"].includes(type) ||
     /\.(txt|md|markdown|csv|json)$/i.test(name);
+}
+function isConvertibleDocument(type: string, name: string) {
+  return [
+    "application/pdf", "text/html",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet"
+  ].includes(type) || /\.(pdf|docx|pptx|xlsx|html?|odt|ods)$/i.test(name);
+}
+function mimeFromName(name: string) {
+  const extension = name.toLowerCase().split(".").pop();
+  return ({
+    pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    html: "text/html", htm: "text/html", odt: "application/vnd.oasis.opendocument.text",
+    ods: "application/vnd.oasis.opendocument.spreadsheet"
+  } as Record<string, string>)[extension ?? ""] ?? "application/octet-stream";
+}
+function safeDocumentName(name: string) {
+  const normalized = name.split(/[\\/]/).pop()?.replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 160);
+  return normalized || "document";
 }
 function parseBindings(value: string) {
   try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : []; }

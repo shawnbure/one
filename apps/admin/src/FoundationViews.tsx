@@ -621,7 +621,8 @@ function Knowledge({ data, onReload, onNotice }: {
       />
       <div className="knowledge-workspace">
         <form className="panel knowledge-ingest" onSubmit={upload}>
-          <div className="panel-head"><div><h2>Add an approved source</h2><p>Text, Markdown, CSV, or JSON · 2 MB maximum · DLP checked before storage</p></div></div>
+          <div className="panel-head"><div><h2>Add an approved source</h2>
+            <p>Paste text or upload a business document · DLP checked before private storage and retrieval</p></div></div>
           <div className="knowledge-form-grid">
             <label>Name<input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
             <label>Business owner<input required maxLength={120} value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} /></label>
@@ -647,11 +648,13 @@ function Knowledge({ data, onReload, onNotice }: {
           <label>Paste source text<textarea rows={7} value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })}
             placeholder="Paste a policy, playbook, procedure, or approved reference…" /></label>
           <div className="knowledge-upload-row">
-            <label className="file-picker"><Upload size={16} /> Choose file<input type="file" accept=".txt,.md,.markdown,.csv,.json,text/*,application/json"
+            <label className="file-picker"><Upload size={16} /> Choose file<input type="file"
+              accept=".txt,.md,.markdown,.csv,.json,.pdf,.docx,.pptx,.xlsx,.html,.htm,.odt,.ods,text/*,application/json,application/pdf"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
             <span>{file?.name ?? "No file selected"}</span>
             <button className="primary" disabled={busy === "upload"}>{busy === "upload" ? "Uploading…" : "Add and index"}</button>
           </div>
+          <p className="knowledge-conversion-note">PDF, Word, PowerPoint, Excel, HTML, and OpenDocument files are converted to Markdown by Cloudflare Workers AI. Raw binary files are not retained; only DLP-protected extracted text enters R2. Maximum upload 4 MB and extracted content 2 MB.</p>
         </form>
         <form className="panel knowledge-test" onSubmit={testQuery}>
           <div className="panel-head"><div><h2>Retrieval test</h2><p>See exactly what a process can retrieve, with source evidence.</p></div></div>
