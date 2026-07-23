@@ -581,6 +581,11 @@ export interface ApiLog {
   actor_id: string | null;
   created_at: string;
 }
+export interface ApiLogPage {
+  data: ApiLog[];
+  page: { limit: number; hasMore: boolean; nextCursor: string | null };
+  summary: { total: number; averageLatencyMs: number; errors: number };
+}
 export interface WebhookEndpoint {
   id: string;
   name: string;
@@ -1107,7 +1112,15 @@ export const api = {
       `/api/processes/${encodeURIComponent(processId)}/mode`,
       { method: "PATCH", body: JSON.stringify({ mode, reason }) },
     ),
-  logs: () => request<{ data: ApiLog[] }>("/api/logs"),
+  logs: (filters?: { direction?: string; outcome?: string; search?: string; cursor?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.direction) params.set("direction", filters.direction);
+    if (filters?.outcome) params.set("outcome", filters.outcome);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.cursor) params.set("cursor", filters.cursor);
+    const query = params.size ? `?${params}` : "";
+    return request<ApiLogPage>(`/api/logs${query}`);
+  },
   webhooks: () => request<{ data: WebhookEndpoint[] }>("/api/webhooks"),
   setWebhookStatus: (id: string, status: "active" | "disabled") =>
     request<{ updated: boolean; status: string }>(

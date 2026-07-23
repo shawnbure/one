@@ -7,6 +7,7 @@ import { listBlueprints } from "./repository";
 import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease, rollbackRelease } from "./studio";
 import { getOverviewData } from "./overview";
+import { listApiLogs } from "./api-logs";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
@@ -1629,9 +1630,14 @@ app.put("/api/evaluation-results/:id/review", requireRoles("admin", "builder", "
 });
 
 app.get("/api/logs", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
-  const { results } = await c.env.DB.prepare(`SELECT id, trace_id, direction, method, path, status, duration_ms, target, actor_id, created_at
-    FROM api_logs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`).bind(c.get("tenantId")).all();
-  return c.json({ data: results });
+  try {
+    return c.json(await listApiLogs(c.env, c.get("tenantId"), {
+      direction: c.req.query("direction"), outcome: c.req.query("outcome"),
+      search: c.req.query("search"), cursor: c.req.query("cursor"), limit: c.req.query("limit")
+    }));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "API logs could not be loaded" }, 400);
+  }
 });
 
 app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
