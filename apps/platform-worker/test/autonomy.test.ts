@@ -26,6 +26,13 @@ describe("progressive autonomy policy", () => {
     });
   });
 
+  it("runs a proposal without action authority or accepted memory in shadow mode", () => {
+    expect(autonomyPlan({ ...process, autonomy: "autonomous", operatingMode: "shadow" })).toMatchObject({
+      effective: "suggest", disposition: "shadowed", runModel: true,
+      requiresApproval: false, shadowMode: true
+    });
+  });
+
   it("allows guarded read-only work but reviews guarded tool-capable work", () => {
     expect(autonomyPlan({ ...process, autonomy: "guarded" })).toMatchObject({
       disposition: "guarded_safe", requiresApproval: false

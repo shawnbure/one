@@ -9,6 +9,7 @@ import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 import { augmentWithKnowledge } from "./knowledge";
 import { isContractViolation, outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
 import { autonomyPlan, routeApproval } from "./autonomy";
+import { recordShadowReview } from "./shadow";
 
 interface ProcessWorkflowParams { tenantId: string; request: ExecutionRequest }
 
@@ -69,12 +70,16 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
     });
     const approvalId = await step.do("apply autonomy policy", async () => {
       const autonomy = autonomyPlan(context.blueprint);
-      const plan = rawResult.toolApprovalRequired && !autonomy.requiresApproval
+      const plan = rawResult.toolApprovalRequired && !autonomy.requiresApproval && !autonomy.shadowMode
         ? { ...autonomy, disposition: "waiting_approval" as const, requiresApproval: true,
           explanation: "A requested capability is proposal-only, so no external action was performed and human approval is required." }
         : autonomy;
       return routeApproval(this.env, tenantId, event.instanceId, context.blueprint, plan, result.outputPreview);
     });
+    if (autonomyPlan(context.blueprint).shadowMode) {
+      await step.do("record shadow comparison", () =>
+        recordShadowReview(this.env, tenantId, event.instanceId, context.blueprint.id));
+    }
     return { output: approvalId ? "Result is waiting for human approval." : result.output };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -22,6 +22,7 @@ import { getUsageLedger, importBillingEvidence, voidBillingEvidence } from "./us
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 import { isDlpBlocked, updateDlpRule } from "./dlp";
+import { getShadowReview, listShadowReviews, reviewShadowExecution, ShadowReviewConflict } from "./shadow";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
@@ -870,6 +871,27 @@ app.get("/api/executions", requireRoles("admin", "builder", "owner", "operator",
 app.get("/api/recovery", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getRecoveryOperations(c.env, c.get("tenantId")) }));
 
+app.get("/api/shadow-reviews",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
+    c.json({ data: await listShadowReviews(c.env, c.get("tenantId")) }));
+
+app.patch("/api/shadow-reviews/:executionId",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer"), async (c) => {
+    try {
+      const executionId = c.req.param("executionId");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const result = await reviewShadowExecution(c.env, c.get("tenantId"), c.get("actorId"),
+        executionId, await c.req.json());
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "shadow.reviewed",
+        "execution", executionId, { verdict: result?.verdict, revision: result?.revision });
+      return c.json({ data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Shadow review could not be saved";
+      return c.json({ error: message }, error instanceof ShadowReviewConflict ? 409 :
+        isDlpBlocked(error) ? 422 : message.includes("not found") ? 404 : 400);
+    }
+  });
+
 app.patch("/api/recovery/:id", requireRoles("admin", "owner", "operator"), async (c) => {
   try {
     const taskId = c.req.param("id");
@@ -894,9 +916,11 @@ app.get("/api/executions/:id", requireRoles("admin", "builder", "owner", "operat
   if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
   const evidence = await getExecutionEvidence(c.env, c.get("tenantId"), executionId);
   if (!evidence) return c.json({ error: "Execution not found" }, 404);
+  const shadowReview = evidence.execution.autonomy_disposition === "shadowed"
+    ? await getShadowReview(c.env, c.get("tenantId"), executionId) : null;
   return c.json({ data: evidence.execution, approvals: evidence.approvals, audit: evidence.audit,
     citations: evidence.citations, toolInvocations: evidence.toolInvocations, toolActions: evidence.toolActions,
-    explanation: explainExecution(evidence) });
+    explanation: explainExecution(evidence), shadowReview });
 });
 
 app.get("/api/executions/:id/evidence-export",

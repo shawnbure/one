@@ -128,7 +128,7 @@ export async function setTenantOperatingMode(env: Env, tenantId: string, actorId
 export async function setProcessOperatingMode(env: Env, tenantId: string, actorId: string, processId: string, input: {
   mode?: string; reason?: string; incidentId?: string;
 }) {
-  const modes = ["active", "read_only", "approval_only", "paused", "drain", "emergency_stop"];
+  const modes = ["active", "shadow", "read_only", "approval_only", "paused", "drain", "emergency_stop"];
   if (!input.mode || !modes.includes(input.mode)) throw new Error("A valid operating mode is required");
   const process = await env.DB.prepare("SELECT name, operating_mode FROM agent_blueprints WHERE id = ? AND tenant_id = ?")
     .bind(processId, tenantId).first<{ name: string; operating_mode: string }>();

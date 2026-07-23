@@ -10,6 +10,7 @@ import { augmentWithKnowledge } from "./knowledge";
 import { isContractViolation, outputContractInstruction, parseContracts,
   validateContractInput, validateContractOutput } from "./contracts";
 import { autonomyPlan, routeApproval } from "./autonomy";
+import { recordShadowReview } from "./shadow";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
@@ -104,6 +105,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
         approvalPlan(autonomy, result.toolApprovalRequired), contractedOutput.value);
       if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
+      if (autonomy.shadowMode) await recordShadowReview(env, tenantId, executionId, blueprint.id);
       return { executionId, instanceKey, profile: blueprint.executionProfile,
         status: approvalId ? "waiting_approval" : "completed",
         ...(approvalId ? {} : safeResult), startedAt };
@@ -117,7 +119,8 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     let result;
     try {
       result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId,
-        contracts.outputSchema, !autonomy.requiresApproval, autonomy.effective, blueprint.toolPolicies ?? []);
+        contracts.outputSchema, !autonomy.requiresApproval && !autonomy.shadowMode,
+        autonomy.effective, blueprint.toolPolicies ?? []);
     } catch (error) {
       if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
         error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
@@ -129,6 +132,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     const approvalId = await routeApproval(env, tenantId, executionId, blueprint,
       approvalPlan(autonomy, result.toolApprovalRequired), result.outputPreview);
     if (!approvalId) await markAutonomyDisposition(env, executionId, autonomy.disposition);
+    if (autonomy.shadowMode) await recordShadowReview(env, tenantId, executionId, blueprint.id);
     return { executionId, instanceKey, profile: blueprint.executionProfile,
       status: approvalId ? "waiting_approval" : "completed",
       ...(approvalId ? {} : { output: result.output, model: result.model }), startedAt };
@@ -212,6 +216,7 @@ async function failUnexpectedExecution(env: Env, tenantId: string, id: string, e
 }
 
 function approvalPlan(plan: ReturnType<typeof autonomyPlan>, toolApprovalRequired: boolean) {
+  if (plan.shadowMode) return plan;
   if (!toolApprovalRequired || plan.requiresApproval) return plan;
   return {
     ...plan,

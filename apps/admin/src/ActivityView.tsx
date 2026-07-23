@@ -27,6 +27,7 @@ import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
   type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
   type QueueOperationsData, type RecoveryOperations, type RecoveryTask, type SessionData,
+  type ShadowReview,
   type ToolActionDispatch, type ToolActionOperationsData,
   type ToolInvocation } from "./api";
 import "./queue-operations.css";
@@ -53,6 +54,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
   const [toolInvocations, setToolInvocations] = useState<ToolInvocation[]>([]);
   const [toolActions, setToolActions] = useState<ToolActionDispatch[]>([]);
   const [explanation, setExplanation] = useState<ExecutionExplanation | null>(null);
+  const [shadowReview, setShadowReview] = useState<ShadowReview | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -79,6 +81,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
     if (!selectedId) {
       setDetail(null);
       setExplanation(null);
+      setShadowReview(null);
       return;
     }
     void api
@@ -91,6 +94,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
         setToolInvocations(result.toolInvocations);
         setToolActions(result.toolActions);
         setExplanation(result.explanation);
+        setShadowReview(result.shadowReview);
       })
       .catch((error: Error) => onNotice(error.message));
   }, [selectedId]);
@@ -242,6 +246,8 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                 </div>
                 <footer>Generated from persisted execution evidence with deterministic rules · no additional model call</footer>
               </section>}
+              {shadowReview && <ShadowReviewPanel review={shadowReview} session={session}
+                onSaved={setShadowReview} onNotice={onNotice}/>}
               {hasActorMemory(detail.execution_profile) && canGovernMemory(session) &&
                 <MemoryGovernance key={detail.id} executionId={detail.id} onNotice={onNotice}/>}
               {detail.autonomy_disposition && (
@@ -737,6 +743,54 @@ function MemoryGovernance({ executionId, onNotice }: {
   </section>;
 }
 
+function ShadowReviewPanel({ review, session, onSaved, onNotice }: {
+  review: ShadowReview; session: SessionData | null;
+  onSaved: (review: ShadowReview) => void; onNotice: (message: string) => void;
+}) {
+  const [verdict, setVerdict] = useState<"match" | "partial" | "miss" | "unsafe">(review.verdict ?? "match");
+  const [actualOutcome, setActualOutcome] = useState(review.actual_outcome ?? "");
+  const [note, setNote] = useState(review.note ?? "");
+  const [saving, setSaving] = useState(false);
+  const canReview = Boolean(session && ["admin", "builder", "owner", "operator", "reviewer"].includes(session.user.role));
+  async function save() {
+    if (!actualOutcome.trim()) { onNotice("Record the actual human outcome before saving."); return; }
+    setSaving(true);
+    try {
+      const result = await api.reviewShadowExecution(review.execution_id, {
+        expectedRevision: review.revision, verdict, actualOutcome: actualOutcome.trim(), note: note.trim()
+      });
+      onSaved(result.data);
+      onNotice("Shadow proposal compared with the actual outcome.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Shadow review could not be saved"); }
+    finally { setSaving(false); }
+  }
+  return <section className="shadow-review">
+    <header><span><Sparkles size={20}/></span><div><small>SAFE LEARNING MODE</small>
+      <h2>Shadow outcome comparison</h2>
+      <p>This model response was proposal-only. It triggered no external action and was not added to accepted assistant memory.</p>
+    </div><em className={review.status}>{review.status}</em></header>
+    {review.status === "reviewed" ? <div className="shadow-result">
+      <span><small>VERDICT</small><strong>{review.verdict?.replaceAll("_", " ")}</strong></span>
+      <span><small>ACTUAL HUMAN OUTCOME</small><strong>{review.actual_outcome}</strong></span>
+      {review.note && <span><small>REVIEW NOTE</small><strong>{review.note}</strong></span>}
+      <footer>Reviewed by {review.reviewer_name ?? "an authorized reviewer"} · {review.reviewed_at ? formatDate(review.reviewed_at) : "time unavailable"}</footer>
+    </div> : canReview ? <div className="shadow-editor">
+      <label>Comparison verdict<select value={verdict} onChange={(event) => setVerdict(event.target.value as typeof verdict)}>
+        <option value="match">Match</option><option value="partial">Partial match</option>
+        <option value="miss">Miss</option><option value="unsafe">Unsafe proposal</option>
+      </select></label>
+      <label>Actual human outcome<textarea maxLength={2000} value={actualOutcome}
+        placeholder="What actually happened when a person completed this work?"
+        onChange={(event) => setActualOutcome(event.target.value)}/></label>
+      <label>Review note (optional)<textarea maxLength={1000} value={note}
+        placeholder="Explain the important difference or learning."
+        onChange={(event) => setNote(event.target.value)}/></label>
+      <button disabled={saving || !actualOutcome.trim()} onClick={() => void save()}>
+        {saving ? "Saving…" : "Save comparison evidence"}</button>
+    </div> : <p className="shadow-readonly">An authorized reviewer must record the actual outcome.</p>}
+  </section>;
+}
+
 function TraceItem({
   title,
   detail,
@@ -790,6 +844,7 @@ function duration(run: Execution) {
 function autonomyEvidenceTitle(disposition: string) {
   return ({
     observed: "Observed without model inference",
+    shadowed: "Shadow proposal only",
     recommended: "Recommendation only",
     waiting_approval: "Human decision required",
     guarded_safe: "Guarded read-only completion",
@@ -801,6 +856,7 @@ function autonomyEvidenceTitle(disposition: string) {
 function autonomyEvidenceDetail(disposition: string) {
   return ({
     observed: "The request was recorded with zero model tokens.",
+    shadowed: "No external action occurred and the response did not enter accepted assistant memory.",
     recommended: "No external action was authorized.",
     waiting_approval: "The proposal is visible in the Work Inbox and is not accepted yet.",
     guarded_safe: "No consequential tools were declared by the published process.",

@@ -4,6 +4,7 @@ import { emitNotification } from "./notifications";
 
 export type AutonomyDisposition =
   | "observed"
+  | "shadowed"
   | "recommended"
   | "waiting_approval"
   | "guarded_safe"
@@ -15,12 +16,18 @@ export interface AutonomyPlan {
   disposition: AutonomyDisposition;
   runModel: boolean;
   requiresApproval: boolean;
+  shadowMode: boolean;
   explanation: string;
 }
 
 export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "operatingMode" | "tools" | "toolPolicies">): AutonomyPlan {
   const configured = blueprint.autonomy;
   const mode = blueprint.operatingMode ?? "active";
+  if (mode === "shadow") return {
+    configured, effective: "suggest", disposition: "shadowed", runModel: true, requiresApproval: false,
+    shadowMode: true,
+    explanation: "The model proposal is recorded for comparison only; it cannot authorize an external action or enter accepted assistant memory."
+  };
   const effective: AutonomyLevel = configured === "observe"
     ? "observe"
     : mode === "approval_only"
@@ -29,11 +36,11 @@ export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "opera
         ? "suggest"
         : configured;
   if (effective === "observe") return {
-    configured, effective, disposition: "observed", runModel: false, requiresApproval: false,
+    configured, effective, disposition: "observed", runModel: false, requiresApproval: false, shadowMode: false,
     explanation: "Input is recorded without generating an AI recommendation."
   };
   if (effective === "approve") return {
-    configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true,
+    configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true, shadowMode: false,
     explanation: "The proposed result requires a human decision before it becomes an accepted outcome."
   };
   const policies = blueprint.toolPolicies ?? [];
@@ -42,24 +49,24 @@ export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "opera
     ? policies.some((tool) => tool.accessMode === "write" || tool.riskLevel !== "low" || !tool.connectionReady)
     : blueprint.tools.length > 0;
   if (effective === "guarded" && guardedReview) return {
-    configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true,
+    configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true, shadowMode: false,
     explanation: hasUnavailableConnection
       ? "A required tool connection is not ready, so guarded execution routes the proposal to review."
       : "A declared tool is write-capable or above low risk, so guarded execution routes the proposal to review."
   };
   if (effective === "guarded") return {
-    configured, effective, disposition: "guarded_safe", runModel: true, requiresApproval: false,
+    configured, effective, disposition: "guarded_safe", runModel: true, requiresApproval: false, shadowMode: false,
     explanation: "No consequential tools are declared; the guarded read-only result may complete."
   };
   if (effective === "autonomous") return {
     configured, effective, disposition: hasUnavailableConnection ? "waiting_approval" : "autonomous",
-    runModel: true, requiresApproval: hasUnavailableConnection,
+    runModel: true, requiresApproval: hasUnavailableConnection, shadowMode: false,
     explanation: hasUnavailableConnection
       ? "A required tool connection is not ready, so autonomous completion falls back to human review."
       : "The published release permits completion without a human checkpoint."
   };
   return {
-    configured, effective, disposition: "recommended", runModel: true, requiresApproval: false,
+    configured, effective, disposition: "recommended", runModel: true, requiresApproval: false, shadowMode: false,
     explanation: "The result is a recommendation and does not authorize an external action."
   };
 }

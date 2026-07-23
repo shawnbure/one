@@ -168,6 +168,22 @@ export interface ExecutionExplanation {
   evidenceCompleteness: "complete" | "partial";
   generatedBy: "deterministic_evidence_rules";
 }
+export interface ShadowReview {
+  id: string;
+  execution_id: string;
+  blueprint_id: string;
+  process_name?: string;
+  status: "pending" | "reviewed";
+  verdict: "match" | "partial" | "miss" | "unsafe" | null;
+  actual_outcome: string | null;
+  note: string | null;
+  reviewed_by: string | null;
+  reviewer_name?: string | null;
+  reviewed_at: string | null;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
 export interface GovernedMemoryTurn {
   id: string;
   role: "user" | "assistant";
@@ -820,6 +836,12 @@ export const api = {
       { method: "POST", body: JSON.stringify({ kind, body }) },
     ),
   executions: () => request<{ data: Execution[] }>("/api/executions"),
+  shadowReviews: () => request<{ data: ShadowReview[] }>("/api/shadow-reviews"),
+  reviewShadowExecution: (executionId: string, body: {
+    expectedRevision: number; verdict: "match" | "partial" | "miss" | "unsafe";
+    actualOutcome: string; note?: string;
+  }) => request<{ data: ShadowReview }>(`/api/shadow-reviews/${encodeURIComponent(executionId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   recovery: () => request<{ data: RecoveryOperations }>("/api/recovery"),
   updateRecovery: (id: string, body: {
     action: "assign" | "investigate" | "resolve" | "accept_risk" | "reopen";
@@ -834,7 +856,8 @@ export const api = {
     ),
   execution: (id: string) =>
     request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[]; citations: ExecutionKnowledgeCitation[];
-      toolInvocations: ToolInvocation[]; toolActions: ToolActionDispatch[]; explanation: ExecutionExplanation }>(
+      toolInvocations: ToolInvocation[]; toolActions: ToolActionDispatch[]; explanation: ExecutionExplanation;
+      shadowReview: ShadowReview | null }>(
       `/api/executions/${encodeURIComponent(id)}`,
     ),
   retryExecution: (id: string) =>

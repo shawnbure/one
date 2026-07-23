@@ -216,7 +216,7 @@ function memoryDetail(profile: string, instanceKey: string | null) {
 }
 function autonomyTitle(disposition: string) {
   return ({
-    observed: "Observe mode stopped before inference", recommended: "Suggestion only",
+    observed: "Observe mode stopped before inference", shadowed: "Shadow proposal only", recommended: "Suggestion only",
     waiting_approval: "Human approval required", guarded_safe: "Guarded policy allowed completion",
     autonomous: "Published policy allowed autonomous completion", approved: "Human approval recorded",
     rejected: "Human rejection recorded"
@@ -226,6 +226,7 @@ function autonomyDetail(disposition: string, approvals: ApprovalRow[]) {
   if (disposition === "waiting_approval") return `${approvals.filter((item) => item.status === "pending").length} exact proposal(s) remain unexecuted in the Work Inbox.`;
   if (disposition === "rejected") return "The proposed outcome was declined and is not treated as an external action.";
   if (disposition === "observed") return "The input was recorded for observation with no model tokens consumed.";
+  if (disposition === "shadowed") return "The model proposal was retained for comparison only; it authorized no action and did not enter accepted assistant memory.";
   if (disposition === "recommended") return "The result is guidance; no external action was authorized.";
   return "The effective autonomy disposition was snapshotted from the published runtime policy.";
 }
@@ -256,6 +257,9 @@ function externalImpact(invocations: ToolInvocationRow[], actions: ToolActionRow
   return "No external action evidence is attached to this execution.";
 }
 function nextAction(execution: ExecutionRow, approvals: ApprovalRow[], invocations: ToolInvocationRow[], actions: ToolActionRow[]) {
+  if (execution.autonomy_disposition === "shadowed") {
+    return "Record the actual human outcome and compare it with this proposal before considering a higher autonomy level.";
+  }
   if (execution.output_contract_status === "failed" || execution.input_contract_status === "failed") {
     return "Compare the payload shape with the published process contract, correct the boundary, and run the release evaluation before replay.";
   }

@@ -191,6 +191,24 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("UPDATE execution_recovery_tasks"))).toBe(false);
   });
 
+  it("keeps shadow evidence out of consumer sessions and review changes away from viewers", async () => {
+    const consumer = environment("consumer");
+    const read = await app.fetch(new Request("http://localhost/api/shadow-reviews", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), consumer.env as never, executionCtx as never);
+    expect(read.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("execution_shadow_reviews"))).toBe(false);
+
+    const viewer = environment("viewer");
+    const change = await app.fetch(new Request("http://localhost/api/shadow-reviews/execution-1", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ expectedRevision: 1, verdict: "match", actualOutcome: "Completed by staff." })
+    }), viewer.env as never, executionCtx as never);
+    expect(change.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("UPDATE execution_shadow_reviews"))).toBe(false);
+  });
+
   it("prevents viewers from changing connection credential lifecycle metadata", async () => {
     const viewer = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/connections/connection-1/lifecycle", {

@@ -1271,6 +1271,7 @@ function Governance({
               onChange={(event) => void mode(process.id, event.target.value)}
             >
               <option value="active">Active</option>
+              <option value="shadow">Shadow · proposal only</option>
               <option value="read_only">Read only</option>
               <option value="approval_only">Approval only</option>
               <option value="paused">Paused</option>

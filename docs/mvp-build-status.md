@@ -21,7 +21,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Accountable recovery | Automatically created failure/blocked/deferred tasks with owner, SLA, investigation state, risk acceptance, and completed-run closure proof |
 | Memory governance | Bounded actor-local conversation context plus operating-role inspection, correction, quarantine, restoration, and content deletion without copying message bodies into D1 or KV |
 | Queue operations | Tenant-scoped process and approved-action enqueue/processing/retry/dead-letter evidence, bounded retention, and operator-authorized safe replay |
-| Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, JSON evidence export, and printable privacy/architecture summary |
+| Governance | Model/data-flow inventory, retention posture, readiness, operational shadow mode, process and tenant operating controls, incident containment/recovery, JSON evidence export, and printable privacy/architecture summary |
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
 | Knowledge Center | Governed text/file intake, pre-storage DLP, R2 source/chunk storage, queued Workers AI embedding, tenant-filtered Vectorize retrieval, process bindings, review/expiry enforcement, execution citation evidence, diagnostics, test query, reindex, and removal |
@@ -59,6 +59,8 @@ Every published release also declares an autonomy level that is enforced at runt
 - `autonomous` completes without a checkpoint inside the published release and operating controls.
 
 The process `read_only` operating mode caps any non-observe release at `suggest`. `approval_only` forces every non-observe release through review. Execution records snapshot the effective level and disposition so later release changes cannot rewrite historical evidence. Approving or rejecting a pending item also resolves the associated execution and records the decision audit.
+
+The process `shadow` operating mode is a production-safe learning boundary. It runs the published model as `suggest`, records its proposal, suppresses tool approval/action delivery, and excludes the assistant response from durable actor memory. Authorized reviewers compare that proposal with the DLP-protected actual human outcome using `match`, `partial`, `miss`, or `unsafe` evidence. This lets a customer establish quality before increasing autonomy without presenting a proposal as completed work.
 
 ## Typed tool boundary
 
@@ -107,7 +109,7 @@ The Worker currently exposes these route groups:
 
 - Session and tenant administration: `/api/session`, `/api/members`, `/api/onboarding`, `/api/onboarding/bootstrap`
 - Discovery and value: `/api/process-templates`, `/api/processes`, `/api/value`
-- Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode, `/api/process-schedules`, create/pause/restore/run-now
+- Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode (including shadow), `/api/shadow-reviews`, `/api/process-schedules`, create/pause/restore/run-now
 - Portability: `/api/processes/:id/package`, `/api/process-packages/import`
 - Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry, `/api/recovery`, `/api/queue-operations`, `/api/tool-actions`, failed Queue-job replay, and approved-action retry/cancel
 - Human review: `/api/approvals`, validated assignee directory/assignment, collaboration messages, information request/response, escalation, approve/decline
