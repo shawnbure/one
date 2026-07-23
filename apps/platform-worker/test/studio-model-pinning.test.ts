@@ -53,4 +53,17 @@ describe("release model pinning", () => {
     })).rejects.toThrow("supported Cloudflare Workers AI model");
     expect(writes).toHaveLength(0);
   });
+
+  it("rejects a model whose governed profile does not match", async () => {
+    const { env, writes } = environment();
+    await expect(createDraftRelease(env, "tenant-1", "process-1", "builder-1", {
+      systemPrompt: "Handle the request.",
+      instructions: [],
+      guardrails: [],
+      modelProfile: "fast",
+      modelId: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      autonomy: "approve"
+    })).rejects.toThrow("requires the balanced model profile");
+    expect(writes).toHaveLength(0);
+  });
 });

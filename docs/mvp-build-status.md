@@ -92,6 +92,8 @@ Durable conversational profiles supply the model with at most 20 active actor-lo
 
 The stable agent identifier is passed to Workers AI as `sessionAffinity`, improving prefix-cache locality where supported. This is an optimization, not correctness state. Instant execution reads the required release from D1 because it intentionally has no durable actor-local cache.
 
+Process Studio presents a curated exact-model selector for Cloudflare-hosted inference. Each option includes qualitative workload guidance and automatically selects its governed profile. The server rejects catalog/profile mismatches, while the system-capabilities endpoint exposes the same catalog for client tooling. The immutable process release remains the source of truth for runtime model identity.
+
 Do not add KV for prompts unless measurement proves a distinct global distribution need. It would add another consistency boundary without replacing durable conversation memory.
 
 ## Security and tenancy invariants

@@ -2,7 +2,7 @@ import type { Env } from "./types";
 import { evaluateReleaseGate } from "./evaluation";
 import { normalizeProcessSchema } from "./contracts";
 import { releaseToolPolicies } from "./tools";
-import { modelProfiles, supportedWorkersAIModels } from "@workrr/contracts";
+import { modelProfiles, supportedWorkersAIModels, workersAIModelCatalog } from "@workrr/contracts";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -114,6 +114,10 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   const modelId = input.modelId ?? modelProfiles[input.modelProfile as keyof typeof modelProfiles].model;
   if (!supportedWorkersAIModels.includes(modelId as typeof supportedWorkersAIModels[number])) {
     throw new Error("Select a supported Cloudflare Workers AI model");
+  }
+  const selectedModel = workersAIModelCatalog[modelId as keyof typeof workersAIModelCatalog];
+  if (selectedModel.profile !== input.modelProfile) {
+    throw new Error(`The selected model requires the ${selectedModel.profile} model profile`);
   }
   const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
   const outputSchema = normalizeProcessSchema(input.outputSchema, "output");

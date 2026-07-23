@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { executionProfiles, type ExecutionRequest, type KnowledgeIndexJob, type ProcessDisposalJob, type QueueJob, type ToolActionJob,
+import { executionProfiles, modelProfiles, workersAIModelCatalog, type ExecutionRequest, type KnowledgeIndexJob, type ProcessDisposalJob, type QueueJob, type ToolActionJob,
   type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
@@ -1862,6 +1862,8 @@ app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewe
 
 app.get("/api/system/capabilities", (c) => c.json({
   executionProfiles,
+  modelProfiles,
+  workersAIModels: workersAIModelCatalog,
   primitives: ["Workers", "Agents SDK", "Durable Objects", "D1", "Workers AI", "Queues", "Workflows", "Cron"],
   promptCache: "Agent-local SQLite plus Workers AI session affinity",
   gateway: "planned"

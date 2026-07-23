@@ -22,7 +22,13 @@ import {
   LockKeyhole,
   Trash2,
 } from "lucide-react";
-import type { AgentBlueprint } from "@workrr/contracts";
+import {
+  modelProfiles,
+  supportedWorkersAIModels,
+  workersAIModelCatalog,
+  type AgentBlueprint,
+  type SupportedWorkersAIModel,
+} from "@workrr/contracts";
 import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
 import "./schedule-studio.css";
 
@@ -160,6 +166,7 @@ function Studio({
   const [instructions, setInstructions] = useState("");
   const [guardrails, setGuardrails] = useState("");
   const [modelProfile, setModelProfile] = useState("balanced");
+  const [modelId, setModelId] = useState<SupportedWorkersAIModel>(modelProfiles.balanced.model);
   const [autonomy, setAutonomy] = useState("approve");
   const [notes, setNotes] = useState("");
   const [inputSchema, setInputSchema] = useState("");
@@ -186,9 +193,15 @@ function Studio({
       setSystemPrompt(result.prompt.system_prompt);
       setInstructions(parseList(result.prompt.instructions_json).join("\n"));
       setGuardrails(parseList(result.prompt.guardrails_json).join("\n"));
-      setModelProfile(result.blueprint.model_profile ?? "balanced");
-      setAutonomy(result.blueprint.autonomy ?? "approve");
       const active = result.releases.find((release) => release.status === "published");
+      const loadedProfile = (active?.model_profile ?? result.blueprint.model_profile ?? "balanced") as keyof typeof modelProfiles;
+      setModelProfile(loadedProfile);
+      setModelId(
+        active?.model_id && supportedWorkersAIModels.includes(active.model_id as SupportedWorkersAIModel)
+          ? active.model_id as SupportedWorkersAIModel
+          : modelProfiles[loadedProfile].model,
+      );
+      setAutonomy(result.blueprint.autonomy ?? "approve");
       setInputSchema(prettySchema(active?.input_schema_json));
       setOutputSchema(prettySchema(active?.output_schema_json));
     } catch (error) {
@@ -217,6 +230,7 @@ function Studio({
         instructions: lines(instructions),
         guardrails: lines(guardrails),
         modelProfile,
+        modelId,
         autonomy,
         releaseNotes: notes,
         inputSchema: parsedInputSchema,
@@ -448,7 +462,11 @@ function Studio({
                 Model profile
                 <select
                   value={modelProfile}
-                  onChange={(event) => setModelProfile(event.target.value)}
+                  onChange={(event) => {
+                    const profile = event.target.value as keyof typeof modelProfiles;
+                    setModelProfile(profile);
+                    setModelId(modelProfiles[profile].model);
+                  }}
                 >
                   <option value="fast">Fast · classification</option>
                   <option value="balanced">Balanced · general work</option>
@@ -470,6 +488,38 @@ function Studio({
                   <option value="autonomous">Autonomous</option>
                 </select>
               </label>
+            </div>
+            <div className="model-selection">
+              <div className="section-head">
+                <div>
+                  <h3>Exact Cloudflare model</h3>
+                  <p>The exact Workers AI model is pinned into this immutable release. Future catalog changes cannot silently change production behavior.</p>
+                </div>
+                <span className="active-label">Cloudflare hosted</span>
+              </div>
+              <label>
+                Release model
+                <select
+                  value={modelId}
+                  onChange={(event) => {
+                    const next = event.target.value as SupportedWorkersAIModel;
+                    setModelId(next);
+                    setModelProfile(workersAIModelCatalog[next].profile);
+                  }}
+                >
+                  {supportedWorkersAIModels.map((id) => (
+                    <option key={id} value={id}>{workersAIModelCatalog[id].label} · {workersAIModelCatalog[id].use}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="model-evidence">
+                <Bot size={18} />
+                <span>
+                  <strong>{workersAIModelCatalog[modelId].label}</strong>
+                  <small>{workersAIModelCatalog[modelId].guidance}</small>
+                  <code>{modelId}</code>
+                </span>
+              </div>
             </div>
             <div className={`autonomy-guidance level-${autonomy}`}>
               <ShieldCheck size={17} />

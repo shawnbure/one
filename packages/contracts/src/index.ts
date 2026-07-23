@@ -150,3 +150,32 @@ export const supportedWorkersAIModels = [
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
 ] as const;
+
+export type SupportedWorkersAIModel = typeof supportedWorkersAIModels[number];
+
+/** Governed product metadata only; runtime releases always persist the exact model ID. */
+export const workersAIModelCatalog: Record<SupportedWorkersAIModel, {
+  label: string;
+  profile: keyof typeof modelProfiles;
+  use: string;
+  guidance: string;
+}> = {
+  "@cf/meta/llama-3.1-8b-instruct-fp8": {
+    label: "Llama 3.1 8B FP8",
+    profile: "fast",
+    use: "Classification and extraction",
+    guidance: "Choose for short, repeatable tasks where response speed matters most."
+  },
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
+    label: "Llama 3.3 70B FP8 Fast",
+    profile: "balanced",
+    use: "General process work",
+    guidance: "Choose for the broadest range of operational assistants and process steps."
+  },
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
+    label: "DeepSeek R1 Distill Qwen 32B",
+    profile: "reasoning",
+    use: "Complex analysis",
+    guidance: "Choose when analysis quality matters more than the fastest response."
+  }
+};

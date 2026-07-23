@@ -285,6 +285,35 @@ a:focus-visible {
   line-height: 1.55;
   tab-size: 2;
 }
+.model-selection {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #d4e2db;
+  border-radius: 10px;
+  background: #f7faf8;
+}
+.model-selection .section-head { padding: 0 0 10px; }
+.model-selection .section-head h3 { margin: 0 0 4px; font-size: 15px; }
+.model-selection .section-head p { max-width: 680px; font-size: 13px !important; line-height: 1.55; }
+.model-selection > label { margin-top: 0; font-size: 13px !important; }
+.model-evidence {
+  display: flex;
+  gap: 11px;
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px solid #cfe2d8;
+  border-radius: 9px;
+  background: #fff;
+  color: #2f7056;
+}
+.model-evidence span,
+.model-evidence strong,
+.model-evidence small,
+.model-evidence code { display: block; }
+.model-evidence span { min-width: 0; }
+.model-evidence strong { font-size: 14px; }
+.model-evidence small { margin-top: 3px; color: #566b60; font-size: 13px; line-height: 1.5; }
+.model-evidence code { margin-top: 7px; overflow-wrap: anywhere; color: #3f5d4f; font-size: 12px; }
 .contract-evidence {
   display: flex;
   align-items: flex-start;

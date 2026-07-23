@@ -1034,6 +1034,7 @@ export const api = {
       instructions: string[];
       guardrails: string[];
       modelProfile: string;
+      modelId?: string;
       autonomy: string;
       releaseNotes: string;
       inputSchema?: Record<string, unknown> | null;
