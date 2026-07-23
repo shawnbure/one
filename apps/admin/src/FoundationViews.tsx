@@ -608,7 +608,9 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
           {mcpCatalog.connectors.map((connector) => <article key={connector.id}>
             <div><strong>{connector.name}</strong><small>{connector.server_url}</small></div>
             <span className={`connection-state ${connector.status === "ready" ? "healthy" : "attention"}`}><i/>{connector.status}</span>
-            <small>{connector.tool_count} capabilities · {connector.last_discovered_at ? `checked ${formatTimestamp(connector.last_discovered_at)}` : "not discovered"}</small>
+            <small>{connector.tool_count} capabilities · {connector.last_checked_at
+              ? `health checked ${formatTimestamp(connector.last_checked_at)}`
+              : connector.last_discovered_at ? `discovered ${formatTimestamp(connector.last_discovered_at)}` : "not discovered"}</small>
             {connector.last_error && <p>{connector.last_error}</p>}
             {session && ["admin", "owner"].includes(session.user.role) && <button disabled={mcpBusy === connector.id}
               onClick={() => void connectMcp(connector.id)}>{connector.status === "ready" ? "Reconnect" : "Connect / authorize"}</button>}

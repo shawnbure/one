@@ -45,6 +45,16 @@ Promise<AgentBlueprint | null> {
           AND c.status='healthy' AND c.secret_configured=1
           AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s
             WHERE lower(CAST(s.value AS TEXT))='calendars.readwrite') THEN 1
+        WHEN json_extract(policy.value, '$.adapterKind')='mcp'
+          AND EXISTS (
+            SELECT 1 FROM mcp_connectors mc
+            JOIN mcp_connector_tools mt ON mt.connector_id=mc.id AND mt.tenant_id=mc.tenant_id
+            WHERE mc.id=json_extract(policy.value, '$.connectionId')
+              AND mc.tenant_id=b.tenant_id AND mc.status='ready'
+              AND mt.enabled=1 AND mt.available=1
+              AND json_extract(policy.value, '$.handlerKey')=
+                'mcp.' || mc.id || '.' || mt.ai_tool_name
+          ) THEN 1
         WHEN json_extract(policy.value, '$.handlerKey') IS NULL
           AND c.status='healthy' AND c.secret_configured=1 THEN 1
         ELSE 0

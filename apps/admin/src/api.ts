@@ -645,7 +645,8 @@ export interface ToolAdapterDefinition {
 export interface McpConnector {
   id: string; name: string; server_url: string; transport: "streamable-http" | "sse" | "auto";
   status: "disabled" | "connecting" | "authenticating" | "ready" | "attention";
-  tool_count: number; last_discovered_at: string | null; last_error: string | null;
+  tool_count: number; last_discovered_at: string | null; last_checked_at: string | null;
+  last_success_at: string | null; last_error: string | null;
   revision: number; created_at: string; updated_at: string;
 }
 export interface McpConnectorTool {

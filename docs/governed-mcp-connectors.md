@@ -34,6 +34,8 @@ Writes and medium/high-risk calls remain proposal-only. Tool inputs are capped a
 
 Disconnect removes the SDK-managed session from the connector actor, clears pending OAuth state, changes the connector to disabled, and disables all of its tools. Workrr retains bounded discovery and governance metadata for audit and controlled reconnection.
 
+Hourly maintenance inspects at most 50 ready or attention connectors whose last check is at least 30 minutes old. A ready actor records `last_checked_at` and `last_success_at`. A missing or failed SDK session changes the connector to attention, disables its enabled capabilities, and creates a critical owned response task no more than once per 24 hours. Error evidence is bounded and strips URLs and opaque token-like values. The immutable release remains unchanged, but the central blueprint loader overlays live MCP readiness from the same tenant connector and exact discovered tool before every execution admission, so a stale release cannot bypass connector health.
+
 ## Portability
 
 OAuth sessions and customer connector identities are deployment-local. A process package therefore exports an MCP capability as a proposal-only HTTP placeholder with support instructions to reconnect and govern the service in the destination. Importing a package can never silently make a remote service executable.

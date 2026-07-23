@@ -12,7 +12,7 @@ export interface McpConnectorInput {
 export async function listMcpConnectors(env: Env, tenantId: string) {
   const [connectors, tools] = await Promise.all([
     env.DB.prepare(`SELECT id, name, server_url, transport, status, tool_count,
-      last_discovered_at, last_error, revision, created_at, updated_at
+      last_discovered_at, last_checked_at, last_success_at, last_error, revision, created_at, updated_at
       FROM mcp_connectors WHERE tenant_id=? ORDER BY name`).bind(tenantId).all(),
     env.DB.prepare(`SELECT t.id, t.connector_id, t.server_tool_name, t.ai_tool_name, t.title,
       t.description, t.input_schema_json, t.access_mode, t.risk_level, t.data_classification,
@@ -56,9 +56,12 @@ export async function connectMcpConnector(env: Env, tenantId: string, connectorI
     const oauthStateHash = result.state === "authenticating"
       ? await hashOAuthState(result.authUrl) : null;
     await env.DB.prepare(`UPDATE mcp_connectors SET status=?, oauth_state_hash=?,
-      last_error=NULL, revision=revision+1, updated_at=CURRENT_TIMESTAMP
+      last_checked_at=CURRENT_TIMESTAMP,
+      last_success_at=CASE WHEN ?='ready' THEN CURRENT_TIMESTAMP ELSE last_success_at END,
+      last_error=NULL, health_alerted_at=NULL, revision=revision+1, updated_at=CURRENT_TIMESTAMP
       WHERE id=? AND tenant_id=?`).bind(
-        result.state === "ready" ? "ready" : "authenticating", oauthStateHash, connectorId, tenantId
+        result.state === "ready" ? "ready" : "authenticating", oauthStateHash, result.state,
+        connectorId, tenantId
       ).run();
     if (result.state === "ready") await discoverMcpTools(env, tenantId, connectorId);
     return {
@@ -79,7 +82,7 @@ export async function disconnectMcpConnector(env: Env, tenantId: string, connect
   await actor.disconnectConnector(tenantId, connectorId);
   await env.DB.batch([
     env.DB.prepare(`UPDATE mcp_connectors SET status='disabled', oauth_state_hash=NULL,
-      last_error=NULL, revision=revision+1, updated_at=CURRENT_TIMESTAMP
+      last_error=NULL, health_alerted_at=NULL, revision=revision+1, updated_at=CURRENT_TIMESTAMP
       WHERE id=? AND tenant_id=?`).bind(connectorId, tenantId),
     env.DB.prepare(`UPDATE mcp_connector_tools SET enabled=0, revision=revision+1,
       updated_at=CURRENT_TIMESTAMP WHERE connector_id=? AND tenant_id=? AND enabled=1`)
@@ -155,7 +158,8 @@ export async function discoverMcpTools(env: Env, tenantId: string, connectorId: 
       .bind(tool.id, tenantId, connectorId,
         tool.name, tool.aiToolName, tool.title, tool.description, JSON.stringify(tool.inputSchema))),
     env.DB.prepare(`UPDATE mcp_connectors SET status='ready', tool_count=?,
-      last_discovered_at=CURRENT_TIMESTAMP, last_error=NULL, revision=revision+1,
+      last_discovered_at=CURRENT_TIMESTAMP, last_checked_at=CURRENT_TIMESTAMP,
+      last_success_at=CURRENT_TIMESTAMP, last_error=NULL, health_alerted_at=NULL, revision=revision+1,
       updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`)
       .bind(tools.length, connectorId, tenantId)
   ]);

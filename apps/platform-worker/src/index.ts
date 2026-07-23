@@ -84,6 +84,7 @@ import { createEmailRoute, listEmailReceipts, listEmailRoutes, receiveProcessEma
   setEmailRouteStatus, updateEmailRoute, verifyEmailRouting } from "./email-channel";
 import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector, disconnectMcpConnector,
   discoverMcpTools, governMcpTool, listMcpConnectors } from "./mcp-connectors";
+import { checkMcpConnectorHealth } from "./mcp-connector-health";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -2601,6 +2602,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       { name: "tool_action_recovery", run: () => enqueueRecoverableToolActions(env) },
       { name: "knowledge_expiry", run: () => expireKnowledgeSources(env, now) },
       { name: "connection_expiry_alerts", run: () => emitConnectionExpiryAlerts(env, now) },
+      { name: "mcp_connector_health", run: () => checkMcpConnectorHealth(env, now) },
       { name: "notification_escalation", run: () => escalateUnacknowledgedNotifications(env, now) },
       { name: "approval_escalation", run: () => escalateOverdueApprovals(env, now) },
       { name: "notification_delivery", run: () => enqueueDueNotificationDeliveries(env, now) },

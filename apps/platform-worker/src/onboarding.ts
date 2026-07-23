@@ -384,6 +384,18 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
         ), 1, 1440)`)
       .bind(`notify-agent-follow-up-${suffix}`, tenantId, tenantId, tenantId, tenantId),
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity, owner_id,
+       acknowledgement_required, escalation_minutes)
+      VALUES (?, ?, 'connection.mcp_attention', 'in_app', NULL, 1, 'critical',
+        COALESCE(
+          (SELECT recovery_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?),
+          (SELECT support_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?),
+          (SELECT id FROM tenant_members WHERE tenant_id = ? AND status = 'active'
+           AND role IN ('owner', 'admin', 'operator')
+           ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, created_at LIMIT 1)
+        ), 1, 240)`)
+      .bind(`notify-mcp-health-${suffix}`, tenantId, tenantId, tenantId, tenantId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity, credential_ref_id)
       VALUES (?, ?, 'execution.failed', 'webhook', NULL, 0, 'critical', ?)`)
       .bind(`notify-execution-webhook-${suffix}`, tenantId, credentialId),
