@@ -165,6 +165,32 @@ Workrr maps Cloudflare Access service tokens by the verified JWT `common_name` c
 
 The Access application also needs a Service Auth policy that includes that service token. Keep both credentials in the calling CI/FDE secret manager, then run:
 
+An FDE can create the exact token, specific-token Service Auth policy, and Workrr operator registration as one reviewed operation. The Cloudflare API token used here needs only `Access: Service Tokens Write` and `Access: Apps and Policies Write`; Wrangler must already be authenticated for the selected customer account's D1:
+
+```sh
+export CLOUDFLARE_API_TOKEN="<least-privilege-bootstrap-token>"
+
+# Read-only plan: resolves the app by both domain and audience.
+npm run access:bootstrap-service -- \
+  --env dev \
+  --tenant demo
+
+# Apply only after review. The credential file must be absolute, outside this
+# repository, and must not already exist.
+npm run access:bootstrap-service -- \
+  --env dev \
+  --tenant demo \
+  --duration 2160h \
+  --credential-file "$HOME/.config/workrr/dev-smoke.json" \
+  --apply \
+  --confirm "BOOTSTRAP DEV SERVICE PRINCIPAL" \
+  --smoke
+```
+
+The default duration is 90 days and `forever` is rejected. The generated credential file is created with owner-only mode `0600`; neither the Client Secret nor the Cloudflare API token is printed, sent to Workrr, or stored in D1. The policy trusts only the newly created token—not “any valid service token.” If the named token already exists, the command stops rather than silently rotating a one-time secret. Production uses `--env production` and the exact confirmation `BOOTSTRAP PRODUCTION SERVICE PRINCIPAL`.
+
+For credentials managed separately, the underlying smoke command remains:
+
 ```sh
 WORKRR_BASE_URL=https://one-dev.workrr.ai \
 CF_ACCESS_CLIENT_ID=... \

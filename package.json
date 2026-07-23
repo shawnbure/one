@@ -17,6 +17,7 @@
     "customer:config": "node scripts/generate-customer-config.mjs",
     "cf:types": "npm run cf:types -w @workrr/platform-worker",
     "access:sync": "node scripts/sync-cloudflare-access.mjs",
+    "access:bootstrap-service": "node scripts/bootstrap-service-principal.mjs",
     "smoke:live": "node scripts/smoke-live.mjs",
     "promote:production": "node scripts/promote-production.mjs"
   },
