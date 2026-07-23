@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  Box,
   CheckCircle2,
   Clock3,
   Filter,
@@ -192,6 +193,16 @@ export function ActivityView({ processes, onNotice }: Props) {
                       {autonomyEvidenceDetail(detail.autonomy_disposition)}
                     </small>
                   </span>
+                </div>
+              )}
+              {toolEvidence(detail.tool_policy_json).length > 0 && (
+                <div className="run-tool-evidence">
+                  <div><Box size={17}/><span><strong>Published tool policy</strong>
+                    <small>{toolEvidence(detail.tool_policy_json).length} typed capabilities snapshotted for this run</small></span></div>
+                  {toolEvidence(detail.tool_policy_json).map((tool) => <span key={tool.id}>
+                    <strong>{tool.name.replaceAll("_", " ")}</strong>
+                    <small>{tool.accessMode} · {tool.riskLevel} risk · {tool.connectionReady ? "connection ready" : "connection unavailable"}</small>
+                  </span>)}
                 </div>
               )}
               <div className="payload-card">
@@ -525,4 +536,13 @@ function autonomyEvidenceDetail(disposition: string) {
     approved: "An authorized reviewer accepted the proposal.",
     rejected: "An authorized reviewer declined the proposal."
   } as Record<string, string>)[disposition] ?? "Runtime autonomy policy recorded.";
+}
+function toolEvidence(value: string | null | undefined) {
+  if (!value) return [] as Array<{ id: string; name: string; accessMode: string; riskLevel: string; connectionReady: boolean }>;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is { id: string; name: string; accessMode: string; riskLevel: string; connectionReady: boolean } =>
+      Boolean(item && typeof item === "object" && "id" in item && "name" in item));
+  } catch { return []; }
 }

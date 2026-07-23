@@ -34,4 +34,18 @@ describe("progressive autonomy policy", () => {
       disposition: "waiting_approval", requiresApproval: true
     });
   });
+
+  it("uses typed tool risk and readiness instead of trusting a name", () => {
+    const baseTool = {
+      id: "tool-1", name: "lookup_customer", version: 1, adapterKind: "http" as const,
+      accessMode: "read" as const, riskLevel: "low" as const, connectionId: "connection-1",
+      connectionReady: true, dataClassification: "internal" as const, rateLimitPerMinute: 60,
+      inputSchemaJson: '{"type":"object"}', outputSchemaJson: '{"type":"object"}'
+    };
+    expect(autonomyPlan({ ...process, autonomy: "guarded", tools: ["lookup_customer"], toolPolicies: [baseTool] }))
+      .toMatchObject({ disposition: "guarded_safe", requiresApproval: false });
+    expect(autonomyPlan({ ...process, autonomy: "autonomous", tools: ["lookup_customer"],
+      toolPolicies: [{ ...baseTool, connectionReady: false }] }))
+      .toMatchObject({ disposition: "waiting_approval", requiresApproval: true });
+  });
 });

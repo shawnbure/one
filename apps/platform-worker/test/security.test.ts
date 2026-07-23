@@ -95,6 +95,25 @@ describe("control-plane security boundary", () => {
     }
   });
 
+  it("allows viewers to inspect typed tools but not create or change them", async () => {
+    for (const request of [
+      new Request("http://localhost/api/tools", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }),
+      new Request("http://localhost/api/tools/tool-1/status", {
+        method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ enabled: false })
+      })
+    ]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(request, env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("INSERT INTO tool_definitions") ||
+        sql.includes("UPDATE tool_definitions"))).toBe(false);
+    }
+  });
+
   it("rejects malformed process packages before creating tenant data", async () => {
     const { env, queries } = environment("builder");
     const response = await app.fetch(new Request("http://localhost/api/process-packages/import", {

@@ -40,6 +40,7 @@ export interface BlueprintRow {
   active_release_id?: string | null;
   input_schema_json?: string | null;
   output_schema_json?: string | null;
+  tool_policy_json?: string | null;
 }
 
 export interface PromptRow {

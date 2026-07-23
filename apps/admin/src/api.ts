@@ -81,6 +81,7 @@ export interface Execution {
   autonomy_level?: string | null;
   autonomy_disposition?: string | null;
   approval_id?: string | null;
+  tool_policy_json?: string | null;
 }
 export interface QueueOperation {
   id: string;
@@ -120,6 +121,7 @@ export interface ProcessRelease {
   evaluated_at: string | null;
   input_schema_json: string | null;
   output_schema_json: string | null;
+  tool_policy_json: string | null;
 }
 
 export interface StudioData {
@@ -133,6 +135,7 @@ export interface StudioData {
   };
   releases: ProcessRelease[];
   runStats: Array<{ status: string; count: number }>;
+  activeTools: string[];
   topology: {
     nodes: Array<{ id: string; type: string; label: string }>;
     edges: Array<{ from: string; to: string }>;
@@ -212,6 +215,28 @@ export interface KnowledgeCitation {
   score: number;
   excerpt: string;
   provenance: string;
+}
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  description: string;
+  version: number;
+  adapter_kind: "mock" | "http" | "microsoft" | "database" | "import_export";
+  connection_id: string | null;
+  connection_name: string | null;
+  connection_status: string | null;
+  connection_secret_configured: number | null;
+  access_mode: "read" | "write";
+  risk_level: "low" | "medium" | "high";
+  input_schema_json: string;
+  output_schema_json: string;
+  data_classification: "public" | "internal" | "confidential" | "restricted";
+  owner: string;
+  rate_limit_per_minute: number;
+  support_instructions: string;
+  enabled: number;
+  process_names: string;
+  process_ids: string;
 }
 export interface ExecutionKnowledgeCitation {
   source_id: string;
@@ -646,6 +671,16 @@ export const api = {
     request<{ data: { id: string; caseResultId: string; score: number; verdict: string } }>(
       `/api/evaluation-results/${encodeURIComponent(id)}/review`, { method: "PUT", body: JSON.stringify(body) }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
+  tools: () => request<{ data: ToolDefinition[] }>("/api/tools"),
+  createTool: (body: Record<string, unknown>) =>
+    request<{ data: { id: string; name: string; processCount: number } }>("/api/tools",
+      { method: "POST", body: JSON.stringify(body) }),
+  setToolBindings: (id: string, processIds: string[]) =>
+    request<{ data: { id: string; processCount: number } }>(`/api/tools/${encodeURIComponent(id)}/bindings`,
+      { method: "PUT", body: JSON.stringify({ processIds }) }),
+  setToolEnabled: (id: string, enabled: boolean) =>
+    request<{ data: { id: string; enabled: boolean } }>(`/api/tools/${encodeURIComponent(id)}/status`,
+      { method: "PATCH", body: JSON.stringify({ enabled }) }),
   startMicrosoftOAuth: (capabilities: string[]) =>
     request<{ data: { authorizationUrl: string; capabilities: string[]; scopes: string[]; expiresAt: string } }>(
       "/api/oauth/microsoft/start", { method: "POST", body: JSON.stringify({ capabilities }) }),

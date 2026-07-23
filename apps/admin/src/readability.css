@@ -343,6 +343,18 @@ a:focus-visible {
 .autonomy-guidance.level-approve,
 .autonomy-evidence.waiting_approval { border-color: #e3ca9d; background: #fff8e9; color: #936628; }
 .autonomy-evidence.rejected { border-color: #dfb5aa; background: #fff3f0; color: #a14d38; }
+.run-tool-evidence {
+  margin-top: 11px;
+  padding: 13px 15px;
+  border: 1px solid #d7e0dc;
+  border-radius: 9px;
+  background: #fafcfb;
+}
+.run-tool-evidence > div { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 8px; color: #326d56; }
+.run-tool-evidence > div span { flex: 1; }
+.run-tool-evidence > span { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #e7ece9; }
+.run-tool-evidence strong,
+.run-tool-evidence small { font-size: 12px; line-height: 1.45; }
 
 /* Studio tabs are a semantic nav inside the page, not part of the dark application rail. */
 .studio-tabs button:hover { background: #eef5f1 !important; color: #285f4a !important; }
@@ -353,7 +365,78 @@ a:focus-visible {
   box-shadow: none !important;
 }
 
+.tool-catalog { margin-top: 18px; overflow: hidden; }
+.tool-catalog > .section-head { padding: 20px; border-bottom: 1px solid var(--line); }
+.tool-catalog .section-head h2,
+.tool-catalog .section-head h3 { margin: 5px 0 3px; font-size: 16px; }
+.tool-layout { display: grid; grid-template-columns: minmax(560px, 1.4fr) minmax(360px, .8fr); align-items: start; }
+.typed-tool-list { border-right: 1px solid var(--line); }
+.typed-tool-list article {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e9efeb;
+}
+.typed-tool-list article.disabled { opacity: .62; }
+.typed-tool-list strong,
+.typed-tool-list small,
+.typed-tool-list em { display: block; }
+.typed-tool-list strong { color: #2d4037; font-size: 13px; }
+.typed-tool-list small,
+.typed-tool-list em { margin-top: 3px; color: #607068; font-size: 12px; line-height: 1.45; }
+.typed-tool-list em { font-style: normal; }
+.tool-access {
+  min-width: 48px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: #edf5f1;
+  color: #2f7056;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+.tool-access.write { background: #fff1dc; color: #926225; }
+.typed-tool-list button {
+  padding: 7px 9px;
+  border: 1px solid #d4ded9;
+  border-radius: 7px;
+  background: white;
+  color: #435d51;
+  font-size: 12px;
+}
+.tool-process-bindings { display: flex !important; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.tool-process-bindings button { padding: 4px 7px; color: #66756e; font-size: 11px; }
+.tool-process-bindings button.bound { border-color: #9fc6b3; background: #edf7f2; color: #28664e; }
+.tool-builder { padding: 0 20px 20px; }
+.tool-builder > .section-head { padding: 17px 0 5px; }
+.tool-builder > label,
+.tool-builder .two-fields label { display: block; margin-top: 12px; color: #41544b; font-size: 12px; font-weight: 700; }
+.tool-builder input,
+.tool-builder select,
+.tool-builder textarea {
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px 10px;
+  border: 1px solid #d4ddd8;
+  border-radius: 7px;
+  background: #fbfcfb;
+  color: #24352d;
+  font-size: 13px;
+}
+.tool-builder textarea { min-height: 70px; resize: vertical; }
+.tool-builder .tool-schema { min-height: 130px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.tool-builder fieldset { margin-top: 13px; padding: 10px; border: 1px solid #dbe3df; border-radius: 8px; }
+.tool-builder legend { padding: 0 5px; color: #41544b; font-size: 12px; font-weight: 700; }
+.tool-builder fieldset label { display: flex; align-items: center; gap: 7px; margin: 5px 0; font-size: 12px; }
+.tool-builder fieldset input { width: auto; margin: 0; }
+.tool-builder > .primary { margin-top: 16px; }
+
 @media (max-width: 1200px) {
+  .tool-layout { grid-template-columns: 1fr; }
+  .typed-tool-list { border-right: 0; border-bottom: 1px solid var(--line); }
   .shell { grid-template-columns: 220px 1fr; }
   aside { width: 220px; }
 }

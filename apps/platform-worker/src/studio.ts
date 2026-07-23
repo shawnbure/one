@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import { evaluateReleaseGate } from "./evaluation";
 import { normalizeProcessSchema } from "./contracts";
+import { releaseToolPolicies } from "./tools";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -21,19 +22,24 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, autonomy, status, release_notes,
       created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at,
-      input_schema_json, output_schema_json FROM process_releases
+      input_schema_json, output_schema_json, tool_policy_json FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND blueprint_id = ?
       AND started_at >= datetime('now','-7 days') GROUP BY status`).bind(tenantId, blueprintId).all()
   ]);
   if (!blueprint) return null;
   const row = blueprint as Record<string, unknown>;
+  const activeRelease = releases.results.find((release) =>
+    String((release as Record<string, unknown>).id) === String(row.active_release_id ?? ""));
+  const activeTools = parseToolNames((activeRelease as Record<string, unknown> | undefined)?.tool_policy_json,
+    JSON.parse(String(row.tools_json)) as string[]);
   return {
     blueprint,
     prompt,
     releases: releases.results,
     runStats: runStats.results,
-    topology: topologyFor(String(row.execution_profile), String(row.autonomy), JSON.parse(String(row.tools_json)) as string[])
+    activeTools,
+    topology: topologyFor(String(row.execution_profile), String(row.autonomy), activeTools)
   };
 }
 
@@ -41,8 +47,11 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   if (!input.systemPrompt.trim()) throw new Error("System prompt is required");
   const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
   const outputSchema = normalizeProcessSchema(input.outputSchema, "output");
-  const blueprint = await env.DB.prepare("SELECT execution_profile FROM agent_blueprints WHERE tenant_id = ? AND id = ?")
-    .bind(tenantId, blueprintId).first<{ execution_profile: string }>();
+  const [blueprint, toolPolicies] = await Promise.all([
+    env.DB.prepare("SELECT execution_profile FROM agent_blueprints WHERE tenant_id = ? AND id = ?")
+      .bind(tenantId, blueprintId).first<{ execution_profile: string }>(),
+    releaseToolPolicies(env, tenantId, blueprintId)
+  ]);
   if (!blueprint) throw new Error("Process not found");
   const versionRow = await env.DB.prepare("SELECT COALESCE(MAX(version), 0) + 1 version FROM process_releases WHERE tenant_id = ? AND blueprint_id = ?")
     .bind(tenantId, blueprintId).first<{ version: number }>();
@@ -50,7 +59,7 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   const releaseId = `release-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const promptReleaseId = `prompt-${blueprintId}-v${version}-${crypto.randomUUID().slice(0, 8)}`;
   const compiled = { promptReleaseId, modelProfile: input.modelProfile, autonomy: input.autonomy,
-    executionProfile: blueprint.execution_profile, inputSchema, outputSchema };
+    executionProfile: blueprint.execution_profile, inputSchema, outputSchema, toolPolicies };
   const checksum = await sha256(JSON.stringify({ ...input, inputSchema, outputSchema, compiled }));
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO prompt_releases
@@ -59,11 +68,12 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
       .bind(promptReleaseId, blueprintId, version, input.systemPrompt.trim(), JSON.stringify(input.instructions), JSON.stringify(input.guardrails), checksum, input.releaseNotes ?? "", actorId),
     env.DB.prepare(`INSERT INTO process_releases
       (id, tenant_id, blueprint_id, version, prompt_release_id, model_profile, autonomy, compiled_json,
-       checksum, status, release_notes, created_by, input_schema_json, output_schema_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`)
+       checksum, status, release_notes, created_by, input_schema_json, output_schema_json, tool_policy_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`)
       .bind(releaseId, tenantId, blueprintId, version, promptReleaseId, input.modelProfile, input.autonomy,
         JSON.stringify(compiled), checksum, input.releaseNotes ?? "", actorId,
-        inputSchema ? JSON.stringify(inputSchema) : null, outputSchema ? JSON.stringify(outputSchema) : null)
+        inputSchema ? JSON.stringify(inputSchema) : null, outputSchema ? JSON.stringify(outputSchema) : null,
+        JSON.stringify(toolPolicies))
   ]);
   return { releaseId, promptReleaseId, version, checksum, status: "draft" as const };
 }
@@ -98,4 +108,11 @@ function topologyFor(profile: string, autonomy: string, tools: string[]) {
 async function sha256(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function parseToolNames(value: unknown, fallback: string[]) {
+  if (typeof value !== "string" || !value) return fallback;
+  try {
+    const parsed = JSON.parse(value) as Array<{ name?: unknown }>;
+    return Array.isArray(parsed) ? parsed.map((tool) => String(tool.name ?? "")).filter(Boolean) : fallback;
+  } catch { return fallback; }
 }

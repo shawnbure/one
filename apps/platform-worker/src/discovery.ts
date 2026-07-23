@@ -1,5 +1,6 @@
 import { createDraftRelease } from "./studio";
 import type { Env } from "./types";
+import { ensureTemplateTools } from "./tools";
 
 export interface CreateProcessInput {
   templateId: string;
@@ -50,6 +51,8 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
         .bind(`case-golden-eval-release-${id}`, tenantId, `eval-release-${id}`, JSON.stringify(defaultAssertions()))
     ]);
   }
+  await ensureTemplateTools(env, tenantId, id, actorId, input.businessOwner || "Unassigned",
+    JSON.parse(template.tools_json) as string[]);
   const existingReleaseRow = await env.DB.prepare(`SELECT id, prompt_release_id, version, checksum, status
     FROM process_releases WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version LIMIT 1`).bind(tenantId, id)
     .first<{ id: string; prompt_release_id: string; version: number; checksum: string; status: "draft" }>();

@@ -11,6 +11,23 @@ export const executionProfiles = [
 export type ExecutionProfile = (typeof executionProfiles)[number];
 export type AutonomyLevel = "observe" | "suggest" | "approve" | "guarded" | "autonomous";
 export type ProcessStatus = "draft" | "testing" | "active" | "paused";
+export interface ToolPolicy {
+  id: string;
+  name: string;
+  version: number;
+  adapterKind: "mock" | "http" | "microsoft" | "database" | "import_export";
+  accessMode: "read" | "write";
+  riskLevel: "low" | "medium" | "high";
+  connectionId: string | null;
+  connectionReady: boolean;
+  dataClassification: "public" | "internal" | "confidential" | "restricted";
+  rateLimitPerMinute: number;
+  inputSchemaJson: string;
+  outputSchemaJson: string;
+  description?: string;
+  owner?: string;
+  supportInstructions?: string;
+}
 
 export interface AgentBlueprint {
   id: string;
@@ -27,6 +44,7 @@ export interface AgentBlueprint {
   activeReleaseId?: string | null;
   inputSchemaJson?: string | null;
   outputSchemaJson?: string | null;
+  toolPolicies?: ToolPolicy[];
 }
 
 export interface PromptBundle {

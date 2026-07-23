@@ -235,7 +235,7 @@ function Studio({
   if (!data) return <div className="loading-card">Loading Process Studio…</div>;
   const blueprint = data.blueprint;
   const executionProfile = blueprint.execution_profile ?? "instant";
-  const tools = JSON.parse(blueprint.tools_json ?? "[]") as string[];
+  const tools = data.activeTools ?? JSON.parse(blueprint.tools_json ?? "[]") as string[];
   return (
     <section className="studio-page">
       <button className="back-link" onClick={onBack}>
@@ -523,7 +523,8 @@ function Studio({
                 </small>
                 <small>
                   {release.input_schema_json ? "Input contract" : "Free-text input"} ·{" "}
-                  {release.output_schema_json ? "Structured output" : "Text output"}
+                  {release.output_schema_json ? "Structured output" : "Text output"} ·{" "}
+                  {toolPolicyCount(release.tool_policy_json)} typed tools
                 </small>
                 <em>
                   Created {release.created_at} by {release.created_by}
@@ -681,6 +682,11 @@ function parseSchemaEditor(value: string, label: string): Record<string, unknown
   } catch {
     throw new Error(`${label} contract must be a valid JSON object`);
   }
+}
+function toolPolicyCount(value: string | null | undefined) {
+  if (!value) return 0;
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.length : 0; }
+  catch { return 0; }
 }
 const exampleInputSchema = {
   type: "object",

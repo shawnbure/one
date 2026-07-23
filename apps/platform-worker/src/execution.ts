@@ -39,24 +39,26 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       await env.DB.prepare(`INSERT OR IGNORE INTO executions
         (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview,
          idempotency_key, started_at, completed_at, process_release_id, input_contract_status,
-         output_contract_status, contract_error, error, autonomy_level, autonomy_disposition)
-        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, 'blocked')`)
+         output_contract_status, contract_error, error, autonomy_level, autonomy_disposition, tool_policy_json)
+        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, 'blocked', ?)`)
         .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
           inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null, startedAt, startedAt,
           blueprint.activeReleaseId ?? null, contracts.outputSchema ? "pending" : "not_configured",
-          error.message.slice(0, 1000), error.message.slice(0, 1000), autonomy.effective).run();
+          error.message.slice(0, 1000), error.message.slice(0, 1000), autonomy.effective,
+          JSON.stringify(blueprint.toolPolicies ?? [])).run();
     }
     throw error;
   }
   await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
-     started_at, process_release_id, input_contract_status, output_contract_status, autonomy_level, autonomy_disposition)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+     started_at, process_release_id, input_contract_status, output_contract_status, autonomy_level,
+     autonomy_disposition, tool_policy_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
       admission.deferred ? "deferred" : "running", inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null,
       startedAt, blueprint.activeReleaseId ?? null, contractedInput.status,
       contracts.outputSchema ? "pending" : "not_configured", autonomy.effective,
-      admission.deferred ? "deferred" : autonomy.disposition).run();
+      admission.deferred ? "deferred" : autonomy.disposition, JSON.stringify(blueprint.toolPolicies ?? [])).run();
 
   if (admission.deferred) {
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };

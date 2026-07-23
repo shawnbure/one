@@ -21,6 +21,7 @@ import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinis
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
   queryKnowledge, queueKnowledgeReindex, reviewKnowledgeSource, expireKnowledgeSources } from "./knowledge";
 import { ContractViolationError, isContractViolation } from "./contracts";
+import { createTool, listTools, setToolBindings, setToolEnabled } from "./tools";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -917,6 +918,50 @@ app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "
     CASE WHEN secret_binding = 'WEBHOOK_INBOX_SECRET' THEN ? ELSE 0 END secret_configured
     FROM webhook_endpoints WHERE tenant_id = ? ORDER BY name`).bind(c.env.WEBHOOK_INBOX_SECRET ? 1 : 0, c.get("tenantId")).all();
   return c.json({ data: results });
+});
+
+app.get("/api/tools", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await listTools(c.env, c.get("tenantId")) }));
+
+app.post("/api/tools", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const data = await createTool(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "tool.created", "tool", data.id,
+      { name: data.name, processCount: data.processCount });
+    return c.json({ data }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Tool could not be created" }, 400);
+  }
+});
+
+app.put("/api/tools/:id/bindings", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const toolId = c.req.param("id");
+    if (!toolId) return c.json({ error: "Tool id is required" }, 400);
+    const body = await c.req.json<{ processIds?: string[] }>();
+    if (!Array.isArray(body.processIds)) return c.json({ error: "processIds is required" }, 400);
+    const data = await setToolBindings(c.env, c.get("tenantId"), toolId, c.get("actorId"), body.processIds);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "tool.bindings_updated", "tool", data.id,
+      { processCount: data.processCount });
+    return c.json({ data });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Tool bindings could not be updated" }, 400);
+  }
+});
+
+app.patch("/api/tools/:id/status", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const toolId = c.req.param("id");
+    if (!toolId) return c.json({ error: "Tool id is required" }, 400);
+    const body = await c.req.json<{ enabled?: boolean }>();
+    if (typeof body.enabled !== "boolean") return c.json({ error: "enabled is required" }, 400);
+    const data = await setToolEnabled(c.env, c.get("tenantId"), toolId, body.enabled);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+      body.enabled ? "tool.enabled" : "tool.disabled", "tool", data.id, { enabled: data.enabled });
+    return c.json({ data });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Tool status could not be updated" }, 400);
+  }
 });
 
 app.post("/api/connections/:id/test", requireRoles("admin", "builder", "owner", "operator"), async (c) => {

@@ -18,7 +18,7 @@ export interface AutonomyPlan {
   explanation: string;
 }
 
-export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "operatingMode" | "tools">): AutonomyPlan {
+export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "operatingMode" | "tools" | "toolPolicies">): AutonomyPlan {
   const configured = blueprint.autonomy;
   const mode = blueprint.operatingMode ?? "active";
   const effective: AutonomyLevel = configured === "observe"
@@ -36,17 +36,27 @@ export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "opera
     configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true,
     explanation: "The proposed result requires a human decision before it becomes an accepted outcome."
   };
-  if (effective === "guarded" && blueprint.tools.length > 0) return {
+  const policies = blueprint.toolPolicies ?? [];
+  const hasUnavailableConnection = policies.some((tool) => tool.connectionId && !tool.connectionReady);
+  const guardedReview = policies.length
+    ? policies.some((tool) => tool.accessMode === "write" || tool.riskLevel !== "low" || !tool.connectionReady)
+    : blueprint.tools.length > 0;
+  if (effective === "guarded" && guardedReview) return {
     configured, effective, disposition: "waiting_approval", runModel: true, requiresApproval: true,
-    explanation: "This process declares consequential tools, so guarded execution routes the proposal to review."
+    explanation: hasUnavailableConnection
+      ? "A required tool connection is not ready, so guarded execution routes the proposal to review."
+      : "A declared tool is write-capable or above low risk, so guarded execution routes the proposal to review."
   };
   if (effective === "guarded") return {
     configured, effective, disposition: "guarded_safe", runModel: true, requiresApproval: false,
     explanation: "No consequential tools are declared; the guarded read-only result may complete."
   };
   if (effective === "autonomous") return {
-    configured, effective, disposition: "autonomous", runModel: true, requiresApproval: false,
-    explanation: "The published release permits completion without a human checkpoint."
+    configured, effective, disposition: hasUnavailableConnection ? "waiting_approval" : "autonomous",
+    runModel: true, requiresApproval: hasUnavailableConnection,
+    explanation: hasUnavailableConnection
+      ? "A required tool connection is not ready, so autonomous completion falls back to human review."
+      : "The published release permits completion without a human checkpoint."
   };
   return {
     configured, effective, disposition: "recommended", runModel: true, requiresApproval: false,
@@ -55,7 +65,7 @@ export function autonomyPlan(blueprint: Pick<AgentBlueprint, "autonomy" | "opera
 }
 
 export async function routeApproval(env: Env, tenantId: string, executionId: string,
-  blueprint: Pick<AgentBlueprint, "id" | "name" | "tools">, plan: AutonomyPlan, output: string) {
+  blueprint: Pick<AgentBlueprint, "id" | "name" | "tools" | "toolPolicies">, plan: AutonomyPlan, output: string) {
   if (!plan.requiresApproval) return null;
   const approvalId = `approval-${executionId}`;
   const now = new Date().toISOString();
@@ -65,7 +75,7 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
        description, impact, autonomy_level, action_risk)
       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'medium', ?, 'medium')`)
     .bind(approvalId, tenantId, executionId, actionName,
-      JSON.stringify({ tools: blueprint.tools, proposedOutput: output.slice(0, 4000) }), now,
+      JSON.stringify({ tools: blueprint.toolPolicies ?? blueprint.tools, proposedOutput: output.slice(0, 4000) }), now,
       `Review ${blueprint.name} proposal`, plan.explanation, plan.effective).run();
   await env.DB.batch([
     env.DB.prepare(`UPDATE executions SET status='waiting_approval', autonomy_disposition='waiting_approval',
@@ -74,7 +84,8 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
       (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json, created_at)
       VALUES (?, ?, 'system', 'approval.requested', 'approval', ?, ?, ?)`)
       .bind(`audit-autonomy-${executionId}`, tenantId, approvalId,
-        JSON.stringify({ executionId, blueprintId: blueprint.id, autonomy: plan.effective, tools: blueprint.tools }), now)
+        JSON.stringify({ executionId, blueprintId: blueprint.id, autonomy: plan.effective,
+          tools: blueprint.toolPolicies ?? blueprint.tools }), now)
   ]);
   if (inserted.meta.changes === 1) {
     try {

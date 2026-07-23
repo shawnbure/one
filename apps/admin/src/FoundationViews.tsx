@@ -22,7 +22,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation } from "./api";
+import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type ToolDefinition } from "./api";
 import "./governed-standards.css";
 
 interface Props {
@@ -57,7 +57,21 @@ export function FoundationView({ section, onNotice }: Props) {
 function Connections({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
   const [checking, setChecking] = useState<string | null>(null);
   const [oauthBusy, setOauthBusy] = useState(false);
+  const [tools, setTools] = useState<ToolDefinition[]>([]);
+  const [toolBusy, setToolBusy] = useState(false);
+  const [toolForm, setToolForm] = useState({
+    name: "", description: "", owner: "", adapterKind: "mock", connectionId: "",
+    accessMode: "read", riskLevel: "low", dataClassification: "internal", rateLimitPerMinute: "60",
+    supportInstructions: "", processIds: [] as string[],
+    inputSchema: '{\n  "type": "object",\n  "additionalProperties": true\n}',
+    outputSchema: '{\n  "type": "object",\n  "additionalProperties": true\n}'
+  });
   const [capabilities, setCapabilities] = useState({ mail: true, mail_send: true, calendar: true, files: false });
+  async function loadTools() {
+    try { setTools((await api.tools()).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Tool catalog could not be loaded"); }
+  }
+  useEffect(() => { void loadTools(); }, []);
   async function test(id: string) {
     setChecking(id);
     try {
@@ -91,6 +105,43 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Microsoft 365 could not be disconnected");
     } finally { setOauthBusy(false); }
+  }
+  async function createTypedTool(event: React.FormEvent) {
+    event.preventDefault();
+    setToolBusy(true);
+    try {
+      await api.createTool({
+        ...toolForm,
+        connectionId: toolForm.connectionId || null,
+        rateLimitPerMinute: Number(toolForm.rateLimitPerMinute),
+        inputSchema: JSON.parse(toolForm.inputSchema),
+        outputSchema: JSON.parse(toolForm.outputSchema)
+      });
+      setToolForm((current) => ({ ...current, name: "", description: "", supportInstructions: "", processIds: [] }));
+      await loadTools();
+      onNotice("Typed tool created. It will enter a process only through a new immutable release.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Tool could not be created"); }
+    finally { setToolBusy(false); }
+  }
+  async function toggleTool(tool: ToolDefinition) {
+    setToolBusy(true);
+    try {
+      await api.setToolEnabled(tool.id, !Number(tool.enabled));
+      await loadTools();
+      onNotice(`${tool.name} ${Number(tool.enabled) ? "disabled" : "enabled"}. Existing release snapshots remain unchanged.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Tool status could not be changed"); }
+    finally { setToolBusy(false); }
+  }
+  async function toggleToolProcess(tool: ToolDefinition, processId: string) {
+    const current = tool.process_ids ? tool.process_ids.split(",").filter(Boolean) : [];
+    const next = current.includes(processId) ? current.filter((id) => id !== processId) : [...current, processId];
+    setToolBusy(true);
+    try {
+      await api.setToolBindings(tool.id, next);
+      await loadTools();
+      onNotice(`${tool.name} process scope updated. Publish a new release to activate the change.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Tool process scope could not be changed"); }
+    finally { setToolBusy(false); }
   }
   const microsoft = data.connections.find((item) => item.name === "Microsoft 365");
   const microsoftConnected = microsoft && Number(microsoft.secret_configured) === 1;
@@ -165,6 +216,66 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
             </button>
           </article>
         ))}
+      </div>
+      <div className="tool-catalog panel">
+        <div className="section-head"><div><span className="eyebrow"><Box size={14}/> GOVERNED CAPABILITIES</span>
+          <h2>Typed tool catalog</h2><p>Define schemas, risk, ownership, limits, connection readiness, and process scope. Mock tools are safe extension points and do not perform external actions.</p></div></div>
+        <div className="tool-layout">
+          <div className="typed-tool-list">
+            {tools.length ? tools.map((tool) => {
+              const connectionReady = tool.adapter_kind === "mock" ||
+                (Boolean(tool.connection_id) && tool.connection_status === "healthy" && Number(tool.connection_secret_configured) === 1);
+              return <article key={tool.id} className={!Number(tool.enabled) ? "disabled" : ""}>
+                <span className={`tool-access ${tool.access_mode}`}>{tool.access_mode}</span>
+                <span><strong>{tool.name.replaceAll("_", " ")}</strong><small>{tool.description}</small>
+                  <em>{tool.adapter_kind.replaceAll("_", " ")} · {tool.risk_level} risk · {tool.data_classification} · {tool.rate_limit_per_minute}/min</em>
+                  <small>{tool.process_names || "Not bound to a process"} · Owner {tool.owner}</small>
+                  <span className="tool-process-bindings">{data.processes.map((process) => {
+                    const bound = (tool.process_ids || "").split(",").includes(String(process.id));
+                    return <button type="button" disabled={toolBusy} className={bound ? "bound" : ""}
+                      key={String(process.id)} onClick={() => void toggleToolProcess(tool, String(process.id))}>
+                      {bound ? "✓ " : "+ "}{processOptionLabel(process, data.processes)}</button>;
+                  })}</span></span>
+                <span className={`connection-state ${connectionReady ? "healthy" : "attention"}`}><i/>
+                  {tool.connection_id ? connectionReady ? "connection ready" : "connection required" : tool.adapter_kind === "mock" ? "mock safe" : "connection required"}</span>
+                <button disabled={toolBusy} onClick={() => void toggleTool(tool)}>{Number(tool.enabled) ? "Disable" : "Enable"}</button>
+              </article>;
+            }) : <p className="empty-copy">No typed tools are registered yet.</p>}
+          </div>
+          <form className="tool-builder" onSubmit={(event) => void createTypedTool(event)}>
+            <div className="section-head"><div><h3>Add a typed tool</h3><p>New bindings affect only future releases.</p></div></div>
+            <label>Tool name<input required pattern="[a-z][a-z0-9_]{2,63}" placeholder="lookup_customer" value={toolForm.name}
+              onChange={(event) => setToolForm({ ...toolForm, name: event.target.value.toLowerCase().replaceAll("-", "_").replace(/[^a-z0-9_]/g, "") })}/></label>
+            <label>Description<textarea required maxLength={500} placeholder="Read the approved customer record by identifier." value={toolForm.description}
+              onChange={(event) => setToolForm({ ...toolForm, description: event.target.value })}/></label>
+            <div className="two-fields"><label>Owner<input required maxLength={120} placeholder="Customer Operations" value={toolForm.owner}
+              onChange={(event) => setToolForm({ ...toolForm, owner: event.target.value })}/></label>
+              <label>Adapter<select value={toolForm.adapterKind} onChange={(event) => setToolForm({ ...toolForm, adapterKind: event.target.value })}>
+                <option value="mock">Mock / local extension</option><option value="http">Typed HTTP</option>
+                <option value="microsoft">Microsoft 365</option><option value="database">Database</option>
+                <option value="import_export">Import / export</option></select></label></div>
+            <div className="two-fields"><label>Access<select value={toolForm.accessMode} onChange={(event) => setToolForm({ ...toolForm, accessMode: event.target.value })}>
+              <option value="read">Read</option><option value="write">Write</option></select></label>
+              <label>Risk<select value={toolForm.riskLevel} onChange={(event) => setToolForm({ ...toolForm, riskLevel: event.target.value })}>
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label></div>
+            <div className="two-fields"><label>Data class<select value={toolForm.dataClassification} onChange={(event) => setToolForm({ ...toolForm, dataClassification: event.target.value })}>
+              <option value="public">Public</option><option value="internal">Internal</option><option value="confidential">Confidential</option><option value="restricted">Restricted</option></select></label>
+              <label>Rate / minute<input type="number" min="1" max="10000" value={toolForm.rateLimitPerMinute}
+                onChange={(event) => setToolForm({ ...toolForm, rateLimitPerMinute: event.target.value })}/></label></div>
+            <label>Connection<select value={toolForm.connectionId} onChange={(event) => setToolForm({ ...toolForm, connectionId: event.target.value })}>
+              <option value="">No connection · mock only</option>{data.connections.map((connection) =>
+                <option key={String(connection.id)} value={String(connection.id)}>{String(connection.name)}</option>)}</select></label>
+            <fieldset><legend>Bind to processes</legend>{data.processes.map((process) => <label key={String(process.id)}>
+              <input type="checkbox" checked={toolForm.processIds.includes(String(process.id))} onChange={(event) =>
+                setToolForm({ ...toolForm, processIds: event.target.checked ? [...toolForm.processIds, String(process.id)] :
+                  toolForm.processIds.filter((id) => id !== String(process.id)) })}/>{processOptionLabel(process, data.processes)}</label>)}</fieldset>
+            <label>Input JSON Schema<textarea className="tool-schema" value={toolForm.inputSchema} onChange={(event) => setToolForm({ ...toolForm, inputSchema: event.target.value })}/></label>
+            <label>Output JSON Schema<textarea className="tool-schema" value={toolForm.outputSchema} onChange={(event) => setToolForm({ ...toolForm, outputSchema: event.target.value })}/></label>
+            <label>Support instructions<textarea maxLength={2000} placeholder="Owner, escalation, sandbox, and recovery notes." value={toolForm.supportInstructions}
+              onChange={(event) => setToolForm({ ...toolForm, supportInstructions: event.target.value })}/></label>
+            <button className="primary" disabled={toolBusy}>{toolBusy ? "Saving…" : "Create typed tool"}</button>
+          </form>
+        </div>
       </div>
       <div className="webhook-section">
         <div className="section-head">
@@ -1085,4 +1196,9 @@ function parseArray(value: string): string[] {
   } catch {
     return [];
   }
+}
+function processOptionLabel(process: Record<string, string>, all: Array<Record<string, string>>) {
+  const name = String(process.name);
+  const duplicate = all.filter((item) => String(item.name) === name).length > 1;
+  return duplicate ? `${name} · ${String(process.id).slice(-6)}` : name;
 }

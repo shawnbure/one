@@ -2,7 +2,17 @@ import type { AgentBlueprint, PromptBundle } from "@workrr/contracts";
 import type { BlueprintRow, Env, PromptRow } from "./types";
 
 export async function getBlueprint(env: Env, tenantId: string, id: string): Promise<AgentBlueprint | null> {
-  const row = await env.DB.prepare(`SELECT b.*, r.input_schema_json, r.output_schema_json
+  const row = await env.DB.prepare(`SELECT b.*, r.input_schema_json, r.output_schema_json,
+    COALESCE((SELECT json_group_array(json_set(policy.value, '$.connectionReady',
+      CASE
+        WHEN json_extract(policy.value, '$.adapterKind')='mock'
+          AND json_extract(policy.value, '$.connectionId') IS NULL THEN 1
+        WHEN c.status='healthy' AND c.secret_configured=1 THEN 1
+        ELSE 0
+      END))
+      FROM json_each(r.tool_policy_json) policy
+      LEFT JOIN connections c ON c.id=json_extract(policy.value, '$.connectionId')
+        AND c.tenant_id=b.tenant_id), r.tool_policy_json, '[]') tool_policy_json
     FROM agent_blueprints b LEFT JOIN process_releases r ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
     WHERE b.tenant_id = ? AND b.id = ?`).bind(tenantId, id).first<BlueprintRow>();
   if (!row) return null;
@@ -20,7 +30,11 @@ export async function getBlueprint(env: Env, tenantId: string, id: string): Prom
     ,operatingMode: (row.operating_mode ?? "active") as AgentBlueprint["operatingMode"],
     activeReleaseId: row.active_release_id,
     inputSchemaJson: row.input_schema_json,
-    outputSchemaJson: row.output_schema_json
+    outputSchemaJson: row.output_schema_json,
+    toolPolicies: (JSON.parse(row.tool_policy_json || "[]") as Array<Record<string, unknown>>).map((tool) => ({
+      ...tool,
+      connectionReady: Boolean(tool.connectionReady)
+    })) as AgentBlueprint["toolPolicies"]
   };
 }
 

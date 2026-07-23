@@ -1,7 +1,8 @@
 import type { Env } from "./types";
 
 export async function getGovernance(env: Env, tenantId: string) {
-  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials, tenantControl, dlpRules, dlpEvents] = await Promise.all([
+  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
+    tenantControl, dlpRules, dlpEvents, tools] = await Promise.all([
     env.DB.prepare(`SELECT id, name, model_profile, prompt_release_id, active_release_id, autonomy, operating_mode,
       risk_level, business_owner, department FROM agent_blueprints WHERE tenant_id = ? ORDER BY name`).bind(tenantId).all(),
     env.DB.prepare(`SELECT c.*, o.account_email oauth_account_email, o.account_name oauth_account_name,
@@ -28,13 +29,22 @@ export async function getGovernance(env: Env, tenantId: string) {
     env.DB.prepare(`SELECT detector, label, action, direction, enabled, updated_by, updated_at
       FROM dlp_rules WHERE tenant_id=? ORDER BY detector`).bind(tenantId).all(),
     env.DB.prepare(`SELECT direction, stage, detector, action, match_count, execution_id, blueprint_id, created_at
-      FROM dlp_events WHERE tenant_id=? ORDER BY created_at DESC LIMIT 30`).bind(tenantId).all()
+      FROM dlp_events WHERE tenant_id=? ORDER BY created_at DESC LIMIT 30`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT t.id, t.adapter_kind, t.connection_id, t.enabled,
+      COUNT(pt.blueprint_id) process_count,
+      CASE WHEN t.adapter_kind='mock' THEN 1
+        WHEN c.status='healthy' AND c.secret_configured=1 THEN 1 ELSE 0 END ready
+      FROM tool_definitions t
+      LEFT JOIN connections c ON c.id=t.connection_id AND c.tenant_id=t.tenant_id
+      LEFT JOIN process_tool_bindings pt ON pt.tool_id=t.id AND pt.tenant_id=t.tenant_id AND pt.enabled=1
+      WHERE t.tenant_id=? GROUP BY t.id`).bind(tenantId).all()
   ]);
   const processRows = processes.results as Array<Record<string, unknown>>;
   const connectionRows = connections.results as Array<Record<string, unknown>>;
   const evaluationRows = evaluations.results as Array<Record<string, unknown>>;
   const credentialRows = credentials.results as Array<Record<string, unknown>>;
   const knowledgeRows = knowledge.results as Array<Record<string, unknown>>;
+  const toolRows = tools.results as Array<Record<string, unknown>>;
   const requiredConnectionRows = connectionRows.filter((row) => row.kind !== "oauth" || row.status !== "disconnected");
   const models = [...new Set(processRows.map((row) => String(row.model_profile)))].map((profile) => ({
     profile,
@@ -70,8 +80,10 @@ export async function getGovernance(env: Env, tenantId: string) {
       { id: "knowledge", label: "Governed knowledge review", ready: knowledgeRows.every((row) =>
         !row.object_key || (row.status === "ready" && (!row.expires_at || new Date(String(row.expires_at)) > new Date()))),
         detail: `${knowledgeRows.filter((row) => row.status === "ready").length}/${knowledgeRows.filter((row) => row.object_key).length} indexed sources retrieval-ready` },
+      { id: "tools", label: "Typed tool readiness", ready: toolRows.filter((row) => Number(row.enabled) && Number(row.process_count)).every((row) => Number(row.ready) === 1),
+        detail: `${toolRows.filter((row) => Number(row.enabled) && Number(row.process_count) && Number(row.ready)).length}/${toolRows.filter((row) => Number(row.enabled) && Number(row.process_count)).length} bound tools ready` },
       { id: "observability", label: "Workers logs and traces", ready: true, detail: "Cloudflare observability enabled" }
     ],
-    dataFlow: ["Process input", "Cloudflare Worker", "Durable Agent / Workflow", "Workers AI", "Human checkpoint", "Business outcome"]
+    dataFlow: ["Process input", "Cloudflare Worker", "Durable Agent / Workflow", "Workers AI", "Typed tool policy", "Human checkpoint", "Business outcome"]
   };
 }

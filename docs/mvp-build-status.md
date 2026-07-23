@@ -22,7 +22,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
 | Knowledge Center | Governed text/file intake, pre-storage DLP, R2 source/chunk storage, queued Workers AI embedding, tenant-filtered Vectorize retrieval, process bindings, review/expiry enforcement, execution citation evidence, diagnostics, test query, reindex, and removal |
-| Foundations | Connections, evaluations, and model profile starting points |
+| Foundations | Connection health, typed tool catalog, evaluations, and model profile starting points |
 | Customer setup | Idempotent launch manifest for profile, membership, paused first process, baseline, evaluation gate, draft release, readiness, and secret-free export |
 | Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook and delegated Microsoft 365 email delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
@@ -55,6 +55,14 @@ Every published release also declares an autonomy level that is enforced at runt
 - `autonomous` completes without a checkpoint inside the published release and operating controls.
 
 The process `read_only` operating mode caps any non-observe release at `suggest`. `approval_only` forces every non-observe release through review. Execution records snapshot the effective level and disposition so later release changes cannot rewrite historical evidence. Approving or rejecting a pending item also resolves the associated execution and records the decision audit.
+
+## Typed tool boundary
+
+Process tools are tenant-scoped governed definitions, not arbitrary model-selected code. Each definition declares JSON Schema input/output contracts, read/write access, risk, adapter kind, connection reference, data classification, owner, rate limit, support instructions, enabled state, and explicit process bindings. A draft release snapshots the enabled tool policies into its compiled checksum. Binding or disabling a catalog tool therefore affects only a future release; it cannot silently alter a published process. Portable process packages carry the non-secret typed definitions and omit source connection IDs/readiness; a destination must supply its own connection before a non-mock adapter can become ready.
+
+Runtime blueprint loading overlays current connection health onto the immutable release policy in the same D1 read. Guarded mode permits only low-risk, read-only, connection-ready tools without review. Write, elevated-risk, or unavailable tools route to the Work Inbox. Autonomous mode also falls back to review when a required connection is unavailable. Every execution stores the evaluated tool-policy snapshot for Activity evidence.
+
+`mock` tools are safe FDE extension points and perform no external action. Non-mock adapters without a healthy credentialed connection are not considered ready. The MVP deliberately does not allow arbitrary customer code execution or let model output directly call a URL.
 
 ## Prompt and memory read model
 
@@ -135,6 +143,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 30. `0030_knowledge_evidence.sql`: immutable execution-to-source citation evidence for grounded run inspection.
 31. `0031_process_contracts.sql`: immutable release input/output schemas and per-execution validation evidence.
 32. `0032_progressive_autonomy.sql`: effective autonomy snapshots, dispositions, and execution-linked approval evidence.
+33. `0033_typed_tools.sql`: tenant tool catalog, process bindings, immutable release policies, and per-run tool evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -170,7 +179,7 @@ npm run build
 
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
-The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy, containment, or customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, paused inputs are recorded as deferred, observe mode consumes zero model tokens, read-only and approval-only controls cap release autonomy, guarded tool-capable work routes to review, tenant drain/emergency stop blocks synchronous and queued admission, incident recovery requires containment evidence, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, recurring schedules atomically claim before Queue handoff, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
+The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy, tool definitions, containment, or customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, paused inputs are recorded as deferred, observe mode consumes zero model tokens, read-only and approval-only controls cap release autonomy, guarded tool policy evaluates typed risk/access/readiness, unavailable autonomous tools fall back to review, tenant drain/emergency stop blocks synchronous and queued admission, incident recovery requires containment evidence, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, recurring schedules atomically claim before Queue handoff, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
 
 Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs load up to 100 cases and fan them into parallel, independently retriable Cloudflare Workflow steps before one deterministic aggregation step. They survive browser disconnection and persist their lifecycle separately from case evidence. DLP rules and model pricing are loaded once into prepared Workflow state rather than reread from D1 for every case. Each case can assign a case weight plus assertion weight and quality dimension (groundedness, completeness, safety, clarity, or format); the release evidence includes both the overall gate score and per-dimension scores. Model trials execute the immutable release prompt and identical cases once with the release baseline profile and once with a candidate Cloudflare profile; both arms are costed and scored without changing the live process or release-gate state. Every model call participates in the tenant hard budget.
 
