@@ -237,6 +237,21 @@ export interface EvaluationDetail {
     baseline_tokens: number | null; candidate_tokens: number | null; recommendation: string | null; error: string | null;
     completed_at: string | null; created_at: string }>;
   rubricTemplates: RubricTemplate[];
+  rubricPackageReviews: Array<{
+    id: string;
+    package_digest: string;
+    schema_version: string;
+    publisher_name: string;
+    publisher_key_id: string | null;
+    signature_status: "verified" | "unsigned";
+    template_count: number;
+    status: "pending" | "approved" | "rejected";
+    submitted_by: string;
+    submitted_at: string;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    review_note: string | null;
+  }>;
   modelProfiles: Array<{ id: string; label: string; model: string; use: string }>;
 }
 export interface RubricCriterion {
@@ -255,8 +270,11 @@ export interface RubricTemplate {
   updated_at: string;
 }
 export interface RubricPackage {
-  schema: "workrr-rubrics/v1";
+  schema: "workrr-rubrics/v1" | "workrr-rubrics/v2";
   exportedAt?: string;
+  issuedAt?: string;
+  publisher?: { name: string; keyId: string; publicKey: JsonWebKey };
+  signature?: string;
   templates: Array<{
     name: string;
     description: string;
@@ -441,8 +459,13 @@ export const api = {
   exportRubricPackage: () =>
     request<{ data: RubricPackage }>("/api/evaluation-rubrics/package"),
   importRubricPackage: (body: RubricPackage) =>
-    request<{ data: { imported: number; skipped: number; totalTemplates: number; activationRequired: number } }>(
+    request<{ data: { imported: number; skipped: number; totalTemplates?: number; activationRequired: number;
+      pendingReview?: string; status?: string; duplicate?: boolean } }>(
       "/api/evaluation-rubrics/package", { method: "POST", body: JSON.stringify(body) }),
+  reviewRubricPackage: (id: string, decision: "approved" | "rejected", note = "") =>
+    request<{ data: { id: string; status: string; imported: number; skipped: number; activationRequired: number } }>(
+      `/api/evaluation-rubric-reviews/${encodeURIComponent(id)}/${decision}`,
+      { method: "POST", body: JSON.stringify({ note }) }),
   exportEvaluationDataset: (id: string) =>
     request<{ data: EvaluationDataset }>(`/api/evaluations/${encodeURIComponent(id)}/dataset`),
   importEvaluationDataset: (id: string, body: EvaluationDataset) =>

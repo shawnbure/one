@@ -23,6 +23,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData } from "./api";
+import "./governed-standards.css";
 
 interface Props {
   section: "Connections" | "Knowledge" | "Evaluations" | "Governance";
@@ -416,9 +417,23 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       const manifest = JSON.parse(await file.text());
       const result = await api.importRubricPackage(manifest);
       await inspect(selected);
-      onNotice(`Imported ${result.data.imported} archived templates; ${result.data.skipped} existing templates skipped.`);
+      onNotice(result.data.pendingReview
+        ? `Verified signed package queued for owner approval (${result.data.pendingReview.slice(0, 8)}).`
+        : `Imported ${result.data.imported} archived templates; ${result.data.skipped} existing templates skipped.`);
     } catch (error) { onNotice(error instanceof Error ? error.message : "Rubric package could not be imported"); }
     finally { setRubricPackageBusy(null); }
+  }
+  async function reviewRubrics(id: string, decision: "approved" | "rejected") {
+    if (!selected) return;
+    setTemplateBusy(id);
+    try {
+      const result = await api.reviewRubricPackage(id, decision);
+      await inspect(selected);
+      onNotice(decision === "approved"
+        ? `Approved package; ${result.data.imported} templates imported archived for destination review.`
+        : "Signed rubric package rejected and retained as audit evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Package review could not be completed"); }
+    finally { setTemplateBusy(null); }
   }
   async function importDataset(file: File | undefined) {
     if (!selected || !file) return;
@@ -510,6 +525,11 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
           </div>
           <div className="rubric-library">
             <div className="section-head"><div><h3>Organization rubric templates</h3><p>Reusable standards are copied into each case, keeping durable runs independent from later template edits.</p></div><span className="rubric-library-actions"><small>{detail.rubricTemplates.length}/20 templates</small><button disabled={rubricPackageBusy !== null} onClick={() => void exportRubrics()}><Download size={14}/>{rubricPackageBusy === "export" ? "Exporting…" : "Export standards"}</button><label className="dataset-import"><Upload size={14}/>{rubricPackageBusy === "import" ? "Importing…" : "Import standards"}<input type="file" accept="application/json,.json" disabled={rubricPackageBusy !== null} onChange={(event) => { void importRubrics(event.target.files?.[0]); event.target.value = ""; }}/></label></span></div>
+            {detail.rubricPackageReviews.filter((review) => review.status === "pending").map((review) =>
+              <article className="rubric-package-review" key={review.id}><ShieldCheck size={18}/><span>
+                <strong>{review.publisher_name}</strong><small>Verified signature · {review.template_count} templates · key {review.publisher_key_id?.slice(0, 12)}…</small>
+              </span><button disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "rejected")}>Reject</button>
+              <button className="primary" disabled={templateBusy === review.id} onClick={() => void reviewRubrics(review.id, "approved")}>Approve import</button></article>)}
             <div className="rubric-template-grid">
               <div className="rubric-template-list">
                 {detail.rubricTemplates.map((template) => {

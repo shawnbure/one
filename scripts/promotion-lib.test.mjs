@@ -34,7 +34,7 @@ test("extracts migration and secret evidence from Wrangler output", () => {
     "MICROSOFT_CLIENT_ID", "OAUTH_TOKEN_ENCRYPTION_KEY"
   ]);
   assert.deepEqual(missingRequiredSecrets(["MICROSOFT_CLIENT_ID", "OAUTH_TOKEN_ENCRYPTION_KEY"]), [
-    "MICROSOFT_CLIENT_SECRET"
+    "MICROSOFT_CLIENT_SECRET", "RUBRIC_SIGNING_JWK"
   ]);
 });
 

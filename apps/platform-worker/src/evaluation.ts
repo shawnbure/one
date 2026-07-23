@@ -279,6 +279,42 @@ function parseJudgeScores(value: string, expected: number) {
   });
 }
 
+function parseSigningJwk(value: string): JsonWebKey & { x: string; d: string } {
+  let parsed: JsonWebKey;
+  try { parsed = JSON.parse(value) as JsonWebKey; }
+  catch { throw new Error("Rubric signing key is not valid JSON"); }
+  if (parsed.kty !== "OKP" || parsed.crv !== "Ed25519" || typeof parsed.x !== "string" || typeof parsed.d !== "string") {
+    throw new Error("Rubric signing key must be a private Ed25519 JWK");
+  }
+  return parsed as JsonWebKey & { x: string; d: string };
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+}
+
+async function digestText(value: string): Promise<string> {
+  return base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromBase64Url(value: string): ArrayBuffer {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return buffer;
+}
+
 export async function persistEvaluationRun(env: Env, tenantId: string, actorId: string, prepared: PreparedEvaluation,
   runId: string, caseResults: EvaluationCaseResult[], updateScenario = true) {
   const controlPassed = prepared.controls.filter((check) => check.passed).length;
@@ -353,7 +389,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
 }
 
 export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId: string) {
-  const [scenario, cases, runs, rubricTemplates] = await Promise.all([
+  const [scenario, cases, runs, rubricTemplates, rubricPackageReviews] = await Promise.all([
     env.DB.prepare(`SELECT e.*, b.name process_name, b.active_release_id FROM evaluation_scenarios e
       JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
       WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first(),
@@ -363,7 +399,10 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
       r.input_tokens, r.output_tokens, r.total_tokens, r.estimated_cost_usd, r.triggered_by, r.created_at,
       r.evidence_json, pr.version release_version FROM evaluation_runs r LEFT JOIN process_releases pr ON pr.id = r.release_id
       WHERE r.tenant_id = ? AND r.scenario_id = ? ORDER BY r.created_at DESC LIMIT 12`).bind(tenantId, scenarioId).all(),
-    listRubricTemplates(env, tenantId)
+    listRubricTemplates(env, tenantId),
+    env.DB.prepare(`SELECT id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
+      template_count, status, submitted_by, submitted_at, reviewed_by, reviewed_at, review_note
+      FROM rubric_package_reviews WHERE tenant_id = ? ORDER BY submitted_at DESC LIMIT 20`).bind(tenantId).all()
   ]);
   if (!scenario) return null;
   const runIds = runs.results.map((row) => String((row as Record<string, unknown>).id));
@@ -386,7 +425,7 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
   ]);
   return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results,
     suites: suites.results, humanReviews: reviews.results, modelTrials: modelTrials.results,
-    rubricTemplates,
+    rubricTemplates, rubricPackageReviews: rubricPackageReviews.results,
     modelProfiles: Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile })) };
 }
 
@@ -506,24 +545,51 @@ export async function updateRubricTemplate(env: Env, tenantId: string, templateI
 
 export async function exportRubricPackage(env: Env, tenantId: string) {
   const templates = await listRubricTemplates(env, tenantId);
-  return {
+  const portableTemplates = templates.map((template) => ({
+    name: template.name,
+    description: template.description,
+    criteria: parseRubricCriteria(template.criteria_json),
+    enabled: Number(template.enabled) === 1
+  }));
+  if (!env.RUBRIC_SIGNING_JWK) return {
     schema: "workrr-rubrics/v1" as const,
     exportedAt: new Date().toISOString(),
-    templates: templates.map((template) => ({
-      name: template.name,
-      description: template.description,
-      criteria: parseRubricCriteria(template.criteria_json),
-      enabled: Number(template.enabled) === 1
-    }))
+    templates: portableTemplates
   };
+  const privateJwk = parseSigningJwk(env.RUBRIC_SIGNING_JWK);
+  const publicJwk = { kty: "OKP", crv: "Ed25519", x: privateJwk.x };
+  const keyId = await digestText(canonicalJson(publicJwk));
+  const signed = {
+    schema: "workrr-rubrics/v2" as const,
+    publisher: {
+      name: (env.RUBRIC_PUBLISHER_NAME ?? "Workrr publisher").trim().slice(0, 120),
+      keyId,
+      publicKey: publicJwk
+    },
+    issuedAt: new Date().toISOString(),
+    templates: portableTemplates
+  };
+  const key = await crypto.subtle.importKey("jwk", privateJwk, { name: "Ed25519" }, false, ["sign"]);
+  const signature = base64Url(new Uint8Array(await crypto.subtle.sign(
+    { name: "Ed25519" }, key, new TextEncoder().encode(canonicalJson(signed))
+  )));
+  return { ...signed, signature };
 }
 
 export async function importRubricPackage(env: Env, tenantId: string, actorId: string, value: unknown) {
   if (!value || typeof value !== "object") throw new Error("Rubric package must be a JSON object");
-  const manifest = value as { schema?: unknown; templates?: unknown };
-  if (manifest.schema !== "workrr-rubrics/v1" || !Array.isArray(manifest.templates) ||
+  const manifest = value as { schema?: unknown; templates?: unknown; publisher?: unknown; issuedAt?: unknown; signature?: unknown };
+  if (manifest.schema === "workrr-rubrics/v2") {
+    return submitSignedRubricPackage(env, tenantId, actorId, manifest);
+  }
+  if (manifest.schema !== "workrr-rubrics/v1") throw new Error("A Workrr rubric v1 or signed v2 package is required");
+  return importRubricTemplates(env, tenantId, actorId, manifest);
+}
+
+async function importRubricTemplates(env: Env, tenantId: string, actorId: string, manifest: { templates?: unknown }) {
+  if (!Array.isArray(manifest.templates) ||
       manifest.templates.length < 1 || manifest.templates.length > 20) {
-    throw new Error("A Workrr rubric v1 package with one to 20 templates is required");
+    throw new Error("A Workrr rubric package with one to 20 templates is required");
   }
   const existing = await env.DB.prepare("SELECT name FROM evaluation_rubric_templates WHERE tenant_id = ?")
     .bind(tenantId).all<{ name: string }>();
@@ -558,6 +624,79 @@ export async function importRubricPackage(env: Env, tenantId: string, actorId: s
     totalTemplates: existingNames.size + inserts.length,
     activationRequired: inserts.length
   };
+}
+
+async function submitSignedRubricPackage(env: Env, tenantId: string, actorId: string, manifest: {
+  schema?: unknown; templates?: unknown; publisher?: unknown; issuedAt?: unknown; signature?: unknown;
+}) {
+  if (!Array.isArray(manifest.templates) || manifest.templates.length < 1 || manifest.templates.length > 20 ||
+      typeof manifest.signature !== "string" || typeof manifest.issuedAt !== "string" ||
+      !manifest.publisher || typeof manifest.publisher !== "object") {
+    throw new Error("A complete signed Workrr rubric v2 package is required");
+  }
+  const publisher = manifest.publisher as { name?: unknown; keyId?: unknown; publicKey?: unknown };
+  if (typeof publisher.name !== "string" || !publisher.name.trim() || publisher.name.length > 120 ||
+      typeof publisher.keyId !== "string" || typeof publisher.publicKey !== "object" || !publisher.publicKey) {
+    throw new Error("Signed rubric publisher metadata is invalid");
+  }
+  const publicJwk = publisher.publicKey as JsonWebKey;
+  if (publicJwk.kty !== "OKP" || publicJwk.crv !== "Ed25519" || typeof publicJwk.x !== "string") {
+    throw new Error("Signed rubric publisher key must be Ed25519");
+  }
+  const expectedKeyId = await digestText(canonicalJson({ kty: "OKP", crv: "Ed25519", x: publicJwk.x }));
+  if (publisher.keyId !== expectedKeyId) throw new Error("Signed rubric publisher key ID does not match its public key");
+  const signed = {
+    schema: "workrr-rubrics/v2",
+    publisher: { name: publisher.name, keyId: publisher.keyId,
+      publicKey: { kty: "OKP", crv: "Ed25519", x: publicJwk.x } },
+    issuedAt: manifest.issuedAt,
+    templates: manifest.templates
+  };
+  const key = await crypto.subtle.importKey("jwk", publicJwk, { name: "Ed25519" }, false, ["verify"]);
+  const valid = await crypto.subtle.verify({ name: "Ed25519" }, key, fromBase64Url(manifest.signature),
+    new TextEncoder().encode(canonicalJson(signed)));
+  if (!valid) throw new Error("Rubric package signature verification failed");
+  // Validate all portable content before retaining it for approval.
+  for (const raw of manifest.templates) {
+    if (!raw || typeof raw !== "object") throw new Error("Every imported rubric template must be an object");
+    const item = raw as { name?: unknown; description?: unknown; criteria?: unknown };
+    const name = cleanTemplateName(item.name);
+    const description = typeof item.description === "string" ? item.description.trim().slice(0, 500) : "";
+    assertRubricTemplateSafe(name, description, normalizeRubricCriteria(item.criteria));
+  }
+  const packageJson = canonicalJson({ ...signed, signature: manifest.signature });
+  const digest = await digestText(packageJson);
+  const id = crypto.randomUUID();
+  const result = await env.DB.prepare(`INSERT OR IGNORE INTO rubric_package_reviews
+    (id, tenant_id, package_digest, schema_version, publisher_name, publisher_key_id, signature_status,
+     package_json, template_count, submitted_by) VALUES (?, ?, ?, 'workrr-rubrics/v2', ?, ?, 'verified', ?, ?, ?)`)
+    .bind(id, tenantId, digest, publisher.name.trim(), publisher.keyId, packageJson, manifest.templates.length, actorId).run();
+  if (!result.meta.changes) {
+    const existing = await env.DB.prepare(`SELECT id, status FROM rubric_package_reviews
+      WHERE tenant_id = ? AND package_digest = ?`).bind(tenantId, digest).first<{ id: string; status: string }>();
+    return { pendingReview: existing?.id, status: existing?.status ?? "pending", duplicate: true,
+      imported: 0, skipped: 0, activationRequired: 0 };
+  }
+  return { pendingReview: id, status: "pending", duplicate: false, imported: 0, skipped: 0, activationRequired: 0 };
+}
+
+export async function reviewRubricPackage(env: Env, tenantId: string, actorId: string, reviewId: string,
+  decision: "approved" | "rejected", note = "") {
+  const review = await env.DB.prepare(`SELECT id, status, package_json FROM rubric_package_reviews
+    WHERE id = ? AND tenant_id = ?`).bind(reviewId, tenantId)
+    .first<{ id: string; status: string; package_json: string }>();
+  if (!review) throw new Error("Rubric package review not found");
+  if (review.status !== "pending") throw new Error("Rubric package review is already complete");
+  let imported = 0, skipped = 0, activationRequired = 0;
+  if (decision === "approved") {
+    const manifest = JSON.parse(review.package_json) as { templates: unknown[] };
+    const result = await importRubricTemplates(env, tenantId, actorId, manifest);
+    ({ imported, skipped, activationRequired } = result);
+  }
+  await env.DB.prepare(`UPDATE rubric_package_reviews SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
+    review_note = ? WHERE id = ? AND tenant_id = ? AND status = 'pending'`)
+    .bind(decision, actorId, note.trim().slice(0, 500), reviewId, tenantId).run();
+  return { id: reviewId, status: decision, imported, skipped, activationRequired };
 }
 
 export async function exportEvaluationDataset(env: Env, tenantId: string, scenarioId: string) {

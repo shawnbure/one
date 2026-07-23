@@ -1,0 +1,30 @@
+.rubric-package-review {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 13px;
+  padding: 12px;
+  border: 1px solid #cfe2d8;
+  border-radius: 9px;
+  background: #eef7f2;
+  color: #356b55;
+}
+.rubric-package-review strong,
+.rubric-package-review small { display: block; }
+.rubric-package-review strong { color: #294d3f; font-size: 13px; }
+.rubric-package-review small { margin-top: 3px; color: #64776e; font-size: 13px; line-height: 1.45; }
+.rubric-package-review > button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #c8d9d0;
+  border-radius: 7px;
+  background: white;
+  color: #456a59;
+  font-size: 13px;
+}
+.rubric-package-review > .primary { border: 0; background: #28694f; color: white; }
+@media (max-width: 900px) {
+  .rubric-package-review { grid-template-columns: auto 1fr; }
+  .rubric-package-review > button { grid-column: span 1; }
+}

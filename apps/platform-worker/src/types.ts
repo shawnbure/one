@@ -17,6 +17,8 @@ export interface Env {
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
   OAUTH_TOKEN_ENCRYPTION_KEY?: string;
+  RUBRIC_SIGNING_JWK?: string;
+  RUBRIC_PUBLISHER_NAME?: string;
   LOCAL_DEV?: string;
 }
 

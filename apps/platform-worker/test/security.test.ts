@@ -213,4 +213,16 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("INSERT OR IGNORE INTO evaluation_rubric_templates"))).toBe(false);
   });
+
+  it("prevents builders and viewers from approving governed rubric packages", async () => {
+    for (const role of ["builder", "viewer"]) {
+      const { env, queries } = environment(role);
+      const response = await app.fetch(new Request("http://localhost/api/evaluation-rubric-reviews/review-1/approved", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: "{}"
+      }), env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("UPDATE rubric_package_reviews"))).toBe(false);
+    }
+  });
 });

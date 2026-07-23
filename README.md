@@ -21,7 +21,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Portable `workrr-evaluation/v1` packages for audited, tenant-scoped rubric and anonymized dataset export/import, with idempotent merge and DLP enforcement before persistence.
 - Optional Cloudflare Workers AI rubric judging with one compact secondary call per eligible case, a 25-case ceiling, DLP on judge traffic, scored evidence without hidden reasoning, and full token/cost accounting.
 - Tenant-scoped organization rubric templates with seeded operational, safety, and handoff standards; applying a template copies its bounded criteria into the case so durable runs avoid repeated configuration reads.
-- Portable `workrr-rubrics/v1` organization-standard packages with secret-free export, idempotent name-based import, strict bounds and sensitive-content rejection, and destination-side activation review.
+- Portable rubric standards with backward-compatible `workrr-rubrics/v1` exchange plus Ed25519-signed `v2` publishing, tamper verification, owner/admin import approval, strict bounds and sensitive-content rejection, and destination-side activation review.
 - Isolated baseline-versus-candidate Cloudflare model trials with quality/cost recommendations and automatic masking of common sensitive patterns before case persistence.
 - Tenant-wide and per-process incident containment with drain/emergency-stop admission gates, deferred paused work, evidence timelines, guarded recovery, and critical notifications.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
@@ -119,6 +119,19 @@ npm run smoke:live
 ```
 
 The smoke principal must be an `operator`. The command verifies session identity, governance and rubric reads, then creates, reads, and deletes a tenant-scoped disposable fixture. Cleanup is attempted even after failure, and a scheduled sweep removes abandoned fixtures after their ten-minute expiry. The command prints no credential values.
+
+### Signed rubric standards
+
+When `RUBRIC_SIGNING_JWK` is configured, rubric exports use `workrr-rubrics/v2` with Ed25519 publisher metadata and a detached signature over the canonical package. The private JWK remains a Wrangler secret. Imports verify the public-key fingerprint and signature before retaining a package for review; they do not create templates until an owner or admin approves the package. Approved templates remain archived until explicitly restored.
+
+Generate a different signing key for each publishing environment and pipe the private JWK directly into Wrangler without committing it:
+
+```sh
+node -e "crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']).then(k=>crypto.subtle.exportKey('jwk',k.privateKey)).then(k=>process.stdout.write(JSON.stringify(k)))" \
+  | npx wrangler secret put RUBRIC_SIGNING_JWK --env dev
+```
+
+Unsigned `workrr-rubrics/v1` packages remain supported for deliberate local/manual exchange and retain the existing archived-on-import behavior.
 
 ### Cloudflare Access member handoff
 
