@@ -174,12 +174,14 @@ export async function getMicrosoftAccessToken(
   tenantId: string,
   requiredScope: string,
   fetcher: typeof fetch = fetch,
+  expectedConnectionId?: string,
 ) {
   assertMicrosoftConfiguration(env);
   const row = await env.DB.prepare(`SELECT o.*, c.id connection_id FROM oauth_connections o
     JOIN connections c ON c.id=o.connection_id AND c.tenant_id=o.tenant_id
-    WHERE o.tenant_id=? AND o.provider='microsoft' AND o.status!='disconnected'`)
-    .bind(tenantId).first<OAuthConnectionRow>();
+    WHERE o.tenant_id=? AND o.provider='microsoft' AND o.status!='disconnected'
+      AND (? IS NULL OR c.id=?)`)
+    .bind(tenantId, expectedConnectionId ?? null, expectedConnectionId ?? null).first<OAuthConnectionRow>();
   if (!row) throw new Error("Microsoft 365 is not connected");
   const scopes = JSON.parse(row.scopes_json) as string[];
   if (!scopes.some((scope) => scope.toLowerCase() === requiredScope.toLowerCase())) {

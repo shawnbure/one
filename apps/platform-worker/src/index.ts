@@ -22,6 +22,7 @@ import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, mar
   queryKnowledge, queueKnowledgeReindex, reviewKnowledgeSource, expireKnowledgeSources } from "./knowledge";
 import { ContractViolationError, isContractViolation } from "./contracts";
 import { createTool, listTools, setToolBindings, setToolEnabled } from "./tools";
+import { listBoundAdapters } from "./tool-adapters";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -927,6 +928,9 @@ app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "
 
 app.get("/api/tools", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await listTools(c.env, c.get("tenantId")) }));
+
+app.get("/api/tool-adapters", requireRoles("admin", "builder", "owner", "operator", "viewer"), (c) =>
+  c.json({ data: listBoundAdapters() }));
 
 app.post("/api/tools", requireRoles("admin", "builder", "owner"), async (c) => {
   try {

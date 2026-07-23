@@ -1,11 +1,13 @@
 import type { ToolPolicy } from "@workrr/contracts";
 import { normalizeProcessSchema } from "./contracts";
+import { boundAdapterCatalog, isBoundAdapter } from "./tool-adapters";
 import type { Env } from "./types";
 
 export interface ToolDefinitionInput {
   name: string;
   description: string;
   adapterKind?: ToolPolicy["adapterKind"];
+  handlerKey?: string | null;
   connectionId?: string | null;
   accessMode: ToolPolicy["accessMode"];
   riskLevel: ToolPolicy["riskLevel"];
@@ -21,6 +23,15 @@ export interface ToolDefinitionInput {
 export async function listTools(env: Env, tenantId: string) {
   const { results } = await env.DB.prepare(`SELECT t.*, c.name connection_name, c.status connection_status,
     c.secret_configured connection_secret_configured,
+    CASE
+      WHEN t.handler_key IS NULL THEN 0
+      WHEN t.handler_key='microsoft.profile.get' AND c.status='healthy' AND c.secret_configured=1 THEN 1
+      WHEN t.handler_key='microsoft.mail.list' AND c.status='healthy' AND c.secret_configured=1
+        AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='mail.readbasic') THEN 1
+      WHEN t.handler_key='microsoft.calendar.list' AND c.status='healthy' AND c.secret_configured=1
+        AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='calendars.readbasic') THEN 1
+      ELSE 0
+    END handler_ready,
     COALESCE(group_concat(DISTINCT b.name), '') process_names,
     COALESCE(group_concat(DISTINCT b.id), '') process_ids
     FROM tool_definitions t
@@ -43,25 +54,31 @@ export async function createTool(env: Env, tenantId: string, actorId: string, in
   if (!owner || owner.length > 120) throw new Error("Tool owner is required");
   const adapterKind = input.adapterKind ?? "mock";
   if (!["mock", "http", "microsoft", "database", "import_export"].includes(adapterKind)) throw new Error("Unsupported tool adapter");
+  const handlerKey = normalizeHandlerKey(input.handlerKey);
+  if (handlerKey && !handlerKey.startsWith(`${adapterKind}.`)) throw new Error("Tool implementation does not match its adapter");
+  if (handlerKey && (input.accessMode !== "read" || input.riskLevel !== "low")) {
+    throw new Error("Current bound implementations are limited to low-risk reads");
+  }
   if (!["read", "write"].includes(input.accessMode)) throw new Error("Tool access mode must be read or write");
   if (!["low", "medium", "high"].includes(input.riskLevel)) throw new Error("Tool risk level is invalid");
   const classification = input.dataClassification ?? "internal";
   if (!["public", "internal", "confidential", "restricted"].includes(classification)) throw new Error("Data classification is invalid");
   const rateLimit = Math.round(Number(input.rateLimitPerMinute ?? 60));
   if (!Number.isFinite(rateLimit) || rateLimit < 1 || rateLimit > 10_000) throw new Error("Rate limit must be between 1 and 10,000 per minute");
-  const inputSchema = normalizeProcessSchema(input.inputSchema ?? defaultSchema, "input")!;
+  const inputSchema = normalizeProcessSchema(isBoundAdapter(handlerKey)
+    ? boundAdapterCatalog[handlerKey].inputSchema : input.inputSchema ?? defaultSchema, "input")!;
   const outputSchema = normalizeProcessSchema(input.outputSchema ?? defaultSchema, "output")!;
   const processIds = [...new Set(input.processIds ?? [])].slice(0, 50);
-  await validateReferences(env, tenantId, input.connectionId ?? null, processIds);
+  await validateReferences(env, tenantId, input.connectionId ?? null, processIds, handlerKey);
   const id = `tool-${crypto.randomUUID()}`;
   const statements = [
     env.DB.prepare(`INSERT INTO tool_definitions
-      (id, tenant_id, name, description, adapter_kind, connection_id, access_mode, risk_level,
+      (id, tenant_id, name, description, adapter_kind, connection_id, handler_key, access_mode, risk_level,
        input_schema_json, output_schema_json, data_classification, owner, rate_limit_per_minute,
        support_instructions, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(id, tenantId, name, description, adapterKind, input.connectionId ?? null,
-        input.accessMode, input.riskLevel, JSON.stringify(inputSchema), JSON.stringify(outputSchema),
+        handlerKey, input.accessMode, input.riskLevel, JSON.stringify(inputSchema), JSON.stringify(outputSchema),
         classification, owner, rateLimit, (input.supportInstructions ?? "").trim().slice(0, 2000), actorId),
     ...processIds.map((processId) => env.DB.prepare(`INSERT INTO process_tool_bindings
       (tenant_id, blueprint_id, tool_id, enabled, created_by) VALUES (?, ?, ?, 1, ?)`)
@@ -94,11 +111,17 @@ export async function setToolEnabled(env: Env, tenantId: string, toolId: string,
 }
 
 export async function releaseToolPolicies(env: Env, tenantId: string, blueprintId: string): Promise<ToolPolicy[]> {
-  const { results } = await env.DB.prepare(`SELECT t.id, t.name, t.version, t.adapter_kind, t.access_mode,
+  const { results } = await env.DB.prepare(`SELECT t.id, t.name, t.version, t.adapter_kind, t.handler_key, t.access_mode,
     t.risk_level, t.connection_id, t.data_classification, t.rate_limit_per_minute,
     t.input_schema_json, t.output_schema_json, t.description, t.owner, t.support_instructions,
     CASE WHEN t.connection_id IS NULL AND t.adapter_kind='mock' THEN 1
-      WHEN c.status='healthy' AND c.secret_configured=1 THEN 1 ELSE 0 END connection_ready
+      WHEN t.handler_key='microsoft.profile.get' AND c.status='healthy' AND c.secret_configured=1 THEN 1
+      WHEN t.handler_key='microsoft.mail.list' AND c.status='healthy' AND c.secret_configured=1
+        AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='mail.readbasic') THEN 1
+      WHEN t.handler_key='microsoft.calendar.list' AND c.status='healthy' AND c.secret_configured=1
+        AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='calendars.readbasic') THEN 1
+      WHEN t.handler_key IS NULL AND c.status='healthy' AND c.secret_configured=1 THEN 1
+      ELSE 0 END connection_ready
     FROM process_tool_bindings pt
     JOIN tool_definitions t ON t.id=pt.tool_id AND t.tenant_id=pt.tenant_id
     LEFT JOIN connections c ON c.id=t.connection_id AND c.tenant_id=t.tenant_id
@@ -107,6 +130,7 @@ export async function releaseToolPolicies(env: Env, tenantId: string, blueprintI
   return results.map((row) => ({
     id: String(row.id), name: String(row.name), version: Number(row.version),
     adapterKind: row.adapter_kind as ToolPolicy["adapterKind"],
+    handlerKey: row.handler_key ? String(row.handler_key) : null,
     accessMode: row.access_mode as ToolPolicy["accessMode"],
     riskLevel: row.risk_level as ToolPolicy["riskLevel"],
     connectionId: row.connection_id ? String(row.connection_id) : null,
@@ -146,13 +170,14 @@ export async function ensurePortableTools(env: Env, tenantId: string, blueprintI
     const inputSchema = normalizeProcessSchema(policy.inputSchemaJson, "input")!;
     const outputSchema = normalizeProcessSchema(policy.outputSchemaJson, "output")!;
     await env.DB.prepare(`INSERT OR IGNORE INTO tool_definitions
-      (id, tenant_id, name, description, version, adapter_kind, connection_id, access_mode, risk_level,
+      (id, tenant_id, name, description, version, adapter_kind, connection_id, handler_key, access_mode, risk_level,
        input_schema_json, output_schema_json, data_classification, owner, rate_limit_per_minute,
        support_instructions, enabled, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`)
       .bind(`tool-${crypto.randomUUID()}`, tenantId, policy.name,
         (policy.description || `Imported capability for ${policy.name.replaceAll("_", " ")}`).slice(0, 500),
-        Math.max(1, Math.round(policy.version)), policy.adapterKind, policy.accessMode, policy.riskLevel,
+        Math.max(1, Math.round(policy.version)), policy.adapterKind, normalizeHandlerKey(policy.handlerKey),
+        policy.accessMode, policy.riskLevel,
         JSON.stringify(inputSchema), JSON.stringify(outputSchema), policy.dataClassification,
         (policy.owner || "Unassigned").slice(0, 120), policy.rateLimitPerMinute,
         (policy.supportInstructions || "").slice(0, 2000), actorId).run();
@@ -163,11 +188,17 @@ export async function ensurePortableTools(env: Env, tenantId: string, blueprintI
   }
 }
 
-async function validateReferences(env: Env, tenantId: string, connectionId: string | null, processIds: string[]) {
+async function validateReferences(env: Env, tenantId: string, connectionId: string | null, processIds: string[],
+  handlerKey: string | null = null) {
+  if (handlerKey && !connectionId) throw new Error("A bound implementation requires a connection");
   if (connectionId) {
-    const connection = await env.DB.prepare("SELECT id FROM connections WHERE id=? AND tenant_id=?")
-      .bind(connectionId, tenantId).first();
+    const connection = await env.DB.prepare("SELECT id, kind, name FROM connections WHERE id=? AND tenant_id=?")
+      .bind(connectionId, tenantId).first<{ id: string; kind: string; name: string }>();
     if (!connection) throw new Error("Connection not found");
+    if (handlerKey?.startsWith("microsoft.") &&
+      (connection.kind !== "oauth" || connection.name !== "Microsoft 365")) {
+      throw new Error("Microsoft implementations require the tenant Microsoft 365 connection");
+    }
   }
   if (processIds.length) {
     const placeholders = processIds.map(() => "?").join(",");
@@ -178,3 +209,11 @@ async function validateReferences(env: Env, tenantId: string, connectionId: stri
 }
 
 const defaultSchema = { type: "object", additionalProperties: true };
+
+function normalizeHandlerKey(value: string | null | undefined) {
+  const key = value?.trim() || null;
+  if (key && !["microsoft.profile.get", "microsoft.mail.list", "microsoft.calendar.list"].includes(key)) {
+    throw new Error("Unsupported tool implementation");
+  }
+  return key;
+}

@@ -24,6 +24,10 @@ describe("governed tool runtime", () => {
     expect(toolExecutionMode({ ...policy, riskLevel: "medium" })).toBe("proposal_only");
     expect(toolExecutionMode({ ...policy, connectionReady: false })).toBe("proposal_only");
     expect(toolExecutionMode({ ...policy, adapterKind: "http", connectionId: "conn-1" })).toBe("proposal_only");
+    expect(toolExecutionMode({ ...policy, adapterKind: "microsoft", connectionId: "conn-ms",
+      handlerKey: "microsoft.profile.get" })).toBe("bound");
+    expect(toolExecutionMode({ ...policy, adapterKind: "microsoft", connectionId: "conn-ms",
+      handlerKey: "microsoft.profile.get" }, "approve")).toBe("proposal_only");
   });
 
   it("does not expose executable tools at advisory autonomy levels", () => {
@@ -43,5 +47,53 @@ describe("governed tool runtime", () => {
       tenantId: "demo", executionId: "run-1", autonomy: "guarded", policies
     });
     expect(Object.keys(runtime.tools ?? {})).toHaveLength(20);
+  });
+
+  it("records safe simulation evidence and reuses it by idempotency key", async () => {
+    const rows = new Map<string, { status: "simulated"; execution_mode: "simulation";
+      output_json: string; error: null }>();
+    let inserts = 0;
+    const DB = {
+      prepare(sql: string) {
+        let values: unknown[] = [];
+        const statement = {
+          bind(...next: unknown[]) { values = next; return statement; },
+          async first() {
+            if (sql.includes("FROM tool_invocations WHERE")) return rows.get(String(values[1])) ?? null;
+            if (sql.includes("COUNT(*) count FROM tool_invocations")) return { count: 0 };
+            return null;
+          },
+          async all() { return { results: [] }; },
+          async run() {
+            if (sql.includes("INSERT INTO tool_invocations")) {
+              inserts += 1;
+              rows.set(String(values[15]), {
+                status: "simulated", execution_mode: "simulation",
+                output_json: String(values[13]), error: null
+              });
+            }
+            return { meta: { changes: 1 } };
+          }
+        };
+        return statement;
+      },
+      async batch(statements: Array<{ run(): Promise<unknown> }>) {
+        for (const statement of statements) await statement.run();
+        return [];
+      }
+    };
+    const runtime = buildExecutionTools({ DB } as never, {
+      tenantId: "demo", executionId: "run-1", autonomy: "guarded", policies: [policy]
+    });
+    const selected = runtime.tools?.lookup_customer;
+    const execute = selected?.execute;
+    expect(execute).toBeTypeOf("function");
+    const options = { toolCallId: "call-1", messages: [] } as never;
+    const first = await execute!({ accountId: "A-1" }, options);
+    const replay = await execute!({ accountId: "A-1" }, options);
+    expect(first).toMatchObject({ status: "simulated" });
+    expect(replay).toEqual(first);
+    expect(inserts).toBe(1);
+    expect(runtime.evidence).toHaveLength(2);
   });
 });

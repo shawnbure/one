@@ -222,10 +222,12 @@ export interface ToolDefinition {
   description: string;
   version: number;
   adapter_kind: "mock" | "http" | "microsoft" | "database" | "import_export";
+  handler_key: string | null;
   connection_id: string | null;
   connection_name: string | null;
   connection_status: string | null;
   connection_secret_configured: number | null;
+  handler_ready: number;
   access_mode: "read" | "write";
   risk_level: "low" | "medium" | "high";
   input_schema_json: string;
@@ -237,6 +239,13 @@ export interface ToolDefinition {
   enabled: number;
   process_names: string;
   process_ids: string;
+}
+export interface ToolAdapterDefinition {
+  key: string;
+  label: string;
+  adapterKind: string;
+  scope: string;
+  inputSchema: Record<string, unknown>;
 }
 export interface ExecutionKnowledgeCitation {
   source_id: string;
@@ -688,6 +697,7 @@ export const api = {
       `/api/evaluation-results/${encodeURIComponent(id)}/review`, { method: "PUT", body: JSON.stringify(body) }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
   tools: () => request<{ data: ToolDefinition[] }>("/api/tools"),
+  toolAdapters: () => request<{ data: ToolAdapterDefinition[] }>("/api/tool-adapters"),
   createTool: (body: Record<string, unknown>) =>
     request<{ data: { id: string; name: string; processCount: number } }>("/api/tools",
       { method: "POST", body: JSON.stringify(body) }),

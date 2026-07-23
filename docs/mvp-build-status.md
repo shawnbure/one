@@ -66,6 +66,10 @@ The model-facing runtime exposes at most 20 release-snapshotted tools and stops 
 
 Every attempted call gets an idempotent `tool_invocations` record with the release tool/version, model call ID, bounded input/output evidence, execution mode, access/risk policy, timestamps, and terminal state. Workflow retries cannot create a duplicate invocation for the same execution and model call. Activity shows these records separately from the published tool policy, making the difference between “available,” “simulated,” “proposed,” and eventually “bound/completed” explicit. The MVP deliberately does not allow arbitrary customer code execution or let catalog metadata directly call a URL.
 
+The first bound adapter registry supports three fixed, delegated Microsoft Graph reads: the connected account profile (`User.Read`), recent message metadata (`Mail.ReadBasic`), and upcoming calendar metadata (`Calendars.ReadBasic`). A bound adapter becomes executable only when its exact handler, Microsoft connection, delegated scope, read access, low-risk classification, published release snapshot, and guarded/autonomous policy all agree. `approve` remains proposal-only. Endpoints, HTTP method, selected fields, item limits, redirect policy, timeout, and 64 KB response ceiling are code-owned rather than model-controlled. Tool inputs and results cross tenant DLP before egress/model use; stored invocation evidence uses the always-redacted representation. OAuth access tokens are short-lived, never logged, and the existing encrypted refresh-token rotation path is reused.
+
+Bound invocations intentionally perform small D1 control-plane reads for prior idempotency evidence, the per-tool minute limit, the tenant DLP policy, and the tenant OAuth record. Prompt and conversation hot state remain in Durable Object SQLite as described below; D1 is not used as a repeated prompt-content cache. A future credential-broker Durable Object may reduce OAuth refresh traffic, but it is not required for correctness and no token material is placed in KV or Cache API.
+
 ## Prompt and memory read model
 
 D1 is the control-plane source of truth. Published prompt/process releases are immutable. A durable agent reads D1 only when it does not have the requested release in its local SQLite database, then installs that release locally. Repeated turns use the actor-local release and conversation state, avoiding a D1 read for every message.
@@ -147,6 +151,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 32. `0032_progressive_autonomy.sql`: effective autonomy snapshots, dispositions, and execution-linked approval evidence.
 33. `0033_typed_tools.sql`: tenant tool catalog, process bindings, immutable release policies, and per-run tool evidence.
 34. `0034_tool_invocations.sql`: idempotent model tool-call evidence and explicit simulation/proposal/bound execution modes.
+35. `0035_bound_tool_adapters.sql`: registered implementation keys and the initial fixed-endpoint Microsoft profile tool.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

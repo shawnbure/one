@@ -22,7 +22,8 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type ToolDefinition } from "./api";
+import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type ToolAdapterDefinition,
+  type ToolDefinition } from "./api";
 import "./governed-standards.css";
 
 interface Props {
@@ -58,9 +59,10 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [checking, setChecking] = useState<string | null>(null);
   const [oauthBusy, setOauthBusy] = useState(false);
   const [tools, setTools] = useState<ToolDefinition[]>([]);
+  const [toolAdapters, setToolAdapters] = useState<ToolAdapterDefinition[]>([]);
   const [toolBusy, setToolBusy] = useState(false);
   const [toolForm, setToolForm] = useState({
-    name: "", description: "", owner: "", adapterKind: "mock", connectionId: "",
+    name: "", description: "", owner: "", adapterKind: "mock", connectionId: "", handlerKey: "",
     accessMode: "read", riskLevel: "low", dataClassification: "internal", rateLimitPerMinute: "60",
     supportInstructions: "", processIds: [] as string[],
     inputSchema: '{\n  "type": "object",\n  "additionalProperties": true\n}',
@@ -68,7 +70,11 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
   });
   const [capabilities, setCapabilities] = useState({ mail: true, mail_send: true, calendar: true, files: false });
   async function loadTools() {
-    try { setTools((await api.tools()).data); }
+    try {
+      const [catalog, adapters] = await Promise.all([api.tools(), api.toolAdapters()]);
+      setTools(catalog.data);
+      setToolAdapters(adapters.data);
+    }
     catch (error) { onNotice(error instanceof Error ? error.message : "Tool catalog could not be loaded"); }
   }
   useEffect(() => { void loadTools(); }, []);
@@ -225,10 +231,12 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
             {tools.length ? tools.map((tool) => {
               const connectionReady = tool.adapter_kind === "mock" ||
                 (Boolean(tool.connection_id) && tool.connection_status === "healthy" && Number(tool.connection_secret_configured) === 1);
+              const implementationReady = Boolean(tool.handler_key && Number(tool.handler_ready));
               return <article key={tool.id} className={!Number(tool.enabled) ? "disabled" : ""}>
                 <span className={`tool-access ${tool.access_mode}`}>{tool.access_mode}</span>
                 <span><strong>{tool.name.replaceAll("_", " ")}</strong><small>{tool.description}</small>
                   <em>{tool.adapter_kind.replaceAll("_", " ")} · {tool.risk_level} risk · {tool.data_classification} · {tool.rate_limit_per_minute}/min</em>
+                  <small>{tool.handler_key ? `Bound implementation · ${tool.handler_key}` : "Proposal-only implementation"}</small>
                   <small>{tool.process_names || "Not bound to a process"} · Owner {tool.owner}</small>
                   <span className="tool-process-bindings">{data.processes.map((process) => {
                     const bound = (tool.process_ids || "").split(",").includes(String(process.id));
@@ -236,8 +244,9 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
                       key={String(process.id)} onClick={() => void toggleToolProcess(tool, String(process.id))}>
                       {bound ? "✓ " : "+ "}{processOptionLabel(process, data.processes)}</button>;
                   })}</span></span>
-                <span className={`connection-state ${connectionReady ? "healthy" : "attention"}`}><i/>
-                  {tool.connection_id ? connectionReady ? "connection ready" : "connection required" : tool.adapter_kind === "mock" ? "mock safe" : "connection required"}</span>
+                <span className={`connection-state ${implementationReady || (tool.adapter_kind === "mock" && connectionReady) ? "healthy" : "attention"}`}><i/>
+                  {implementationReady ? "bound adapter ready" : tool.handler_key ? "scope or connection required" :
+                    tool.adapter_kind === "mock" ? "simulation ready" : "proposal only"}</span>
                 <button disabled={toolBusy} onClick={() => void toggleTool(tool)}>{Number(tool.enabled) ? "Disable" : "Enable"}</button>
               </article>;
             }) : <p className="empty-copy">No typed tools are registered yet.</p>}
@@ -250,10 +259,27 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
               onChange={(event) => setToolForm({ ...toolForm, description: event.target.value })}/></label>
             <div className="two-fields"><label>Owner<input required maxLength={120} placeholder="Customer Operations" value={toolForm.owner}
               onChange={(event) => setToolForm({ ...toolForm, owner: event.target.value })}/></label>
-              <label>Adapter<select value={toolForm.adapterKind} onChange={(event) => setToolForm({ ...toolForm, adapterKind: event.target.value })}>
+              <label>Adapter<select value={toolForm.adapterKind} onChange={(event) => setToolForm({
+                ...toolForm, adapterKind: event.target.value, handlerKey: "", connectionId: ""
+              })}>
                 <option value="mock">Mock / local extension</option><option value="http">Typed HTTP</option>
                 <option value="microsoft">Microsoft 365</option><option value="database">Database</option>
                 <option value="import_export">Import / export</option></select></label></div>
+            <label>Implementation<select value={toolForm.handlerKey} onChange={(event) => setToolForm({
+              ...toolForm, handlerKey: event.target.value,
+              accessMode: event.target.value ? "read" : toolForm.accessMode,
+              riskLevel: event.target.value ? "low" : toolForm.riskLevel,
+              connectionId: event.target.value
+                ? String(data.connections.find((item) => String(item.name) === "Microsoft 365")?.id ?? "")
+                : toolForm.connectionId,
+              inputSchema: event.target.value
+                ? JSON.stringify(toolAdapters.find((adapter) => adapter.key === event.target.value)?.inputSchema ?? {}, null, 2)
+                : toolForm.inputSchema
+            })}>
+              <option value="">Proposal only · no external call</option>
+              {toolAdapters.filter((adapter) => adapter.adapterKind === toolForm.adapterKind).map((adapter) =>
+                <option key={adapter.key} value={adapter.key}>{adapter.label} ({adapter.scope})</option>)}
+            </select><small>Only registered fixed-endpoint adapters can run. Generic HTTP remains proposal-only.</small></label>
             <div className="two-fields"><label>Access<select value={toolForm.accessMode} onChange={(event) => setToolForm({ ...toolForm, accessMode: event.target.value })}>
               <option value="read">Read</option><option value="write">Write</option></select></label>
               <label>Risk<select value={toolForm.riskLevel} onChange={(event) => setToolForm({ ...toolForm, riskLevel: event.target.value })}>
@@ -269,7 +295,9 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <input type="checkbox" checked={toolForm.processIds.includes(String(process.id))} onChange={(event) =>
                 setToolForm({ ...toolForm, processIds: event.target.checked ? [...toolForm.processIds, String(process.id)] :
                   toolForm.processIds.filter((id) => id !== String(process.id)) })}/>{processOptionLabel(process, data.processes)}</label>)}</fieldset>
-            <label>Input JSON Schema<textarea className="tool-schema" value={toolForm.inputSchema} onChange={(event) => setToolForm({ ...toolForm, inputSchema: event.target.value })}/></label>
+            <label>Input JSON Schema<textarea className="tool-schema" disabled={Boolean(toolForm.handlerKey)}
+              value={toolForm.inputSchema} onChange={(event) => setToolForm({ ...toolForm, inputSchema: event.target.value })}/>
+              {toolForm.handlerKey && <small>The registered adapter fixes this bounded input contract.</small>}</label>
             <label>Output JSON Schema<textarea className="tool-schema" value={toolForm.outputSchema} onChange={(event) => setToolForm({ ...toolForm, outputSchema: event.target.value })}/></label>
             <label>Support instructions<textarea maxLength={2000} placeholder="Owner, escalation, sandbox, and recovery notes." value={toolForm.supportInstructions}
               onChange={(event) => setToolForm({ ...toolForm, supportInstructions: event.target.value })}/></label>

@@ -7,7 +7,18 @@ export async function getBlueprint(env: Env, tenantId: string, id: string): Prom
       CASE
         WHEN json_extract(policy.value, '$.adapterKind')='mock'
           AND json_extract(policy.value, '$.connectionId') IS NULL THEN 1
-        WHEN c.status='healthy' AND c.secret_configured=1 THEN 1
+        WHEN json_extract(policy.value, '$.handlerKey')='microsoft.profile.get'
+          AND c.status='healthy' AND c.secret_configured=1 THEN 1
+        WHEN json_extract(policy.value, '$.handlerKey')='microsoft.mail.list'
+          AND c.status='healthy' AND c.secret_configured=1
+          AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s
+            WHERE lower(CAST(s.value AS TEXT))='mail.readbasic') THEN 1
+        WHEN json_extract(policy.value, '$.handlerKey')='microsoft.calendar.list'
+          AND c.status='healthy' AND c.secret_configured=1
+          AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s
+            WHERE lower(CAST(s.value AS TEXT))='calendars.readbasic') THEN 1
+        WHEN json_extract(policy.value, '$.handlerKey') IS NULL
+          AND c.status='healthy' AND c.secret_configured=1 THEN 1
         ELSE 0
       END))
       FROM json_each(r.tool_policy_json) policy

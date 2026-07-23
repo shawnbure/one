@@ -96,6 +96,15 @@ describe("control-plane security boundary", () => {
   });
 
   it("allows viewers to inspect typed tools but not create or change them", async () => {
+    const registryEnvironment = environment("viewer");
+    const registryResponse = await app.fetch(new Request("http://localhost/api/tool-adapters", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), registryEnvironment.env as never, executionCtx as never);
+    expect(registryResponse.status).toBe(200);
+    const registry = await registryResponse.json() as { data: Array<{ key: string; scope: string }> };
+    expect(registry.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "microsoft.profile.get", scope: "User.Read" })
+    ]));
     for (const request of [
       new Request("http://localhost/api/tools", {
         method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
