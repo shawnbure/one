@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock3,
   FileCode2,
+  Download,
   GitBranch,
   History,
   Play,
@@ -16,6 +17,7 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
+  Upload,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type ProcessRelease, type StudioData } from "./api";
@@ -26,6 +28,7 @@ interface Props {
   onSelect: (id: string | null) => void;
   onNotice: (message: string) => void;
   onCreate: () => void;
+  onRefresh: () => Promise<void>;
 }
 
 export function ProcessStudioView({
@@ -34,9 +37,10 @@ export function ProcessStudioView({
   onSelect,
   onNotice,
   onCreate,
+  onRefresh,
 }: Props) {
   if (!processId)
-    return <ProcessPortfolio processes={processes} onSelect={onSelect} onCreate={onCreate} />;
+    return <ProcessPortfolio processes={processes} onSelect={onSelect} onCreate={onCreate} onNotice={onNotice} onRefresh={onRefresh} />;
   return (
     <Studio
       processId={processId}
@@ -50,11 +54,28 @@ function ProcessPortfolio({
   processes,
   onSelect,
   onCreate,
+  onNotice,
+  onRefresh,
 }: {
   processes: AgentBlueprint[];
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onNotice: (message: string) => void;
+  onRefresh: () => Promise<void>;
 }) {
+  const [importing, setImporting] = useState(false);
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    setImporting(true);
+    try {
+      if (file.size > 256_000) throw new Error("Process package exceeds 256 KB");
+      const result = await api.importProcessPackage(JSON.parse(await file.text()));
+      await onRefresh();
+      onNotice(`Imported process ${result.data.id} as a paused draft.`);
+      onSelect(result.data.id);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Process package import failed"); }
+    finally { setImporting(false); }
+  }
   return (
     <section className="studio-page">
       <div className="page-title">
@@ -68,10 +89,7 @@ function ProcessPortfolio({
             human controls.
           </p>
         </div>
-        <button className="primary" onClick={onCreate}>
-          <Plus size={16} />
-          Create process
-        </button>
+        <div className="portfolio-actions"><label className="secondary import-package"><Upload size={16}/>{importing ? "Importing…" : "Import package"}<input type="file" accept="application/json,.json" disabled={importing} onChange={(event) => { void importFile(event.target.files?.[0]); event.target.value = ""; }}/></label><button className="primary" onClick={onCreate}><Plus size={16} />Create process</button></div>
       </div>
       <div className="portfolio-grid">
         {processes.map((process) => (
@@ -220,7 +238,7 @@ function Studio({
             <p>{blueprint.description}</p>
           </div>
         </div>
-        <div className="release-chip">
+        <div className="studio-title-actions"><a className="export-button" href={`/api/processes/${encodeURIComponent(processId)}/package`}><Download size={15}/>Export package</a><div className="release-chip">
           <i />
           <span>
             <small>ACTIVE RELEASE</small>
@@ -229,7 +247,7 @@ function Studio({
               {activeRelease?.status ?? "unreleased"}
             </strong>
           </span>
-        </div>
+        </div></div>
       </div>
       <nav className="studio-tabs">
         {(["design", "behavior", "releases"] as const).map((value) => (
@@ -410,6 +428,7 @@ function Studio({
             <ul>
               <li>Immutable compiled bundle</li>
               <li>Prompt and policy checksum</li>
+              <li>Release-specific evaluation gate</li>
               <li>Explicit model selection</li>
               <li>Audited publisher identity</li>
               <li>One-click rollback</li>
@@ -446,6 +465,9 @@ function Studio({
                 <em>
                   Created {release.created_at} by {release.created_by}
                 </em>
+                <span className={`release-gate ${release.evaluation_status}`}>
+                  <ShieldCheck size={12}/> Evaluation {release.evaluation_status.replaceAll("_", " ")}
+                </span>
               </span>
               {release.status !== "published" ? (
                 <button disabled={busy} onClick={() => void publish(release)}>

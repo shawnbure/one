@@ -357,6 +357,7 @@ export function App() {
               onSelect={setStudioProcessId}
               onNotice={setNotice}
               onCreate={() => setCreatingProcess(true)}
+              onRefresh={refresh}
             />
           ) : [
               "Connections",

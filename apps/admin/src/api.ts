@@ -87,6 +87,8 @@ export interface ProcessRelease {
   published_at: string | null;
   published_by: string | null;
   checksum: string;
+  evaluation_status: "not_run" | "passing" | "failing";
+  evaluated_at: string | null;
 }
 
 export interface StudioData {
@@ -325,4 +327,5 @@ export const api = {
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
   notifications: () => request<{ data: NotificationData }>("/api/notifications"),
   updateNotificationPolicy: (id: string, body: { enabled: boolean }) => request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  importProcessPackage: (body: unknown) => request<{ data: { id: string; status: string } }>("/api/process-packages/import", { method: "POST", body: JSON.stringify(body) }),
 };

@@ -23,6 +23,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Foundations | Connections, knowledge, evaluations, and model profile starting points |
 | Customer setup | Organization profile, readiness checklist, and secret-free portable deployment manifest |
 | Notifications | Tenant-scoped routing policies and persisted delivery evidence for operational events |
+| Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 
 ## Execution architecture
 
@@ -67,7 +68,8 @@ The Worker currently exposes these route groups:
 
 - Session and tenant administration: `/api/session`, `/api/members`
 - Discovery and value: `/api/process-templates`, `/api/processes`, `/api/value`
-- Studio and controls: `/api/processes/:id/studio`, release publish, operating mode
+- Studio and controls: `/api/processes/:id/studio`, release publish, release-specific evaluation gate, operating mode
+- Portability: `/api/processes/:id/package`, `/api/process-packages/import`
 - Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry
 - Human review: `/api/approvals`, assignment, approve/decline
 - Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`
@@ -90,6 +92,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 8. `0008_execution_usage.sql`: per-execution token accounting and model usage reporting.
 9. `0009_customer_onboarding.sql`: customer branding, operating defaults, and bootstrap state.
 10. `0010_notification_policies.sql`: alert routing policies and delivery evidence.
+11. `0011_release_evaluation_gate.sql`: release-specific evaluation status and scenario backfill.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -132,11 +135,10 @@ The foundation is usable, but these are the highest-value next slices:
 
 1. Customer onboarding wizard that provisions membership, branding, default controls, and a first process from a single manifest.
 2. Connector credential vault and OAuth lifecycle, beginning with one real customer system rather than a broad empty catalog.
-3. Evaluation datasets, test runs, release comparison, and publish gates.
-4. Usage/cost ledger by tenant, process, release, model, and execution profile.
-5. Notification policies for approvals, failures, DLQ events, and control violations.
-6. Import/export of a portable process package with secrets excluded.
-7. Production Access bootstrap and a scripted, reviewable environment promotion command.
-8. End-to-end tests covering identity, tenant isolation, durable stickiness, workflow retries, and webhook deduplication.
+3. Rich evaluation datasets, expected-output assertions, and release-to-release comparison. Deterministic release-specific publish gates are implemented.
+4. Convert token accounting into a priced cost ledger once customer model pricing policy is selected.
+5. Add authenticated delivery workers for email/webhook notification channels; in-app policy routing is implemented.
+6. Production Access bootstrap and a scripted, reviewable environment promotion command.
+7. Expand end-to-end tests from identity/tenant/role/package gates to durable stickiness, workflow retries, and webhook deduplication.
 
 Each slice should preserve the core boundary: D1 controls configuration and reporting, durable actors own sticky conversational state, Workflows own long-running orchestration, and Queues own burst absorption.

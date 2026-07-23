@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { evaluateReleaseGate } from "./evaluation";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -16,7 +17,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
       p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, autonomy, status, release_notes,
-      created_by, created_at, published_at, published_by, checksum FROM process_releases
+      created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND blueprint_id = ?
       AND started_at >= datetime('now','-7 days') GROUP BY status`).bind(tenantId, blueprintId).all()
@@ -61,6 +62,7 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
   const release = await env.DB.prepare(`SELECT * FROM process_releases WHERE id = ? AND tenant_id = ? AND blueprint_id = ?`)
     .bind(releaseId, tenantId, blueprintId).first<Record<string, string | number>>();
   if (!release) throw new Error("Process release not found");
+  await evaluateReleaseGate(env, tenantId, actorId, blueprintId, releaseId);
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("UPDATE process_releases SET status = 'retired' WHERE tenant_id = ? AND blueprint_id = ? AND status = 'published'").bind(tenantId, blueprintId),

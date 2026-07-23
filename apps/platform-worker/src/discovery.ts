@@ -32,7 +32,9 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
     env.DB.prepare(`INSERT INTO process_discovery
       (id, tenant_id, blueprint_id, purpose, volume_per_month, minutes_per_item, hourly_cost, error_rate, opportunity_score, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), tenantId, id, input.purpose.trim(), input.baseline.volumePerMonth, input.baseline.minutesPerItem, input.baseline.hourlyCost, input.baseline.errorRate, score, actorId)
+      .bind(crypto.randomUUID(), tenantId, id, input.purpose.trim(), input.baseline.volumePerMonth, input.baseline.minutesPerItem, input.baseline.hourlyCost, input.baseline.errorRate, score, actorId),
+    env.DB.prepare(`INSERT INTO evaluation_scenarios (id, tenant_id, blueprint_id, name, category, status, assertion_count)
+      VALUES (?, ?, ?, 'Release safety baseline', 'release_gate', 'not_run', 4)`).bind(`eval-release-${id}`, tenantId, id)
   ]);
   const release = await createDraftRelease(env, tenantId, id, actorId, {
     systemPrompt: template.system_prompt,

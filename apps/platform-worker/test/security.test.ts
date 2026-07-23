@@ -56,4 +56,14 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies"))).toBe(false);
   });
+
+  it("rejects malformed process packages before creating tenant data", async () => {
+    const { env, queries } = environment("builder");
+    const response = await app.fetch(new Request("http://localhost/api/process-packages/import", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ schemaVersion: 99, process: { name: "Unsafe" } })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(400);
+    expect(queries.some((sql) => sql.includes("INSERT INTO agent_blueprints"))).toBe(false);
+  });
 });
