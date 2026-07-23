@@ -115,6 +115,8 @@ Owners and admins can now approve the exact Cloudflare-hosted models available t
 
 Governance now includes four accountable quarterly customer reviews: privacy and architecture, AI model inventory, Access and roles, and incident/recovery readiness. Each obligation has an explicit due state and affects deployment readiness. An owner or administrator completes it with a bounded evidence reference and substantive notes; Workrr records the accountable actor, schedules the next review from its cadence, and writes an immutable audit event. New and existing tenants receive the same baseline, and no review query is added to agent execution.
 
+Hourly Cron proactively scans at most 100 governance obligations due within 14 days. A receipt keyed by tenant, review, exact due cycle, and due/overdue stage prevents overlapping scheduled invocations from creating duplicate tasks while still allowing one later overdue escalation. Claims are released when the customer has no enabled routing policy or delivery fails, preserving recoverability. Notification content contains control metadata only and never prompt, credential, or business payload content.
+
 Every incomplete deployment-readiness finding carries a stable remediation destination and a customer-readable action label. Governance routes operators directly to customer setup, service principals, processes, evaluations, connections, delivery, knowledge, tools, or API logs rather than leaving them to interpret a passive warning. Mutations remain protected by the destination surface's existing role checks.
 
 Do not add KV for prompts unless measurement proves a distinct global distribution need. It would add another consistency boundary without replacing durable conversation memory.
@@ -257,6 +259,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 79. `0079_budget_threshold_alerts.sql`: monthly tenant/process threshold receipts and default accountable notification routing.
 80. `0080_tenant_model_policy.sql`: owner-controlled tenant Workers AI model approvals, seeded safely for existing tenants.
 81. `0081_governance_reviews.sql`: accountable quarterly privacy, model, access, and recovery review obligations.
+82. `0082_governance_review_alerts.sql`: deduplicated due/overdue review receipts and accountable in-app routing.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

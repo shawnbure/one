@@ -1004,6 +1004,8 @@ Exit criteria: multiple tenants can operate with measurable isolation, reliabili
 
 Customer governance uses recurring control-plane reviews rather than informal calendar reminders. Each tenant receives quarterly privacy/architecture, model inventory, access/role, and incident/recovery obligations. Due or overdue reviews degrade readiness; accountable completion requires an evidence reference and notes, advances the next due date, and emits audit evidence. These records are queried only by governance surfaces and never by agent hot paths.
 
+The hourly scheduled dispatcher scans a bounded 14-day review horizon and routes due work through the normal notification policy. A D1 receipt keyed to the exact review due cycle and due/overdue stage makes overlapping Cron invocations idempotent while permitting one distinct overdue escalation. Failed or unroutable notification claims are released for later recovery; no inference or reviewed business content is involved.
+
 ### Phase 4 — AI Gateway handoff
 
 Deliverables:

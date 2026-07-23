@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 81,
-  "requiredMigrationName": "0081_governance_reviews.sql"
+  "requiredMigrationId": 82,
+  "requiredMigrationName": "0082_governance_review_alerts.sql"
 }

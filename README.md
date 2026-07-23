@@ -48,7 +48,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Portable rubric standards with backward-compatible `workrr-rubrics/v1` exchange plus Ed25519-signed `v2` publishing, tamper verification, owner/admin import approval, strict bounds and sensitive-content rejection, and destination-side activation review.
 - Isolated baseline-versus-candidate Cloudflare model trials with quality/cost recommendations and automatic masking of common sensitive patterns before case persistence.
 - Tenant-wide and per-process incident containment with drain/emergency-stop admission gates, deferred paused work, evidence timelines, guarded recovery, and critical notifications.
-- Accountable quarterly governance reviews for privacy architecture, model inventory, access roles, and incident recovery, with due-state readiness, bounded evidence references, owner-only completion, and immutable audit events.
+- Accountable quarterly governance reviews for privacy architecture, model inventory, access roles, and incident recovery, with due-state readiness, bounded evidence references, owner-only completion, immutable audit events, and deduplicated Cron-driven due/overdue tasks.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
 - Microsoft 365 delegated OAuth with PKCE, one-time state, selectable least-privilege Graph scopes, AES-256-GCM refresh-token storage, rotation-aware health checks, Mail.Send notification delivery, and disconnect evidence.
 - Tenant-configurable DLP detectors with audit, redact, and block actions enforced before Queue, Workflow, Durable Agent, model, evaluation, and persisted-preview boundaries.

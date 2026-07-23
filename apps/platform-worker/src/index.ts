@@ -78,6 +78,7 @@ import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   setLaunchpadThreadArchived } from "./launchpad";
 import { emitMaintenanceDegradedAlerts, runScheduledMaintenance } from "./maintenance";
 import { emitBudgetThresholdAlerts } from "./budget-alerts";
+import { emitGovernanceReviewAlerts } from "./governance-review-alerts";
 import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
 
 export { ProcessAgent } from "./agent";
@@ -2451,7 +2452,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       { name: "autonomy_safety", run: () => evaluateAllAutonomySafety(env, now) },
       { name: "access_session_expiry", run: () => expireAccessSessions(env, now) },
       { name: "value_target_reviews", run: () => emitValueTargetReviewAlerts(env, now) },
-      { name: "budget_threshold_alerts", run: () => emitBudgetThresholdAlerts(env, now) }
+      { name: "budget_threshold_alerts", run: () => emitBudgetThresholdAlerts(env, now) },
+      { name: "governance_review_alerts", run: () => emitGovernanceReviewAlerts(env, now) }
     ], now).then(async (result) => {
       await emitMaintenanceDegradedAlerts(env, result);
       return result;
