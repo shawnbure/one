@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 89, name: "0089_ai_gateway_handoff.sql", applied_at: "2026-07-23 23:00:00"
+            id: 90, name: "0090_custom_dlp_entries.sql", applied_at: "2026-07-23 23:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -831,6 +831,27 @@ describe("control-plane security boundary", () => {
     }), env as never, executionCtx as never);
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("UPDATE dlp_rules"))).toBe(false);
+  });
+
+  it("prevents viewers from creating or changing organization-specific DLP phrases", async () => {
+    for (const request of [
+      new Request("http://localhost/api/dlp/custom-entries", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ label: "Sensitive project", term: "Project Falcon",
+          action: "block", direction: "both" })
+      }),
+      new Request("http://localhost/api/dlp/custom-entries/entry-1", {
+        method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ action: "audit", direction: "both", enabled: false, expectedRevision: 1 })
+      })
+    ]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(request, env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("custom_dlp_entries"))).toBe(false);
+    }
   });
 
   it("allows viewers to export but not import portable evaluation packages", async () => {

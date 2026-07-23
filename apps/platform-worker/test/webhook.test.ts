@@ -24,7 +24,7 @@ function webhookEnvironment(rules: unknown[] = []) {
           if (sql.includes("tenant_operating_controls")) return { mode: "active" };
           return null;
         },
-        async all() { return { results: rules }; },
+        async all() { return { results: sql.includes("custom_dlp_entries") ? [] : rules }; },
         async run() {
           if (sql.includes("INSERT OR IGNORE INTO webhook_receipts")) {
             if (receipt) return { meta: { changes: 0 } };

@@ -6,7 +6,7 @@ export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
   const aiGatewayPromise = getAiGatewaySetting(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, emailRoutes,
-    credentials, tenantControl, dlpRules, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
+    credentials, tenantControl, dlpRules, customDlpEntries, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.execution_profile, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
       b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id,
       r.evaluation_status, r.evaluated_at,
@@ -46,8 +46,13 @@ export async function getGovernance(env: Env, tenantId: string) {
       .bind(tenantId).first(),
     env.DB.prepare(`SELECT detector, label, action, direction, enabled, updated_by, updated_at
       FROM dlp_rules WHERE tenant_id=? ORDER BY detector`).bind(tenantId).all(),
-    env.DB.prepare(`SELECT direction, stage, detector, action, match_count, execution_id, blueprint_id, created_at
-      FROM dlp_events WHERE tenant_id=? ORDER BY created_at DESC LIMIT 30`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT id, label, action, direction, enabled, revision, updated_by, updated_at
+      FROM custom_dlp_entries WHERE tenant_id=? ORDER BY enabled DESC, label`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT e.direction, e.stage, e.detector, e.action, e.match_count, e.execution_id,
+      e.blueprint_id, e.created_at, c.label display_label
+      FROM dlp_events e LEFT JOIN custom_dlp_entries c
+        ON c.tenant_id=e.tenant_id AND e.detector=('custom:' || c.id)
+      WHERE e.tenant_id=? ORDER BY e.created_at DESC LIMIT 30`).bind(tenantId).all(),
     env.DB.prepare(`SELECT t.id, t.adapter_kind, t.connection_id, t.enabled,
       COUNT(pt.blueprint_id) process_count,
       CASE WHEN t.adapter_kind='mock' THEN 1
@@ -102,6 +107,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     emailRoutes: emailRoutes.results,
     credentials: credentialRows,
     dlpRules: dlpRules.results,
+    customDlpEntries: customDlpEntries.results,
     dlpEvents: dlpEvents.results,
     deploymentVerification,
     models,

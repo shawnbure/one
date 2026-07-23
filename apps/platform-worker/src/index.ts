@@ -31,7 +31,7 @@ import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate,
 import { getUsageLedger, importBillingEvidence, updateProcessBudget, voidBillingEvidence } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
-import { isDlpBlocked, updateDlpRule } from "./dlp";
+import { createCustomDlpEntry, isDlpBlocked, updateCustomDlpEntry, updateDlpRule } from "./dlp";
 import { getShadowReview, listShadowReviews, reviewShadowExecution, ShadowReviewConflict } from "./shadow";
 import { getProviderAcceptance, runMicrosoftAcceptance } from "./provider-acceptance";
 import { getPlatformVersion } from "./platform-version";
@@ -2440,6 +2440,27 @@ app.patch("/api/dlp/rules/:detector", requireRoles("admin", "owner"), async (c) 
       detector, await c.req.json()) });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "DLP rule update failed" }, 400);
+  }
+});
+
+app.post("/api/dlp/custom-entries", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await createCustomDlpEntry(c.env, c.get("tenantId"), c.get("actorId"),
+      await c.req.json()) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Custom DLP entry could not be created" }, 400);
+  }
+});
+
+app.patch("/api/dlp/custom-entries/:id", requireRoles("admin", "owner"), async (c) => {
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Custom DLP entry ID is required" }, 400);
+  try {
+    return c.json({ data: await updateCustomDlpEntry(c.env, c.get("tenantId"), c.get("actorId"), id,
+      await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Custom DLP entry could not be updated";
+    return c.json({ error: message }, message.includes("changed") ? 409 : 400);
   }
 });
 

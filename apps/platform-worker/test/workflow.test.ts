@@ -22,7 +22,7 @@ function workflowEnvironment(rules: unknown[] = []) {
             instructions_json: "[]", guardrails_json: '["No contract changes"]', checksum: "abc", published_at: "now" };
           return null;
         },
-        async all() { return { results: rules }; },
+        async all() { return { results: sql.includes("custom_dlp_entries") ? [] : rules }; },
         async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; }
       };
       return statement;

@@ -1485,6 +1485,10 @@ function Governance({
   const [incidentForm, setIncidentForm] = useState({ title: "", severity: "medium", blueprintId: "", impact: "" });
   const [incidentBusy, setIncidentBusy] = useState(false);
   const [dlpBusy, setDlpBusy] = useState<string | null>(null);
+  const [customDlpForm, setCustomDlpForm] = useState({
+    label: "", term: "", action: "redact" as "audit" | "redact" | "block",
+    direction: "both" as "input" | "output" | "both"
+  });
   const [modelPolicyBusy, setModelPolicyBusy] = useState<string | null>(null);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [gatewayForm, setGatewayForm] = useState({
@@ -1507,6 +1511,7 @@ function Governance({
   });
   const canManageRetention = session?.user.role === "admin" || session?.user.role === "owner";
   const canManageModels = session?.user.role === "admin" || session?.user.role === "owner";
+  const canManageDlp = session?.user.role === "admin" || session?.user.role === "owner";
   async function changeModelPolicy(modelId: string, enabled: boolean) {
     setModelPolicyBusy(modelId);
     try {
@@ -1635,6 +1640,32 @@ function Governance({
     } catch (error) { onNotice(error instanceof Error ? error.message : "DLP policy update failed"); }
     finally { setDlpBusy(null); }
   }
+  async function addCustomDlp() {
+    if (!customDlpForm.label.trim() || !customDlpForm.term.trim()) {
+      onNotice("Enter a safe label and the protected phrase."); return;
+    }
+    setDlpBusy("custom:new");
+    try {
+      await api.createCustomDlpEntry(customDlpForm);
+      setCustomDlpForm({ label: "", term: "", action: "redact", direction: "both" });
+      await onReload();
+      onNotice("Organization-specific DLP phrase encrypted and activated.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Custom DLP entry could not be created"); }
+    finally { setDlpBusy(null); }
+  }
+  async function changeCustomDlp(entry: GovernanceData["customDlpEntries"][number],
+    patch: { action?: typeof entry.action; direction?: typeof entry.direction; enabled?: boolean }) {
+    setDlpBusy(entry.id);
+    try {
+      await api.updateCustomDlpEntry(entry.id, {
+        action: patch.action ?? entry.action, direction: patch.direction ?? entry.direction,
+        enabled: patch.enabled ?? Boolean(entry.enabled), expectedRevision: entry.revision
+      });
+      await onReload();
+      onNotice(`${entry.label} DLP policy updated.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Custom DLP policy update failed"); }
+    finally { setDlpBusy(null); }
+  }
   return (
     <section className="foundation-page">
       <div className="governance-title">
@@ -1749,10 +1780,51 @@ function Governance({
                 <option value="both">Input + output</option><option value="input">Input only</option><option value="output">Output only</option>
               </select>
             </div>)}
+            <div className="custom-dlp-heading">
+              <span><strong>Organization phrases</strong><small>Encrypted at rest · values never return to this screen</small></span>
+              <em>{data.customDlpEntries.length}/25</em>
+            </div>
+            {data.customDlpEntries.map((entry) => <div key={entry.id}>
+              <label className="dlp-toggle"><input type="checkbox" checked={Boolean(entry.enabled)}
+                disabled={!canManageDlp || dlpBusy === entry.id}
+                onChange={(event) => void changeCustomDlp(entry, { enabled: event.target.checked })}/>
+                <span><strong>{entry.label}</strong><small>protected custom phrase · revision {entry.revision}</small></span></label>
+              <select value={entry.action} disabled={!canManageDlp || dlpBusy === entry.id}
+                onChange={(event) => void changeCustomDlp(entry,
+                  { action: event.target.value as "audit" | "redact" | "block" })}>
+                <option value="audit">Audit only</option><option value="redact">Redact</option><option value="block">Block</option>
+              </select>
+              <select value={entry.direction} disabled={!canManageDlp || dlpBusy === entry.id}
+                onChange={(event) => void changeCustomDlp(entry,
+                  { direction: event.target.value as "input" | "output" | "both" })}>
+                <option value="both">Input + output</option><option value="input">Input only</option><option value="output">Output only</option>
+              </select>
+            </div>)}
+            {canManageDlp && <div className="custom-dlp-form">
+              <label><span>Safe label</span><input value={customDlpForm.label} maxLength={80}
+                placeholder="e.g. Project Falcon"
+                onChange={(event) => setCustomDlpForm({ ...customDlpForm, label: event.target.value })}/></label>
+              <label><span>Protected phrase</span><input value={customDlpForm.term} maxLength={120}
+                type="password" autoComplete="new-password" placeholder="Encrypted after save"
+                onChange={(event) => setCustomDlpForm({ ...customDlpForm, term: event.target.value })}/></label>
+              <select aria-label="Custom phrase action" value={customDlpForm.action}
+                onChange={(event) => setCustomDlpForm({ ...customDlpForm,
+                  action: event.target.value as "audit" | "redact" | "block" })}>
+                <option value="audit">Audit only</option><option value="redact">Redact</option><option value="block">Block</option>
+              </select>
+              <select aria-label="Custom phrase direction" value={customDlpForm.direction}
+                onChange={(event) => setCustomDlpForm({ ...customDlpForm,
+                  direction: event.target.value as "input" | "output" | "both" })}>
+                <option value="both">Input + output</option><option value="input">Input only</option><option value="output">Output only</option>
+              </select>
+              <button className="primary-button" disabled={dlpBusy === "custom:new"} onClick={() => void addCustomDlp()}>
+                {dlpBusy === "custom:new" ? "Encrypting…" : "Protect phrase"}
+              </button>
+            </div>}
           </div>
           <div className="dlp-evidence"><div className="section-head"><div><h3>Recent evidence</h3><p>Counts and policy actions only—matched content is never logged.</p></div></div>
             {data.dlpEvents.length ? data.dlpEvents.slice(0, 8).map((event, index) => <article key={`${event.created_at}-${event.detector}-${index}`}>
-              <span className={`dlp-action ${event.action}`}>{event.action}</span><span><strong>{event.detector.replaceAll("_", " ")}</strong><small>{event.stage} · {event.direction} · {event.created_at}</small></span><em>{event.match_count}</em>
+              <span className={`dlp-action ${event.action}`}>{event.action}</span><span><strong>{event.display_label || event.detector.replaceAll("_", " ")}</strong><small>{event.stage} · {event.direction} · {event.created_at}</small></span><em>{event.match_count}</em>
             </article>) : <p className="empty-copy">No sensitive-pattern detections recorded.</p>}
           </div>
         </div>

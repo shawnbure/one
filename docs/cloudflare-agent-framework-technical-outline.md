@@ -1010,6 +1010,10 @@ The hourly scheduled dispatcher scans a bounded 14-day review horizon and routes
 
 Implemented MVP boundary: the tenant Gateway is disabled by default, requires owner privacy/billing evidence, and gates a separately approved curated external model. Native Workers AI remains the no-read default. External immutable releases use Cloudflare-managed Unified Billing, bypass response caching, preserve Agent/Workflow/tool behavior, and persist bounded Gateway routing evidence. BYOK, multi-leg fallback authoring, and Cloudflare-side spend/DLP configuration remain deliberate later extensions.
 
+### Organization-specific DLP phrases
+
+The six built-in pattern detectors are supplemented by up to 25 tenant-defined exact phrases. These policies stay in the control plane rather than KV, Cache API, Agent SQLite, or Workflow state. D1 stores AES-GCM ciphertext, IV, safe label, policy metadata, and a keyed duplicate digest; the deployment encryption root is separated into encryption and digest keys with distinct HKDF contexts. The browser never receives the phrase after submission. At each protected boundary the Worker performs a bounded tenant read, decrypts enabled phrases only in request memory, evaluates longer phrases first, and discards the clear values with the isolate/request lifetime. Evidence contains an opaque custom-entry ID and count, never the label or match. Configuration packages intentionally exclude these non-portable encrypted values.
+
 Deliverables:
 
 - `AiGatewayProvider`;

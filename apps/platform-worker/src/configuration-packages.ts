@@ -90,7 +90,8 @@ export async function exportConfigurationPackage(env: Env, tenantId: string): Pr
     exclusions: [
       "credentials, tokens, and secret values", "notification destinations",
       "member identities and owner assignments", "prompts, knowledge, and business payloads",
-      "process definitions (use process packages)", "legal holds and prior audit evidence"
+      "organization-specific encrypted DLP phrases", "process definitions (use process packages)",
+      "legal holds and prior audit evidence"
     ]
   };
 }
