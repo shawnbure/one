@@ -846,6 +846,19 @@ a:focus-visible {
   .metrics { grid-template-columns: 1fr 1fr; }
   .grid-main { grid-template-columns: 1fr; }
   .side-stack { grid-template-columns: 1fr; }
+  main > header {
+    box-sizing: border-box;
+    width: 100%;
+    height: auto;
+    min-height: 108px;
+    align-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 18px;
+  }
+  main > header .crumb { width: 100%; }
+  main > header .header-actions { width: 100%; min-width: 0; }
+  main > header .search { width: auto; min-width: 0; flex: 1 1 auto; }
 }
 
 .lifecycle-center { margin-top: 16px; overflow: hidden; }

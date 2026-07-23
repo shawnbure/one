@@ -567,7 +567,8 @@ export function App() {
               setStudioProcessId(id); setActive("Processes");
             }}/>
           ) : active === "Notifications" ? (
-            <NotificationsView session={session} onNotice={setNotice} />
+            <NotificationsView session={session} onNotice={setNotice}
+              onOpenValue={() => setActive("Value & decisions")} />
           ) : active === "Customer setup" ? (
             <CustomerSetupView session={session} onNotice={setNotice} />
           ) : active === "Team & roles" ? (

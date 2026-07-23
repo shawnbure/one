@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 72,
-  "requiredMigrationName": "0072_process_value_targets.sql"
+  "requiredMigrationId": 73,
+  "requiredMigrationName": "0073_value_target_review_alerts.sql"
 }

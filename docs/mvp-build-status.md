@@ -242,6 +242,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 70. `0070_access_session_audit.sql`: privacy-bounded Cloudflare Access session evidence, designated emergency administrator plan, and reviewable emergency-session events.
 71. `0071_business_value_measurements.sql`: attributable customer outcome evidence, baseline-derived value calculations, immutable correction history, and tenant/process indexes.
 72. `0072_process_value_targets.sql`: owner-approved 30-day process targets, exception thresholds, review evidence, optimistic revisions, and review-date indexing.
+73. `0073_value_target_review_alerts.sql`: deduplicated due-soon and overdue target-review notifications with accountable in-app ownership and opt-in external delivery policies.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -370,6 +371,8 @@ Every process can now pair its discovery baseline with an owner-approved 30-day 
 Process Studio now makes the baseline-and-target requirement an activation invariant instead of dashboard guidance. Release publication performs a same-tenant server check before running the release evaluation gate and requires both a discovery baseline and a current owner-approved value target. An expired target review blocks a new publication until the target is renewed. The Releases workspace presents these two checks in a readable launch-evidence panel and disables publication with the exact missing evidence, while the API remains authoritative if a client bypasses the interface. Governed rollback remains available because it restores a previously evaluated release during an incident rather than introducing a new deployment.
 
 The executive portfolio now joins the existing 30-day execution-cost ledger to business outcome evidence by tenant and process. It reports gross measured value, captured Workers AI cost, net value, value-to-cost efficiency, and per-item AI cost without adding reads to an agent turn or duplicating cost storage. Expansion requires positive net value in addition to the existing volume, target, incident, safety, failure, and override gates; a process whose estimated AI cost meets or exceeds measured value is directed to correct model choice, prompt size, retries, or scope. The UI explicitly labels this as the rate captured by Workrr rather than reconciled Cloudflare billing, preserving the separate invoice-reconciliation evidence boundary.
+
+Hourly maintenance now turns target review dates into accountable work. One bounded scan considers at most 100 targets due within seven days, excludes retired processes, and emits a due-soon response task followed by a distinct overdue task if the same target revision expires. A partial unique D1 index makes each tenant/policy/process-revision/stage event idempotent even if Cron overlaps or retries. In-app routing is enabled with a lifecycle support owner or best eligible tenant owner and a one-day acknowledgement SLA; matching Microsoft email and signed-webhook policies exist but remain disabled until the customer configures them. Notification detail contains the process name, date, and required next action—not target rationale or approval evidence—and owners can move directly from the event to Value & Decisions.
 
 ## Remaining aggressive-MVP work
 

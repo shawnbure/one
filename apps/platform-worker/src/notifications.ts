@@ -40,18 +40,19 @@ export async function emitNotification(env: Env, tenantId: string, event: {
   const ids: string[] = [];
   for (const policy of policies.results) {
     const id = crypto.randomUUID();
-    ids.push(id);
     const channel = String(policy.channel);
     const status = channel === "in_app" ? "delivered" : "pending";
     const now = new Date();
     const scheduledFor = channel === "in_app" ? null : nextDeliveryTime(policy as unknown as DeliveryPolicy, now);
-    await env.DB.prepare(`INSERT INTO notification_events
+    const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO notification_events
       (id, tenant_id, policy_id, event_type, severity, title, detail, target_type, target_id,
        delivery_status, delivered_at, delivery_scheduled_for)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(id, tenantId, policy.id, event.eventType, policy.severity, event.title, event.detail,
         event.targetType ?? null, event.targetId ?? null, status, status === "delivered" ? now.toISOString() : null,
         scheduledFor?.toISOString() ?? null).run();
+    if (inserted.meta.changes !== 1) continue;
+    ids.push(id);
     if (channel === "webhook" || channel === "email") {
       const bypassesSchedule = String(policy.severity) === "critical" && Number(policy.critical_bypass);
       if ((!scheduledFor || scheduledFor <= now) &&

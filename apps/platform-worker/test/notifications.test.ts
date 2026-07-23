@@ -109,7 +109,7 @@ describe("signed notification delivery", () => {
       expect.objectContaining({ kind: "notification_delivery", tenantId: "tenant-1" }),
       expect.objectContaining({ kind: "notification_delivery", tenantId: "tenant-1" }),
     ]);
-    expect(writes.filter((sql) => sql.includes("INSERT INTO notification_events"))).toHaveLength(3);
+    expect(writes.filter((sql) => sql.includes("INTO notification_events"))).toHaveLength(3);
     expect(writes.filter((sql) => sql.includes("delivery_queued_at"))).toHaveLength(2);
   });
 

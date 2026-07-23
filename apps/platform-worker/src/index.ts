@@ -15,6 +15,7 @@ import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { recordValueMeasurement, voidValueMeasurement } from "./value-evidence";
 import { updateValueTarget, ValueTargetConflict } from "./value-targets";
+import { emitValueTargetReviewAlerts } from "./value-target-review";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotification, emitNotification, enqueueDueNotificationDeliveries, failNotificationDelivery,
   safeEmailDestination, safeWebhookDestination } from "./notifications";
@@ -2279,7 +2280,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       enforceAllTenantRetention(env, now),
       expireRubricPublisherKeys(env, now),
       evaluateAllAutonomySafety(env, now),
-      expireAccessSessions(env, now)
+      expireAccessSessions(env, now),
+      emitValueTargetReviewAlerts(env, now)
     ]));
   }
 };

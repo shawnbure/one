@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Bell, CheckCircle2, KeyRound, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { api, type Member, type NotificationData, type SessionData } from "./api";
 
-export function NotificationsView({ session, onNotice }: {
+export function NotificationsView({ session, onNotice, onOpenValue }: {
   session: SessionData | null;
   onNotice: (message: string) => void;
+  onOpenValue: () => void;
 }) {
   const [data, setData] = useState<NotificationData | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function NotificationsView({ session, onNotice }: {
     finally { setBusy(null); }
   }
   if (!data) return <div className="loading-card">Loading notification center…</div>;
-  return <section className="notifications-page"><div className="page-title"><div><span className="eyebrow"><Bell size={14}/> OPERATIONAL RESPONSE</span><h1>Notifications</h1><p>Route approvals, failures, exhausted retries, and control violations to accountable owners.</p></div><button className="refresh-button" onClick={() => void load()}><RefreshCw size={15}/>Refresh</button></div>
+  return <section className="notifications-page"><div className="page-title"><div><span className="eyebrow"><Bell size={14}/> OPERATIONAL RESPONSE</span><h1>Notifications</h1><p>Route approvals, failures, expiring reviews, exhausted retries, and control violations to accountable owners.</p></div><button className="refresh-button" onClick={() => void load()}><RefreshCw size={15}/>Refresh</button></div>
     <div className="delivery-credentials"><div className="credential-summary panel"><span className="foundation-icon"><KeyRound size={18}/></span><span><strong>Cloudflare webhook credential</strong><small>{data.credentials[0]?.purpose ?? "No external delivery credential is registered."}</small></span><span className={`connection-state ${data.credentials[0]?.configured ? "healthy" : "attention"}`}><i/>{data.credentials[0]?.configured ? "Configured" : "Required"}</span></div>
       <div className="credential-summary panel"><span className="foundation-icon"><Send size={18}/></span><span><strong>Microsoft 365 email</strong><small>{data.microsoftEmail?.account_email ?? data.microsoftEmail?.account_name ?? "Connect a delegated account with Mail.Send."}</small></span><span className={`connection-state ${data.microsoftEmail?.configured ? "healthy" : "attention"}`}><i/>{data.microsoftEmail?.configured ? "Ready" : "Required"}</span></div></div>
     <div className="notification-layout"><article className="policy-list panel"><div className="section-head"><div><h2>Routing policies</h2><p>In-app alerts are owned response tasks. Webhook and Microsoft email rows are provider-delivery evidence.</p></div></div>{data.policies.map((policy) => {
@@ -129,13 +130,15 @@ export function NotificationsView({ session, onNotice }: {
                 [policy.id]: { ...deliveryPolicy, digestHourUtc: Number(event.target.value) } })}/></label>}
             <button disabled={busy === policy.id} onClick={() => void saveDeliveryPolicy(policy.id)}>Save schedule</button></span></>}</span><span className={`delivery ${policy.enabled ? "enabled" : "disabled"}`}>{policy.enabled ? "Enabled" : "Disabled"}</span>{canConfigure && <button disabled={busy === policy.id} onClick={() => void toggle(policy.id, !policy.enabled)}>{policy.enabled ? "Disable" : "Enable"}</button>}</div>;
     })}</article>
-      <aside className="event-list panel"><div className="section-head"><div><h2>Recent events</h2><p>Human response and external delivery remain separate evidence.</p></div></div>{data.events.length ? data.events.map((event) => <div className={`event-row ${event.delivery_status} ${event.escalated_at ? "escalated" : ""}`} key={event.id}>{event.acknowledged_at || event.delivery_status === "delivered" ? <CheckCircle2 size={16}/> : <ShieldCheck size={16}/>}<span><strong>{event.title}</strong><small>{event.detail}</small><em>{event.channel === "in_app" ? `owner ${event.owner_name ?? "unassigned"} · ${event.acknowledged_at ? `acknowledged by ${event.acknowledged_by_name ?? "operator"}` : event.escalated_at ? "escalated" : `acknowledge within ${event.escalation_minutes} minutes`}` : `${event.delivery_status === "delivered" && event.response_status === 202 ? "accepted by provider" : event.delivery_status} · ${event.attempt_count ? `${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"} · ` : ""}`}{formatDate(event.created_at)}</em>
+      <aside className="event-list panel"><div className="section-head"><div><h2>Recent events</h2><p>Human response and external delivery remain separate evidence.</p></div></div>{data.events.length ? data.events.map((event) => <div className={`event-row ${event.delivery_status} ${event.escalated_at ? "escalated" : ""}`} key={event.id}>{event.acknowledged_at || event.delivery_status === "delivered" ? <CheckCircle2 size={16}/> : <ShieldCheck size={16}/>}<span><strong>{event.title}</strong><small>{event.detail}</small><em>{event.channel === "in_app" ? `owner ${event.owner_name ?? "unassigned"} · ${event.acknowledged_at ? `acknowledged by ${event.acknowledged_by_name ?? "operator"}` : event.escalated_at ? "escalated" : `acknowledge within ${event.escalation_minutes} minutes`}` : `${event.delivery_status === "delivered" && event.response_status === 202 ? "accepted by provider" : event.delivery_status} · ${event.attempt_count ? `${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"} · ` : ""}`} · {formatDate(event.created_at)}</em>
         {event.channel !== "in_app" && event.delivery_status === "pending" && event.delivery_scheduled_for &&
           !event.delivery_queued_at && <small className="delivery-scheduled">Scheduled · releases by hourly maintenance after {formatDate(event.delivery_scheduled_for)}</small>}
         {event.digest_batch_id && event.event_type !== "notification.digest" &&
           <small className="delivery-scheduled">Included in email digest · {event.delivery_status}</small>}
         {event.acknowledgement_note && <small className="acknowledgement-note">{event.acknowledgement_note}</small>}
         {event.last_error && <small className="delivery-error">{event.last_error}</small>}
+        {event.event_type === "value.target_review_due" &&
+          <button className="notification-action" onClick={onOpenValue}>Review target in Value &amp; decisions</button>}
         {event.channel === "in_app" && Boolean(event.acknowledgement_required) && !event.acknowledged_at && canAcknowledge && <span className="acknowledgement-editor">
           <input maxLength={1000} placeholder="Optional response note…" value={acknowledgementNotes[event.id] ?? ""} onChange={(input) =>
             setAcknowledgementNotes({ ...acknowledgementNotes, [event.id]: input.target.value })}/>

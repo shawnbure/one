@@ -321,9 +321,28 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
         (SELECT support_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?), 1, 1440)`)
       .bind(`notify-help-request-${suffix}`, tenantId, tenantId),
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity, owner_id,
+       acknowledgement_required, escalation_minutes)
+      VALUES (?, ?, 'value.target_review_due', 'in_app', NULL, 1, 'warning',
+        COALESCE(
+          (SELECT support_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?),
+          (SELECT id FROM tenant_members WHERE tenant_id = ? AND status = 'active'
+           AND role IN ('owner', 'admin', 'operator')
+           ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, created_at LIMIT 1)
+        ), 1, 1440)`)
+      .bind(`notify-value-target-review-${suffix}`, tenantId, tenantId, tenantId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity, credential_ref_id)
       VALUES (?, ?, 'execution.failed', 'webhook', NULL, 0, 'critical', ?)`)
       .bind(`notify-execution-webhook-${suffix}`, tenantId, credentialId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity, credential_ref_id)
+      VALUES (?, ?, 'value.target_review_due', 'webhook', NULL, 0, 'warning', ?)`)
+      .bind(`notify-value-target-review-webhook-${suffix}`, tenantId, credentialId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity)
+      VALUES (?, ?, 'value.target_review_due', 'email', NULL, 0, 'warning')`)
+      .bind(`notify-value-target-review-email-${suffix}`, tenantId),
     ...[
       ["approval.pending", "warning", "approval"],
       ["execution.failed", "critical", "execution"],
