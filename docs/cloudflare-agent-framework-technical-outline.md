@@ -474,14 +474,15 @@ mandatory prompt modules
 
 When recent messages cross a configured token threshold, a background or durable summarization step produces a versioned session summary. Old messages remain available for audit and targeted retrieval, but they are no longer included verbatim on every turn.
 
-Suggested conversation tables inside each Agent instance:
+The MVP uses these conversation tables inside each Agent instance:
 
-- `messages`: complete ordered message and tool-call history;
-- `session_summaries`: versioned rolling summaries with covered message range;
-- `memory_facts`: explicit durable facts with source, confidence, sensitivity, and expiry;
+- `governed_memory`: ordered user/assistant turns with correction, quarantine, and deletion state;
+- `durable_fact`: explicit facts with source-turn/execution provenance, allowlisted category, proposal/approval state, revision, and expiry;
 - `pending_actions`: tools, external events, and approvals awaiting completion;
-- `cached_releases`: immutable prompt bundles used by this conversation;
-- `session_events`: local ordered lifecycle events.
+- `prompt_bundle`: immutable prompt bundles used by this conversation;
+- `actor_local_work`: queued and scheduled work owned by this actor.
+
+Rolling summaries are not produced automatically in the MVP. Context remains deterministically bounded to 20 recent active turns and 24,000 characters. Long-term facts are likewise never inferred: an authorized operator proposes one from an active source turn, tenant DLP protects it, and a separate governed action approves it. Only 20 unexpired active facts and 4,000 fact characters may enter a turn. Corrections return a fact to proposal; retirement and expiry remove it immediately. Fact text stays in actor SQLite while D1 receives metadata-only audit evidence.
 
 #### Many conversations using the same agent definition
 
@@ -512,10 +513,10 @@ The framework distinguishes four scopes:
 | --- | --- | --- |
 | Turn working state | ephemeral memory / small durable Agent state | current tool call, stream status |
 | Conversation memory | Agent SQLite | messages, summary, pending approvals |
-| Customer/tenant memory | D1 and optionally Vectorize | preferences, verified facts, shared business context |
+| Customer/tenant memory | D1 and optionally Vectorize | future shared preferences and verified business facts |
 | Source knowledge | R2 and Vectorize | manuals, policies, documents |
 
-Agents may read broader memory only through tenant- and permission-aware services. Conversation data is not silently promoted into customer memory; promotion requires an explicit memory policy and records its source.
+Agents may read broader memory only through tenant- and permission-aware services. Actor facts remain scoped to one Durable Agent identity and are not silently promoted into customer/tenant memory. Any future cross-actor promotion requires a separate explicit policy and source evidence.
 
 ## 6. Core domain model
 

@@ -25,12 +25,13 @@ import {
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type ActorLocalWork, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
-  type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
+  type DurableActorFact, type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
   type QueueOperationsData, type RecoveryOperations, type RecoveryTask, type SessionData,
   type ShadowReview,
   type ToolActionDispatch, type ToolActionOperationsData,
   type ToolInvocation } from "./api";
 import "./queue-operations.css";
+import "./durable-facts.css";
 
 interface Props {
   processes: AgentBlueprint[];
@@ -684,6 +685,10 @@ function MemoryGovernance({ executionId, onNotice }: {
   const [reason, setReason] = useState("");
   const [content, setContent] = useState("");
   const [migrationReason, setMigrationReason] = useState("");
+  const [factDraft, setFactDraft] = useState<{ sourceTurnId: string; content: string;
+    category: DurableActorFact["category"]; reason: string; expiresAt: string } | null>(null);
+  const [factAction, setFactAction] = useState<{ fact: DurableActorFact;
+    action: "approve" | "correct" | "retire"; content: string; reason: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -727,6 +732,43 @@ function MemoryGovernance({ executionId, onNotice }: {
     } catch (error) { onNotice(error instanceof Error ? error.message : "Actor release could not migrate"); }
     finally { setLoading(false); }
   }
+  function proposeFrom(turn: GovernedMemoryTurn) {
+    setFactDraft({
+      sourceTurnId: turn.id, content: turn.content.slice(0, 500), category: "customer_context",
+      reason: "", expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10)
+    });
+  }
+  async function saveFactProposal() {
+    if (!factDraft || !factDraft.content.trim() || factDraft.reason.trim().length < 5) {
+      onNotice("Add a bounded fact and a specific reason of at least five characters."); return;
+    }
+    setLoading(true);
+    try {
+      await api.proposeExecutionFact(executionId, {
+        ...factDraft, content: factDraft.content.trim(), reason: factDraft.reason.trim(),
+        expiresAt: new Date(`${factDraft.expiresAt}T23:59:59.000Z`).toISOString()
+      });
+      setFactDraft(null); await load();
+      onNotice("Durable fact proposed. It will not enter model context until separately approved.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Durable fact could not be proposed"); }
+    finally { setLoading(false); }
+  }
+  async function saveFactAction() {
+    if (!factAction || factAction.reason.trim().length < 5) {
+      onNotice("Add a specific reason of at least five characters."); return;
+    }
+    setLoading(true);
+    try {
+      await api.governExecutionFact(executionId, factAction.fact.id, {
+        action: factAction.action, expectedRevision: factAction.fact.revision,
+        reason: factAction.reason.trim(),
+        content: factAction.action === "correct" ? factAction.content.trim() : undefined
+      });
+      setFactAction(null); await load();
+      onNotice(`Durable fact ${factAction.action === "approve" ? "approved for context" : `${factAction.action}d`}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Durable fact could not change"); }
+    finally { setLoading(false); }
+  }
 
   return <section className="memory-governance">
     <div className="memory-heading"><span><BrainCircuit size={20}/></span><div>
@@ -738,7 +780,7 @@ function MemoryGovernance({ executionId, onNotice }: {
       <span><strong>{memory.turns.filter((turn) => turn.status === "active").length}</strong> active turns</span>
       <span><strong>{memory.contextPolicy.maximumTurns}</strong> turn context ceiling</span>
       <span><strong>{memory.contextPolicy.maximumCharacters.toLocaleString()}</strong> character ceiling</span>
-      <span><strong>Off</strong> automatic fact promotion</span>
+      <span><strong>{memory.facts.filter((fact) => fact.status === "active").length}</strong> approved durable facts</span>
     </div>
     <div className={`actor-release-state ${memory.migrationAvailable ? "update" : "current"}`}>
       <div><small>INSTALLED RELEASE</small><strong>v{memory.currentVersion ?? "unknown"}</strong>
@@ -761,6 +803,7 @@ function MemoryGovernance({ executionId, onNotice }: {
         <p>{turn.content}</p>
         <footer><small>{formatDate(turn.createdAt)}{turn.sourceExecutionId ? ` · run ${turn.sourceExecutionId.slice(0, 8)}` : " · legacy turn"}</small>
           {turn.status !== "deleted" && <span>
+            <button onClick={() => proposeFrom(turn)}><BrainCircuit size={12}/>Propose fact</button>
             <button onClick={() => start(turn, "correct")}><Pencil size={12}/>Correct</button>
             {turn.status === "active"
               ? <button onClick={() => start(turn, "quarantine")}><XCircle size={12}/>Quarantine</button>
@@ -768,7 +811,23 @@ function MemoryGovernance({ executionId, onNotice }: {
             <button className="delete" onClick={() => start(turn, "delete")}><Trash2 size={12}/>Delete</button>
           </span>}</footer>
         {turn.lastReason && <aside>Last change: {turn.lastReason}</aside>}
-      </article>) : <p className="memory-empty">This actor has no stored conversation turns yet.</p>}</div></>}
+      </article>) : <p className="memory-empty">This actor has no stored conversation turns yet.</p>}</div>
+    <div className="durable-facts"><header><div><small>APPROVED LONG-TERM CONTEXT</small>
+      <h3>Durable facts</h3><p>Facts require provenance and a separate approval. Expired, proposed, and retired facts never enter model context.</p>
+    </div><span>{memory.factPolicy.maximumActiveFacts} fact ceiling · {memory.factPolicy.maximumContextCharacters.toLocaleString()} characters</span></header>
+      {memory.facts.length ? memory.facts.map((fact) => <article className={fact.status} key={fact.id}>
+        <div><span>{fact.category.replace("_", " ")}</span><em>{fact.status} · revision {fact.revision}</em></div>
+        <p>{fact.content}</p><small>Source turn {fact.sourceTurnId.slice(0, 8)} · expires {formatDate(fact.expiresAt)}</small>
+        <footer>{fact.status === "proposed" && <button onClick={() => setFactAction({
+          fact, action: "approve", content: fact.content, reason: ""
+        })}>Approve for context</button>}
+        {fact.status !== "retired" && <><button onClick={() => setFactAction({
+          fact, action: "correct", content: fact.content, reason: ""
+        })}>Correct proposal</button><button className="delete" onClick={() => setFactAction({
+          fact, action: "retire", content: fact.content, reason: ""
+        })}>Retire</button></>}</footer>
+      </article>) : <p className="memory-empty">No durable facts have been proposed for this actor.</p>}
+    </div></>}
     {edit && <div className="memory-editor"><div><strong>{edit.action} memory turn</strong>
       <button onClick={() => setEdit(null)}>Cancel</button></div>
       {edit.action === "correct" && <label>Corrected content<textarea maxLength={8000}
@@ -777,6 +836,31 @@ function MemoryGovernance({ executionId, onNotice }: {
         value={reason} onChange={(event) => setReason(event.target.value)}/></label>
       <button disabled={loading || !reason.trim() || (edit.action === "correct" && !content.trim())}
         onClick={() => void save()}>Apply governed change</button></div>}
+    {factDraft && <div className="memory-editor"><div><strong>Propose durable fact</strong>
+      <button onClick={() => setFactDraft(null)}>Cancel</button></div>
+      <label>Category<select value={factDraft.category} onChange={(event) => setFactDraft({
+        ...factDraft, category: event.target.value as DurableActorFact["category"]
+      })}><option value="customer_context">Customer context</option><option value="preference">Preference</option>
+        <option value="process_context">Process context</option><option value="constraint">Constraint</option></select></label>
+      <label>Bounded fact<textarea maxLength={500} value={factDraft.content}
+        onChange={(event) => setFactDraft({ ...factDraft, content: event.target.value })}/></label>
+      <label>Expiry<input type="date" value={factDraft.expiresAt}
+        onChange={(event) => setFactDraft({ ...factDraft, expiresAt: event.target.value })}/></label>
+      <label>Proposal reason<textarea maxLength={500} value={factDraft.reason}
+        placeholder="Why should this source turn become reusable context?"
+        onChange={(event) => setFactDraft({ ...factDraft, reason: event.target.value })}/></label>
+      <button disabled={loading || !factDraft.content.trim() || factDraft.reason.trim().length < 5}
+        onClick={() => void saveFactProposal()}>Create reviewable proposal</button></div>}
+    {factAction && <div className="memory-editor"><div><strong>{factAction.action} durable fact</strong>
+      <button onClick={() => setFactAction(null)}>Cancel</button></div>
+      {factAction.action === "correct" && <label>Corrected fact<textarea maxLength={500}
+        value={factAction.content} onChange={(event) => setFactAction({ ...factAction, content: event.target.value })}/></label>}
+      <label>Reason<textarea maxLength={500} value={factAction.reason}
+        placeholder="Record the evidence for this decision."
+        onChange={(event) => setFactAction({ ...factAction, reason: event.target.value })}/></label>
+      <button disabled={loading || factAction.reason.trim().length < 5 ||
+        (factAction.action === "correct" && !factAction.content.trim())}
+        onClick={() => void saveFactAction()}>Apply fact decision</button></div>}
   </section>;
 }
 

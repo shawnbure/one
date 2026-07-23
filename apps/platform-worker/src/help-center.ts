@@ -20,7 +20,7 @@ const modules: LearningModule[] = [
     minutes: 6, roles: ["admin", "builder", "owner", "operator", "reviewer", "viewer", "consumer"],
     steps: [
       "D1 stores tenant-scoped configuration, evidence, and operational reporting.",
-      "Durable actors retain only sticky conversation or entity state; instant agents do not create durable memory.",
+      "Durable actors retain sticky conversation or entity state. Long-term facts require a cited source turn, DLP, expiry, and human approval; instant agents do not create durable memory.",
       "Workers AI performs model inference inside the Cloudflare platform, while approvals govern consequential actions.",
       "Activity and API logs explain which release, model, policy, and actor produced an outcome."
     ]
@@ -75,7 +75,7 @@ const modules: LearningModule[] = [
     minutes: 4, roles: ["consumer"],
     steps: [
       "Provide only information needed for the approved business process.",
-      "A conversation process is sticky to its thread; an instant process does not retain conversational memory.",
+      "A conversation process is sticky to its thread and may use separately approved actor-local facts; an instant process does not retain conversational memory.",
       "Treat generated output as a recommendation unless the interface shows a completed approved action.",
       "Escalate when the answer lacks evidence, conflicts with policy, or contains unexpected sensitive data."
     ]

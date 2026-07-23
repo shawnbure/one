@@ -70,7 +70,7 @@ Recurring processes are configured in Process Studio with hourly, daily, or week
 
 DLP rules are tenant-scoped in D1 and loaded at each execution boundary so policy changes affect already-queued Workflow work. Email and phone values redact by default; SSNs, valid payment-card numbers, and API-secret patterns block; IP addresses default to evidence-only inspection. Audit-only content may reach the selected private model, but Workrr still masks it in D1 previews and Durable Object conversation history. DLP evidence stores detector, action, stage, direction, and count—never the matched value.
 
-Conversation, consumer, entity, shared-shard, and temporary-durable profiles reuse only active actor-local turns. Each call is bounded to the 20 most recent turns, 24,000 total characters, and 8,000 characters per turn before the current request is added. Quarantined and deleted turns are excluded immediately. Workrr does not automatically extract or promote durable “facts”; that remains disabled until an allowlisted, provenance-bearing memory schema is implemented.
+Conversation, consumer, entity, shared-shard, and temporary-durable profiles reuse only active actor-local turns. Each call is bounded to the 20 most recent turns, 24,000 total characters, and 8,000 characters per turn before the current request is added. Quarantined and deleted turns are excluded immediately. Long-term facts remain actor-local and are never inferred automatically: an operator must propose bounded content from an active source turn, tenant DLP must pass, and a separate governed approval must activate it. At most 20 unexpired approved facts and 4,000 fact characters enter context.
 
 ## Local development
 

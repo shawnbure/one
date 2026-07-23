@@ -63,7 +63,7 @@ import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperatio
   updateRetentionControls } from "./retention";
 import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConflict, updateHelpRequest } from "./help-center";
 import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence } from "./execution-evidence";
-import { governExecutionMemory, listExecutionMemory } from "./memory-governance";
+import { governExecutionFact, governExecutionMemory, listExecutionMemory, proposeExecutionFact } from "./memory-governance";
 import { migrateExecutionActorRelease } from "./actor-release-migration";
 import { getRecoveryOperations, RecoveryConflict, updateRecoveryTask } from "./recovery";
 import { DelegationConflict, listApprovalDelegations, setApprovalDelegation } from "./approval-delegations";
@@ -1291,6 +1291,53 @@ app.patch("/api/executions/:executionId/memory/:turnId",
       return c.json({ data: turn });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Actor memory could not be changed";
+      const status = isDlpBlocked(error) ? 422 : message.includes("changed") ? 409 :
+        message.includes("not found") ? 404 : 400;
+      return c.json({ error: message }, status);
+    }
+  });
+
+app.post("/api/executions/:executionId/memory/facts",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("executionId");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const fact = await proposeExecutionFact(c.env, c.get("tenantId"), c.get("actorId"),
+        executionId, await c.req.json());
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "memory_fact.proposed",
+        "execution_memory_fact", fact.id, {
+          executionId, category: fact.category, sourceTurnId: fact.sourceTurnId,
+          revision: fact.revision, status: fact.status, expiresAt: fact.expiresAt
+        });
+      c.header("cache-control", "no-store");
+      return c.json({ data: fact }, 201);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Durable fact could not be proposed";
+      const status = isDlpBlocked(error) ? 422 : message.includes("not found") ? 404 : 400;
+      return c.json({ error: message }, status);
+    }
+  });
+
+app.patch("/api/executions/:executionId/memory/facts/:factId",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("executionId");
+      const factId = c.req.param("factId");
+      if (!executionId || !factId) return c.json({ error: "Execution and durable fact IDs are required" }, 400);
+      const input = await c.req.json<{
+        action?: string; expectedRevision?: number; content?: string; reason?: string; expiresAt?: string;
+      }>();
+      const fact = await governExecutionFact(c.env, c.get("tenantId"), c.get("actorId"),
+        executionId, factId, input);
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `memory_fact.${input.action}`,
+        "execution_memory_fact", fact.id, {
+          executionId, category: fact.category, sourceTurnId: fact.sourceTurnId,
+          revision: fact.revision, status: fact.status, expiresAt: fact.expiresAt
+        });
+      c.header("cache-control", "no-store");
+      return c.json({ data: fact });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Durable fact could not be changed";
       const status = isDlpBlocked(error) ? 422 : message.includes("changed") ? 409 :
         message.includes("not found") ? 404 : 400;
       return c.json({ error: message }, status);

@@ -250,17 +250,34 @@ export interface GovernedMemoryTurn {
   createdAt: string;
   updatedAt: string;
 }
+export interface DurableActorFact {
+  id: string;
+  category: "preference" | "customer_context" | "process_context" | "constraint";
+  content: string;
+  sourceTurnId: string;
+  sourceExecutionId: string | null;
+  status: "proposed" | "active" | "retired";
+  revision: number;
+  proposedBy: string;
+  approvedBy: string | null;
+  reason: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface ExecutionMemory {
   executionProfile: string;
   storage: "agent_sqlite";
   contextPolicy: { maximumTurns: number; maximumCharacters: number; maximumCharactersPerTurn: number };
-  durableFactPromotion: "disabled";
+  durableFactPromotion: "human_approval_required";
+  factPolicy: { maximumActiveFacts: number; maximumFactCharacters: number; maximumContextCharacters: number };
   currentReleaseId: string | null;
   currentVersion: number | null;
   activeReleaseId: string | null;
   activeVersion: number | null;
   migrationAvailable: boolean;
   turns: GovernedMemoryTurn[];
+  facts: DurableActorFact[];
 }
 
 export interface ActorLocalTask {
@@ -1210,6 +1227,18 @@ export const api = {
     reason: string;
   }) => request<{ data: GovernedMemoryTurn }>(
     `/api/executions/${encodeURIComponent(executionId)}/memory/${encodeURIComponent(turnId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
+  proposeExecutionFact: (executionId: string, body: {
+    category: DurableActorFact["category"]; content: string; sourceTurnId: string;
+    reason: string; expiresAt: string;
+  }) => request<{ data: DurableActorFact }>(
+    `/api/executions/${encodeURIComponent(executionId)}/memory/facts`,
+    { method: "POST", body: JSON.stringify(body) }),
+  governExecutionFact: (executionId: string, factId: string, body: {
+    action: "approve" | "correct" | "retire"; expectedRevision: number;
+    content?: string; reason: string; expiresAt?: string;
+  }) => request<{ data: DurableActorFact }>(
+    `/api/executions/${encodeURIComponent(executionId)}/memory/facts/${encodeURIComponent(factId)}`,
     { method: "PATCH", body: JSON.stringify(body) }),
   migrateExecutionActorRelease: (executionId: string, body: {
     targetReleaseId: string; confirmFromReleaseId: string; reason: string;

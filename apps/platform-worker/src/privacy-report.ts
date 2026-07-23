@@ -122,7 +122,7 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
         store: "Policy-defined tenant data", content: String(row.data_class),
         retention: `${row.retention_days} days`, deletion: String(row.deletion_mode)
       })),
-      { store: "Durable Object SQLite", content: "Sticky conversation messages and agent-local release bundle",
+      { store: "Durable Object SQLite", content: "Sticky conversation messages, approved provenance-bearing actor facts, and agent-local release bundle",
         retention: "Thread/process policy", deletion: "Actor-scoped administrative deletion" },
       { store: "R2 and Vectorize", content: "Governed knowledge objects, chunks, and embeddings",
         retention: "Source review and expiry policy", deletion: "Source removal deletes object, vectors, and metadata" }
