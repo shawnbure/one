@@ -142,6 +142,24 @@ openssl rand -base64 32 | npx wrangler secret put OAUTH_TOKEN_ENCRYPTION_KEY --e
 
 Use a distinct encryption key per environment and retain it in the customer’s password manager. Rotating that key requires reconnecting existing OAuth accounts because Workrr deliberately has no plaintext-token recovery path.
 
+### Reviewable production promotion
+
+Production promotion is dry-run by default. The command fetches the latest Git refs, requires a clean fast-forward history, verifies that `main` can be updated without rewriting it, inventories pending production D1 migrations, and lists required secret names without reading secret values:
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID="<customer-account-id>"
+npm run promote:production
+```
+
+When the plan reports `ready: true`, apply the exact reviewed `origin/dev` SHA from a trusted FDE workstation:
+
+```bash
+export CLOUDFLARE_API_TOKEN="<workers-build-read-token>"
+npm run promote:production -- --apply --sha "<full-40-character-origin-dev-sha>" --confirm production
+```
+
+Apply mode cannot skip typecheck, tests, or the production build. It applies additive D1 migrations first, fast-forwards `main`, waits for Cloudflare Workers Builds to deploy that exact commit, then verifies the resulting Worker version and that `one.workrr.ai` redirects through `workrr-one.cloudflareaccess.com`. Promotion stops if the Microsoft OAuth secrets are absent; only secret names are inspected or printed.
+
 ## Verification
 
 ```bash

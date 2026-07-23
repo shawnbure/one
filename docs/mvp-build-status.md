@@ -121,15 +121,16 @@ Development migrations are applied before each matching development deploy. Prod
 
 Cloudflare Workers Builds owns deployment. GitHub Actions must not duplicate it. Non-production branch builds are disabled to control build usage.
 
-Before each production promotion:
+Before each production promotion, run `npm run promote:production` for a non-mutating plan. Apply mode requires the exact full `origin/dev` SHA plus `--confirm production` and automates the following contract:
 
 1. Verify the production Access application and explicit customer allow policy.
 2. Verify the production `ACCESS_TEAM_DOMAIN` and production-specific `ACCESS_AUD`; never reuse dev's audience.
 3. Validate tenant memberships and least-privilege roles.
 4. Configure `WEBHOOK_INBOX_SECRET` and `NOTIFICATION_WEBHOOK_SECRET` with `wrangler secret put`; never place values in D1 or Git.
-5. Review and apply pending D1 migrations to the production database.
-6. Run typecheck, tests, build, and a dry-run deploy.
-7. Merge the reviewed `dev` commit into `main`, then verify health, Access redirect, login, one read, and one controlled mutation.
+5. Inventory and apply pending D1 migrations to the production database.
+6. Run typecheck, tests, build, and a dry-run deploy without a bypass flag.
+7. Fast-forward `main` to the exact reviewed `origin/dev` commit without checking out or rewriting either branch.
+8. Wait for Cloudflare Workers Builds to report success for that exact commit, then verify the Worker version and Workrr Access redirect.
 
 ## Verification contract
 
@@ -163,7 +164,7 @@ The foundation is usable, but these are the highest-value next slices:
 2. Extend the implemented reusable organization rubric templates with portable cross-tenant template packages when customer governance teams need to distribute shared standards across dedicated deployments. Customer-configurable DLP policy is implemented across execution, Queue, Workflow, Durable Agent, evaluation, judge traffic, import, and preview-storage boundaries. Automatic masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
 3. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
 4. Add authenticated email delivery using the Microsoft lifecycle; Queue-backed signed webhook delivery is implemented.
-5. Add a scripted, reviewable environment promotion command. Cloudflare Access member handoff is implemented as a secret-free, environment-bound export plus an explicit dry-run/apply FDE command.
-6. Expand the current identity, tenant, role, OAuth replay/encryption, package, durable-stickiness, Workflow accounting, webhook-deduplication, and Access-handoff tests into live-environment smoke tests with disposable customer fixtures.
+5. Expand the implemented scripted production promotion beyond Worker version and Access verification with authenticated live-environment smoke tests using disposable customer fixtures. The command already provides dry-run planning, clean/fast-forward Git gates, exact-SHA confirmation, required-secret inventory, mandatory verification, ordered D1 migrations, Cloudflare build polling, Worker version evidence, and Access redirect verification.
+6. Expand the current identity, tenant, role, OAuth replay/encryption, package, durable-stickiness, Workflow accounting, webhook-deduplication, Access-handoff, and promotion tests into those live-environment smoke tests.
 
 Each slice should preserve the core boundary: D1 controls configuration and reporting, durable actors own sticky conversational state, Workflows own long-running orchestration, and Queues own burst absorption.
