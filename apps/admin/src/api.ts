@@ -755,8 +755,22 @@ export interface AccessOperationsData {
 }
 export interface ValueData {
   totals: { items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number };
-  byProcess: Array<Record<string, string | number>>;
+  byProcess: Array<{ blueprint_id: string; process_name: string; items_processed: number;
+    human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number }>;
   discoveries: Array<Record<string, string | number>>;
+  portfolio: Array<{
+    blueprint_id: string; process_name: string; status: string; operating_mode: string;
+    business_owner: string; department: string; safety_autonomy_cap: string | null;
+    baseline_volume: number; baseline_minutes: number; hourly_cost: number; opportunity_score: number;
+    items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number;
+    snapshot_failures: number; runs: number; completed_runs: number; adverse_runs: number;
+    avg_cycle_ms: number | null; open_incidents: number; failureRate: number; overrideRate: number;
+    recommendation: { action: "expand" | "correct" | "retire" | "observe" | "hold";
+      confidence: "high" | "medium" | "low"; reason: string; nextStep: string };
+  }>;
+  decisionPolicy: { evidenceWindowDays: number; minimumEvidenceItems: number;
+    correctAtFailurePercent: number; correctAtOverridePercent: number;
+    expandAtMaximumFailurePercent: number; expandAtMaximumOverridePercent: number };
 }
 export interface OnboardingData {
   settings: null | { organization_name: string; support_email: string; accent_color: string; default_model_profile: string; data_region: string; initialized_at: string | null };

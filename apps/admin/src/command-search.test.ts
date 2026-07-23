@@ -45,4 +45,9 @@ describe("command search", () => {
       status: "active", activeReleaseId: null, executionProfile: "instant"
     }, true)).toBe(false);
   });
+
+  it("makes the executive value portfolio discoverable to operators only", () => {
+    expect(authorizedWorkspaceLabels(false)).toContain("Value & decisions");
+    expect(authorizedWorkspaceLabels(true)).not.toContain("Value & decisions");
+  });
 });

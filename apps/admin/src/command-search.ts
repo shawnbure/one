@@ -10,7 +10,7 @@ export interface CommandSearchItem {
 const operatorWorkspaceLabels = [
   "Overview", "Launchpad", "Processes", "Opportunities", "Work inbox", "Activity",
   "API logs", "Connections", "Knowledge", "Evaluations", "Governance", "Notifications",
-  "Usage & budgets", "Customer setup", "Team & roles", "Help Center"
+  "Value & decisions", "Usage & budgets", "Customer setup", "Team & roles", "Help Center"
 ] as const;
 
 export function authorizedWorkspaceLabels(consumer: boolean) {

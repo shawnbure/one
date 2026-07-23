@@ -100,16 +100,121 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
 }
 
 export async function getValueDashboard(env: Env, tenantId: string) {
-  const [totals, byProcess, discoveries] = await Promise.all([
+  const [totals, byProcess, discoveries, portfolioRows] = await Promise.all([
     env.DB.prepare(`SELECT SUM(items_processed) items_processed, SUM(human_minutes_saved) human_minutes_saved,
       SUM(estimated_value) estimated_value, SUM(override_count) override_count, SUM(failure_count) failure_count
       FROM value_snapshots WHERE tenant_id = ? AND period_start >= date('now','-30 days')`).bind(tenantId).first(),
-    env.DB.prepare(`SELECT v.*, b.name process_name FROM value_snapshots v JOIN agent_blueprints b ON b.id = v.blueprint_id
-      WHERE v.tenant_id = ? ORDER BY v.estimated_value DESC`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT v.blueprint_id, b.name process_name,
+      SUM(v.items_processed) items_processed, SUM(v.human_minutes_saved) human_minutes_saved,
+      SUM(v.estimated_value) estimated_value, SUM(v.override_count) override_count,
+      SUM(v.failure_count) failure_count
+      FROM value_snapshots v JOIN agent_blueprints b ON b.id=v.blueprint_id AND b.tenant_id=v.tenant_id
+      WHERE v.tenant_id=? AND v.period_start >= date('now','-30 days')
+      GROUP BY v.blueprint_id, b.name ORDER BY estimated_value DESC`).bind(tenantId).all(),
     env.DB.prepare(`SELECT d.*, b.name process_name FROM process_discovery d JOIN agent_blueprints b ON b.id = d.blueprint_id
-      WHERE d.tenant_id = ? ORDER BY d.opportunity_score DESC`).bind(tenantId).all()
+      WHERE d.tenant_id = ? ORDER BY d.opportunity_score DESC`).bind(tenantId).all(),
+    env.DB.prepare(`WITH value_30d AS (
+        SELECT blueprint_id, SUM(items_processed) items_processed,
+          SUM(human_minutes_saved) human_minutes_saved, SUM(estimated_value) estimated_value,
+          SUM(override_count) override_count, SUM(failure_count) snapshot_failures
+        FROM value_snapshots WHERE tenant_id=? AND period_start >= date('now','-30 days')
+        GROUP BY blueprint_id
+      ), runs_30d AS (
+        SELECT blueprint_id, COUNT(*) runs,
+          SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) completed_runs,
+          SUM(CASE WHEN status IN ('failed','blocked','deferred') THEN 1 ELSE 0 END) adverse_runs,
+          AVG(CASE WHEN completed_at IS NOT NULL
+            THEN MAX(0, (julianday(completed_at)-julianday(started_at))*86400000) END) avg_cycle_ms
+        FROM executions WHERE tenant_id=? AND started_at >= datetime('now','-30 days')
+        GROUP BY blueprint_id
+      ), open_incidents AS (
+        SELECT blueprint_id, COUNT(*) open_incidents FROM incidents
+        WHERE tenant_id=? AND status!='resolved' AND blueprint_id IS NOT NULL GROUP BY blueprint_id
+      )
+      SELECT b.id blueprint_id, b.name process_name, b.status, b.operating_mode,
+        b.business_owner, b.department, b.safety_autonomy_cap,
+        COALESCE(d.volume_per_month,0) baseline_volume, COALESCE(d.minutes_per_item,0) baseline_minutes,
+        COALESCE(d.hourly_cost,0) hourly_cost, COALESCE(d.opportunity_score,0) opportunity_score,
+        COALESCE(v.items_processed,0) items_processed, COALESCE(v.human_minutes_saved,0) human_minutes_saved,
+        COALESCE(v.estimated_value,0) estimated_value, COALESCE(v.override_count,0) override_count,
+        COALESCE(v.snapshot_failures,0) snapshot_failures, COALESCE(r.runs,0) runs,
+        COALESCE(r.completed_runs,0) completed_runs, COALESCE(r.adverse_runs,0) adverse_runs,
+        r.avg_cycle_ms, COALESCE(i.open_incidents,0) open_incidents
+      FROM agent_blueprints b
+      LEFT JOIN process_discovery d ON d.blueprint_id=b.id AND d.tenant_id=b.tenant_id
+      LEFT JOIN value_30d v ON v.blueprint_id=b.id
+      LEFT JOIN runs_30d r ON r.blueprint_id=b.id
+      LEFT JOIN open_incidents i ON i.blueprint_id=b.id
+      WHERE b.tenant_id=? ORDER BY estimated_value DESC, b.name`)
+      .bind(tenantId, tenantId, tenantId, tenantId).all<Record<string, unknown>>()
   ]);
-  return { totals, byProcess: byProcess.results, discoveries: discoveries.results };
+  const portfolio = portfolioRows.results.map((row) => {
+    const metrics = {
+      itemsProcessed: Number(row.items_processed ?? 0),
+      estimatedValue: Number(row.estimated_value ?? 0),
+      overrideCount: Number(row.override_count ?? 0),
+      adverseRuns: Number(row.adverse_runs ?? 0),
+      runs: Number(row.runs ?? 0),
+      openIncidents: Number(row.open_incidents ?? 0),
+      safetyCap: typeof row.safety_autonomy_cap === "string" ? row.safety_autonomy_cap : null,
+      opportunityScore: Number(row.opportunity_score ?? 0),
+      status: String(row.status ?? "draft"),
+      operatingMode: String(row.operating_mode ?? "paused")
+    };
+    return { ...row, ...portfolioRates(metrics), recommendation: classifyPortfolioDecision(metrics) };
+  });
+  return { totals, byProcess: byProcess.results, discoveries: discoveries.results, portfolio,
+    decisionPolicy: {
+      evidenceWindowDays: 30, minimumEvidenceItems: 10,
+      correctAtFailurePercent: 10, correctAtOverridePercent: 15,
+      expandAtMaximumFailurePercent: 5, expandAtMaximumOverridePercent: 10
+    } };
+}
+
+interface PortfolioMetrics {
+  itemsProcessed: number; estimatedValue: number; overrideCount: number; adverseRuns: number; runs: number;
+  openIncidents: number; safetyCap: string | null; opportunityScore: number; status: string; operatingMode: string;
+}
+
+export function classifyPortfolioDecision(metrics: PortfolioMetrics) {
+  const { failureRate, overrideRate } = portfolioRates(metrics);
+  if (metrics.openIncidents > 0 || metrics.safetyCap) {
+    const reason = metrics.openIncidents > 0 ? `${metrics.openIncidents} unresolved incident${metrics.openIncidents === 1 ? "" : "s"}` :
+      `autonomy is safety-capped at ${metrics.safetyCap}`;
+    return { action: "correct" as const, confidence: metrics.itemsProcessed >= 10 || metrics.runs >= 10 ? "high" as const : "medium" as const,
+      reason, nextStep: "Open Process Studio, review failure and human-feedback evidence, then publish a corrected evaluated release." };
+  }
+  if (metrics.itemsProcessed < 10 && metrics.runs < 10) {
+    return { action: "observe" as const, confidence: "low" as const,
+      reason: "Fewer than 10 measured items and runs in the last 30 days",
+      nextStep: "Keep the process governed at its current level and collect enough production or shadow evidence." };
+  }
+  if (failureRate > 10 || overrideRate > 15) {
+    const reason = failureRate > 10 ? `${failureRate.toFixed(1)}% adverse run rate` : `${overrideRate.toFixed(1)}% override rate`;
+    return { action: "correct" as const, confidence: "high" as const, reason,
+      nextStep: "Open Process Studio, review failure and human-feedback evidence, then publish a corrected evaluated release." };
+  }
+  if ((metrics.status === "paused" || metrics.operatingMode === "paused") &&
+      metrics.estimatedValue <= 0 && metrics.opportunityScore < 40) {
+    return { action: "retire" as const, confidence: "medium" as const,
+      reason: "Paused, no measured value, and a low discovery opportunity score",
+      nextStep: "Confirm with the business owner, export required evidence, and start governed retirement in Process Studio." };
+  }
+  if (metrics.estimatedValue > 0 && failureRate <= 5 && overrideRate <= 10) {
+    return { action: "expand" as const, confidence: metrics.itemsProcessed >= 30 ? "high" as const : "medium" as const,
+      reason: `${metrics.itemsProcessed} items produced measured value with bounded exception rates`,
+      nextStep: "Validate capacity and owner readiness, then expand volume or an adjacent use case without automatically raising autonomy." };
+  }
+  return { action: "hold" as const, confidence: "medium" as const,
+    reason: "Evidence is usable but does not yet meet the expand, correct, or retire thresholds",
+    nextStep: "Review the next 30-day evidence window before changing scope." };
+}
+
+function portfolioRates(metrics: Pick<PortfolioMetrics, "itemsProcessed" | "overrideCount" | "adverseRuns" | "runs">) {
+  return {
+    failureRate: metrics.runs > 0 ? metrics.adverseRuns / metrics.runs * 100 : 0,
+    overrideRate: metrics.itemsProcessed > 0 ? metrics.overrideCount / metrics.itemsProcessed * 100 : 0
+  };
 }
 
 function opportunityScore(baseline: CreateProcessInput["baseline"]): number {

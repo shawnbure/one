@@ -36,6 +36,7 @@ import {
   X,
   Code2,
   CircleDollarSign,
+  TrendingUp,
   Lightbulb,
   BookOpen,
 } from "lucide-react";
@@ -105,6 +106,9 @@ const NotificationsView = lazy(() =>
 );
 const UsageView = lazy(() =>
   import("./UsageView").then(({ UsageView }) => ({ default: UsageView })),
+);
+const ValuePortfolioView = lazy(() =>
+  import("./ValuePortfolioView").then(({ ValuePortfolioView }) => ({ default: ValuePortfolioView })),
 );
 const OpportunitiesView = lazy(() =>
   import("./OpportunitiesView").then(({ OpportunitiesView }) => ({
@@ -228,6 +232,7 @@ const nav = [
   ["Evaluations", FileCheck2],
   ["Governance", ShieldCheck],
   ["Notifications", Bell],
+  ["Value & decisions", TrendingUp],
   ["Usage & budgets", CircleDollarSign],
 ] as const;
 
@@ -243,6 +248,7 @@ const workspaceSearch: Record<string, { description: string; keywords: string[] 
   Knowledge: { description: "Govern customer documents, retrieval, and citations", keywords: ["r2", "vectorize", "documents"] },
   Evaluations: { description: "Run release gates, regression suites, and model trials", keywords: ["tests", "quality", "golden"] },
   Governance: { description: "Control privacy, memory, incidents, retention, and deployment", keywords: ["security", "privacy", "controls"] },
+  "Value & decisions": { description: "Decide where to expand, correct, observe, or retire AI processes", keywords: ["executive", "portfolio", "value", "roi"] },
   Notifications: { description: "Configure accountable in-app, email, and webhook delivery", keywords: ["alerts", "email", "digest"] },
   "Usage & budgets": { description: "Review model cost, tokens, limits, and reconciliation", keywords: ["cost", "billing", "tokens"] },
   "Customer setup": { description: "Provision, measure, and hand off the customer environment", keywords: ["deployment", "onboarding", "fde"] },
@@ -556,6 +562,10 @@ export function App() {
             />
           ) : active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
+          ) : active === "Value & decisions" ? (
+            <ValuePortfolioView onNotice={setNotice} onOpenProcess={(id) => {
+              setStudioProcessId(id); setActive("Processes");
+            }}/>
           ) : active === "Notifications" ? (
             <NotificationsView session={session} onNotice={setNotice} />
           ) : active === "Customer setup" ? (

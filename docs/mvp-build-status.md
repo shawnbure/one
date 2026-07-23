@@ -359,6 +359,8 @@ Team & Roles now turns Cloudflare Access authentication into useful, privacy-bou
 
 Administrators can designate a separate, active Workrr administrator as the emergency identity, attach a vault/runbook evidence reference and recovery procedure, and set a review date. The configuring administrator cannot designate themself, the emergency identity remains subject to both Cloudflare Access and tenant membership, and each newly observed session creates one critical notification plus an immutable audit event. Administrators and owners must classify that session as a drill, incident, or false positive with review evidence; viewers can inspect the resulting evidence without changing it.
 
+Value & Decisions closes the gap between collecting business metrics and making an operating decision. One tenant-scoped portfolio query combines the last 30 days of value snapshots and executions with discovery baselines, unresolved incidents, operating state, and latched safety caps. The UI explains each expand, correct, observe, hold, or retire recommendation, its confidence, the exact threshold evidence, and the governed next action. Active incidents and safety caps always take precedence; sparse evidence remains observation rather than being mistaken for success; expansion requires positive measured value plus bounded adverse-run and override rates; and retirement is suggested only for paused, low-opportunity work with no measured value. Recommendations are deterministic, make no model call, do not mutate process state, and never promote autonomy automatically.
+
 ## Remaining aggressive-MVP work
 
 The foundation is usable, but these are the highest-value next slices:
