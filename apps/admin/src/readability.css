@@ -320,6 +320,20 @@ a:focus-visible {
 .model-inventory .model-due { color: #956728 !important; }
 .model-inventory em.ready-badge,
 .model-inventory em.attention-badge { flex: none; font-size: 11px !important; font-weight: 700; }
+.readiness-row > span { flex: 1; min-width: 0; }
+.readiness-row > button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid #cfddd6;
+  border-radius: 7px;
+  background: #fff;
+  color: #346d55;
+  font-size: 11px;
+  font-weight: 700;
+}
 .contract-evidence {
   display: flex;
   align-items: flex-start;

@@ -409,6 +409,7 @@ export function App() {
               }
               session={session}
               onNotice={setNotice}
+              onNavigate={setActive}
             />
           ) : (
             <>

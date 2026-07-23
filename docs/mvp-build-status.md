@@ -96,6 +96,8 @@ Process Studio presents a curated exact-model selector for Cloudflare-hosted inf
 
 Governance derives model readiness from existing control-plane evidence rather than spending tokens on synthetic probes. Each exact model is marked ready when an active release has either a successful execution or passing evaluation within 30 days. The evidence is computed in the existing process inventory query, avoiding an additional D1 request, and legacy profile-only releases never count as verified.
 
+Every incomplete deployment-readiness finding carries a stable remediation destination and a customer-readable action label. Governance routes operators directly to customer setup, service principals, processes, evaluations, connections, delivery, knowledge, tools, or API logs rather than leaving them to interpret a passive warning. Mutations remain protected by the destination surface's existing role checks.
+
 Do not add KV for prompts unless measurement proves a distinct global distribution need. It would add another consistency boundary without replacing durable conversation memory.
 
 ## Security and tenancy invariants

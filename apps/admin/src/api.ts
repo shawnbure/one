@@ -449,6 +449,8 @@ export interface GovernanceData {
     label: string;
     ready: boolean;
     detail: string;
+    action: string;
+    actionLabel: string;
   }>;
   dataFlow: string[];
   deploymentVerification: {

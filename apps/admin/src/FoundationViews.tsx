@@ -30,9 +30,10 @@ interface Props {
   section: "Connections" | "Knowledge" | "Evaluations" | "Governance";
   session: SessionData | null;
   onNotice: (message: string) => void;
+  onNavigate: (section: string) => void;
 }
 
-export function FoundationView({ section, session, onNotice }: Props) {
+export function FoundationView({ section, session, onNotice, onNavigate }: Props) {
   const [data, setData] = useState<GovernanceData | null>(null);
   async function load() {
     try {
@@ -53,7 +54,7 @@ export function FoundationView({ section, session, onNotice }: Props) {
   if (section === "Connections") return <Connections data={data} session={session} onReload={load} onNotice={onNotice} />;
   if (section === "Knowledge") return <Knowledge data={data} onReload={load} onNotice={onNotice} />;
   if (section === "Evaluations") return <Evaluations data={data} session={session} onReload={load} onNotice={onNotice} />;
-  return <Governance data={data} session={session} onReload={load} onNotice={onNotice} />;
+  return <Governance data={data} session={session} onReload={load} onNotice={onNotice} onNavigate={onNavigate} />;
 }
 
 function Connections({ data, session, onReload, onNotice }: { data: GovernanceData; session: SessionData | null;
@@ -1023,11 +1024,13 @@ function Governance({
   session,
   onReload,
   onNotice,
+  onNavigate,
 }: {
   data: GovernanceData;
   session: SessionData | null;
   onReload: () => Promise<void>;
   onNotice: (message: string) => void;
+  onNavigate: (section: string) => void;
 }) {
   const ready = data.readiness.filter((item) => item.ready).length;
   const [containmentReason, setContainmentReason] = useState("");
@@ -1203,6 +1206,9 @@ function Governance({
                 <strong>{item.label}</strong>
                 <small>{item.detail}</small>
               </span>
+              {!item.ready && <button onClick={() => onNavigate(item.action)}>
+                {item.actionLabel}<ArrowRight size={13}/>
+              </button>}
             </div>
           ))}
         </article>
