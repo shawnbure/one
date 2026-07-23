@@ -11,7 +11,7 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { runEvaluation } from "./evaluation";
+import { createEvaluationCase, getEvaluationDetail, runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
 
 export { ProcessAgent } from "./agent";
@@ -405,6 +405,26 @@ app.post("/api/evaluations/:id/run", requireRoles("admin", "builder", "owner", "
   const body: { releaseId?: string } = await c.req.json<{ releaseId?: string }>().catch(() => ({}));
   try { return c.json({ data: await runEvaluation(c.env, c.get("tenantId"), c.get("actorId"), scenarioId, body.releaseId) }); }
   catch (error) { return c.json({ error: error instanceof Error ? error.message : "Evaluation failed" }, 404); }
+});
+
+app.get("/api/evaluations/:id", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  const detail = await getEvaluationDetail(c.env, c.get("tenantId"), scenarioId);
+  return detail ? c.json({ data: detail }) : c.json({ error: "Evaluation scenario not found" }, 404);
+});
+
+app.post("/api/evaluations/:id/cases", requireRoles("admin", "builder", "owner"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  try {
+    const result = await createEvaluationCase(c.env, c.get("tenantId"), scenarioId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_case.created",
+      "evaluation_scenario", scenarioId, { caseId: result.id, assertionCount: result.assertionCount });
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Evaluation case could not be created" }, 400);
+  }
 });
 
 app.get("/api/logs", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {

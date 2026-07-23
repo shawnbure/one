@@ -10,15 +10,17 @@ import {
   Download,
   FileCheck2,
   FileText,
+  GitCompare,
   KeyRound,
   Link2,
   LockKeyhole,
   RefreshCw,
+  Plus,
   ShieldCheck,
   Users,
   XCircle,
 } from "lucide-react";
-import { api, type GovernanceData } from "./api";
+import { api, type EvaluationDetail, type GovernanceData } from "./api";
 
 interface Props {
   section: "Connections" | "Knowledge" | "Evaluations" | "Governance";
@@ -200,21 +202,50 @@ function Knowledge({ data }: { data: GovernanceData }) {
 }
 function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
   const [running, setRunning] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [detail, setDetail] = useState<EvaluationDetail | null>(null);
+  const [savingCase, setSavingCase] = useState(false);
+  const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "", format: "text" as "text" | "json", maxChars: 2000 });
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
   ).length;
+  async function inspect(id: string) {
+    setSelected(id);
+    try { setDetail((await api.evaluation(id)).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation detail could not load"); }
+  }
   async function run(id: string) {
     setRunning(id);
     try {
       const result = await api.runEvaluation(id);
-      onNotice(`Evaluation ${result.data.status}: ${result.data.passedAssertions}/${result.data.assertionCount} assertions`);
+      onNotice(`Evaluation ${result.data.status}: ${(result.data.score * 100).toFixed(0)}% · ${result.data.passedAssertions}/${result.data.assertionCount} assertions`);
       await onReload();
+      if (selected === id) await inspect(id);
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Evaluation could not run");
     } finally {
       setRunning(null);
     }
   }
+  async function addCase() {
+    if (!selected) return;
+    setSavingCase(true);
+    try {
+      await api.createEvaluationCase(selected, {
+        name: caseForm.name, input: caseForm.input,
+        expectedPhrases: phrases(caseForm.expected), prohibitedPhrases: phrases(caseForm.prohibited),
+        format: caseForm.format, maxChars: caseForm.maxChars
+      });
+      setCaseForm({ name: "", input: "", expected: "", prohibited: "", format: "text", maxChars: 2000 });
+      await inspect(selected);
+      await onReload();
+      onNotice("Golden case added; the scenario must be rerun before release promotion.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation case could not be created"); }
+    finally { setSavingCase(false); }
+  }
+  const latest = detail?.runs[0];
+  const previous = detail?.runs.find((run) => run.release_id !== latest?.release_id) ?? detail?.runs[1];
+  const delta = latest && previous ? (Number(latest.score) - Number(previous.score)) * 100 : null;
   return (
     <section className="foundation-page">
       <Title
@@ -234,9 +265,9 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
             release can be promoted.
           </p>
         </div>
-        <span className="healthy">
+        <span className={passing === data.evaluations.length && passing > 0 ? "healthy" : "connection-state attention"}>
           <i />
-          Passing
+          {passing === data.evaluations.length && passing > 0 ? "Passing" : "Action required"}
         </span>
       </div>
       <div className="evaluation-list panel">
@@ -267,15 +298,45 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <i />
               {item.status}
             </span>
-            <button disabled={running === item.id} onClick={() => void run(String(item.id))}>
-              <RefreshCw size={14} /> {running === item.id ? "Running…" : "Run"}
-            </button>
+            <span className="evaluation-actions"><button onClick={() => void inspect(String(item.id))}><GitCompare size={14}/>Compare</button>
+              <button disabled={running === item.id} onClick={() => void run(String(item.id))}><RefreshCw size={14} /> {running === item.id ? "Running…" : "Run"}</button></span>
           </article>
         ))}
       </div>
+      {selected && <div className="evaluation-lab panel">
+        {!detail ? <div className="loading-card">Loading evaluation lab…</div> : <>
+          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span>{detail.cases.length} cases</span></div>
+          <div className="comparison-strip">
+            <article><small>LATEST RELEASE</small><strong>{latest ? `v${latest.release_version ?? "?"} · ${(Number(latest.score) * 100).toFixed(0)}%` : "Not run"}</strong><span className={`connection-state ${latest?.status ?? "attention"}`}><i/>{latest?.status ?? "not run"}</span></article>
+            <article><small>PREVIOUS COMPARISON</small><strong>{previous ? `v${previous.release_version ?? "?"} · ${(Number(previous.score) * 100).toFixed(0)}%` : "No baseline"}</strong><span>{delta === null ? "Run another release to compare" : `${delta >= 0 ? "+" : ""}${delta.toFixed(0)} percentage points`}</span></article>
+            <article><small>RELEASE COST</small><strong>{latest ? money(Number(latest.estimated_cost_usd)) : "$0.0000"}</strong><span>{latest ? `${number(Number(latest.total_tokens))} model tokens` : "No inference recorded"}</span></article>
+          </div>
+          <div className="golden-layout">
+            <div className="golden-cases"><div className="section-head"><div><h3>Golden cases</h3><p>Anonymized inputs and deterministic output properties.</p></div></div>
+              {detail.cases.map((item) => { const result = latest ? detail.caseResults.find((row) => row.run_id === latest.id && row.case_id === item.id) : null; return <article key={item.id}><span className={`eval-icon ${result?.status ?? "attention"}`}>{result?.status === "passing" ? <CheckCircle2 size={17}/> : <AlertTriangle size={17}/>}</span><span><strong>{item.name}</strong><small>{assertionLabel(item.assertions_json)} · {item.source}</small></span><span className={`connection-state ${result?.status ?? "attention"}`}><i/>{result?.status ?? "not run"}</span>{result && <small>{result.latency_ms} ms · {result.passed_assertions}/{result.assertion_count}</small>}</article>; })}
+            </div>
+            <div className="case-builder"><div className="section-head"><div><h3>Add golden case</h3><p>Use anonymized facts only.</p></div><Plus size={16}/></div>
+              <label>Case name<input value={caseForm.name} onChange={(event) => setCaseForm({ ...caseForm, name: event.target.value })}/></label>
+              <label>Anonymized input<textarea value={caseForm.input} onChange={(event) => setCaseForm({ ...caseForm, input: event.target.value })}/></label>
+              <label>Required phrases <small>comma separated</small><input value={caseForm.expected} onChange={(event) => setCaseForm({ ...caseForm, expected: event.target.value })}/></label>
+              <label>Prohibited phrases <small>comma separated</small><input value={caseForm.prohibited} onChange={(event) => setCaseForm({ ...caseForm, prohibited: event.target.value })}/></label>
+              <div className="case-fields"><label>Format<select value={caseForm.format} onChange={(event) => setCaseForm({ ...caseForm, format: event.target.value as "text" | "json" })}><option value="text">Text</option><option value="json">Valid JSON</option></select></label><label>Max characters<input type="number" min="1" max="50000" value={caseForm.maxChars} onChange={(event) => setCaseForm({ ...caseForm, maxChars: Number(event.target.value) })}/></label></div>
+              <button className="primary" disabled={savingCase} onClick={() => void addCase()}>{savingCase ? "Adding…" : "Add regression case"}</button>
+            </div>
+          </div>
+        </>}
+      </div>}
     </section>
   );
 }
+
+function phrases(value: string) { return value.split(",").map((item) => item.trim()).filter(Boolean); }
+function assertionLabel(value: string) {
+  try { const items = JSON.parse(value) as Array<{ type: string }>; return `${items.length} assertions · ${items.map((item) => item.type.replaceAll("_", " ")).join(" · ")}`; }
+  catch { return "Assertions require review"; }
+}
+function money(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value || 0); }
+function number(value: number) { return new Intl.NumberFormat().format(value || 0); }
 
 function Governance({
   data,

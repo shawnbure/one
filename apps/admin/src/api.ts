@@ -194,13 +194,22 @@ export interface NotificationData {
     last_validated_at: string | null; configured: number }>;
 }
 export interface UsageData {
-  summary: { executions: number; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number };
+  summary: { executions: number; evaluation_cases: number; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number };
   budget: { monthly_limit_usd: number; warning_percent: number; hard_limit: number } | null;
   models: Array<{ model_id: string; label: string; input_usd_per_million: number; output_usd_per_million: number; context_tokens: number; pricing_effective_at: string; pricing_source: string }>;
   byModel: Array<{ model: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
   byProcess: Array<{ blueprint_id: string; process_name: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
   recent: Array<{ id: string; blueprint_id: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number; started_at: string }>;
   estimateNotice: string;
+}
+export interface EvaluationDetail {
+  scenario: { id: string; name: string; process_name: string; status: string; gate_threshold: number; active_release_id: string | null };
+  cases: Array<{ id: string; name: string; input_text: string; assertions_json: string; weight: number; enabled: number; source: string; created_at: string }>;
+  runs: Array<{ id: string; release_id: string; release_version: number | null; status: string; score: number;
+    passed_assertions: number; assertion_count: number; case_count: number; total_tokens: number; estimated_cost_usd: number; created_at: string }>;
+  caseResults: Array<{ run_id: string; case_id: string; status: string; passed_assertions: number; assertion_count: number;
+    output_preview: string | null; model: string | null; total_tokens: number; estimated_cost_usd: number; latency_ms: number;
+    evidence_json: string; error: string | null }>;
 }
 
 export class ApiError extends Error {
@@ -335,7 +344,14 @@ export const api = {
       body: JSON.stringify(body),
     }),
   value: () => request<{ data: ValueData }>("/api/value"),
-  runEvaluation: (id: string) => request<{ data: { id: string; status: string; passedAssertions: number; assertionCount: number } }>(`/api/evaluations/${id}/run`, { method: "POST" }),
+  runEvaluation: (id: string, releaseId?: string) => request<{ data: { id: string; status: string; score: number;
+    passedAssertions: number; assertionCount: number; caseCount: number; totalTokens: number; estimatedCostUsd: number } }>(
+      `/api/evaluations/${id}/run`, { method: "POST", body: JSON.stringify({ releaseId }) }),
+  evaluation: (id: string) => request<{ data: EvaluationDetail }>(`/api/evaluations/${encodeURIComponent(id)}`),
+  createEvaluationCase: (id: string, body: { name: string; input: string; expectedPhrases: string[];
+    prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
+    request<{ data: { id: string; assertionCount: number } }>(`/api/evaluations/${encodeURIComponent(id)}/cases`,
+      { method: "POST", body: JSON.stringify(body) }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>

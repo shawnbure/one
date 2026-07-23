@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { assertBudgetAvailable, pricedCompletionSql } from "../src/usage";
 
-function budgetEnvironment(row: { monthly_limit_usd: number; spent: number } | null) {
-  return { DB: { prepare() { const statement = { bind() { return statement; }, async first() { return row; } }; return statement; } } };
+function budgetEnvironment(row: { monthly_limit_usd: number; spent: number } | null, sqls: string[] = []) {
+  return { DB: { prepare(sql: string) { sqls.push(sql); const statement = { bind() { return statement; }, async first() { return row; } }; return statement; } } };
 }
 
 describe("usage budget enforcement", () => {
@@ -13,6 +13,12 @@ describe("usage budget enforcement", () => {
   it("blocks new inference when captured spend reaches the hard limit", async () => {
     await expect(assertBudgetAvailable(budgetEnvironment({ monthly_limit_usd: 25, spent: 25.01 }) as never, "tenant-1"))
       .rejects.toThrow("hard limit");
+  });
+
+  it("includes evaluation inference in hard-limit spend", async () => {
+    const sqls: string[] = [];
+    await assertBudgetAvailable(budgetEnvironment(null, sqls) as never, "tenant-1");
+    expect(sqls[0]).toContain("evaluation_case_results");
   });
 
   it("prices input and output independently from the captured model rate", () => {
