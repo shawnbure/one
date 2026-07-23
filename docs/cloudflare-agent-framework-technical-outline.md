@@ -298,6 +298,8 @@ For durable profiles, the Agent actor stores the installed process-release ID se
 
 An explicit actor migration is an operator action, not a side effect of publication. It uses optimistic source-release confirmation, permits only the current published and evaluated target, installs the target prompt bundle inside the serialized Agent actor, retains governed conversation turns, and records tenant-scoped from/to evidence and rationale in D1 and the audit log.
 
+Fleet adoption is computed from D1 control-plane evidence rather than Durable Object enumeration. For each known instance key, the latest execution release is reconciled with any later explicit migration. Process Studio aggregates the resulting actors by release and highlights current, pinned-previous, and unattributed cohorts. This query runs only when an operator opens Studio; it is not part of the agent request path.
+
 If an Agent has not received the publication event, it may finish in-flight runs on the previous release. New run creation supplies the intended release ID. This gives deterministic behavior with a single authoritative prompt store.
 
 ### 5.4 Prompt composition

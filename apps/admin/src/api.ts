@@ -317,6 +317,23 @@ export interface StudioData {
     from_version: number | null; to_version: number;
   }>;
   runStats: Array<{ status: string; count: number }>;
+  actorAdoption: {
+    supported: boolean;
+    knownActors: number;
+    currentActors: number;
+    pinnedPreviousActors: number;
+    unattributedActors: number;
+    cohorts: Array<{
+      release_id: string | null; version: number | null; status: string | null;
+      actor_count: number; latest_evidence_at: string | null;
+      state: "current" | "pinned_previous" | "unattributed";
+    }>;
+    actors: Array<{
+      execution_id: string; instance_key: string; effective_release_id: string | null;
+      version: number | null; status: string | null; last_active_at: string;
+      migrated_at: string | null; state: "current" | "pinned_previous" | "unattributed";
+    }>;
+  };
   activeTools: string[];
   topology: {
     nodes: Array<{ id: string; type: string; label: string }>;

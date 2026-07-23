@@ -1,0 +1,33 @@
+.release-operations{display:grid;gap:16px}
+.actor-adoption{overflow:hidden}
+.actor-adoption>.section-head{padding:20px;border-bottom:1px solid var(--line)}
+.actor-adoption>.section-head h2{margin:5px 0 3px;font:600 19px Manrope}
+.actor-adoption>.section-head p{margin:0;color:#5d6c65;font-size:13px}
+.actor-adoption>.section-head>em{padding:6px 10px;border-radius:15px;background:#e5f3ec;color:#286c52;font-size:12px;font-style:normal;font-weight:750}
+.actor-adoption-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid #e1e8e4}
+.actor-adoption-metrics span{padding:15px 18px;border-right:1px solid #e1e8e4}
+.actor-adoption-metrics span:last-child{border-right:0}
+.actor-adoption-metrics strong,.actor-adoption-metrics small{display:block}
+.actor-adoption-metrics strong{color:#20372d;font:600 21px Manrope}
+.actor-adoption-metrics small{margin-top:3px;color:#64746c;font-size:12px}
+.actor-adoption-metrics .attention{background:#fff8ea}.actor-adoption-metrics .attention strong{color:#8b632b}
+.actor-adoption-metrics .risk{background:#fff1ef}.actor-adoption-metrics .risk strong{color:#9a483d}
+.actor-cohorts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:16px 18px}
+.actor-cohorts article{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:13px;border:1px solid #dce5e0;border-radius:9px;background:#f8faf9}
+.actor-cohorts article.current{border-color:#c9e2d7;background:#eef7f3}
+.actor-cohorts article.pinned_previous{border-color:#ead9b9;background:#fffaf0}
+.actor-cohorts article.unattributed{border-color:#e8c9c4;background:#fff5f3}
+.actor-cohorts strong,.actor-cohorts small{display:block}.actor-cohorts strong{color:#2b4036;font-size:13px}.actor-cohorts small{margin-top:4px;color:#65756d;font-size:11px;overflow-wrap:anywhere}
+.actor-cohorts em{flex:none;padding:4px 7px;border-radius:11px;background:#fff;color:#50665c;font-size:11px;font-style:normal;font-weight:700}
+.actor-cohorts>p{grid-column:1/-1;margin:0;color:#66766e;font-size:13px}
+.actor-inventory{margin:0 18px 16px;border:1px solid #dbe4df;border-radius:9px;overflow:hidden}
+.actor-inventory summary{padding:12px 14px;background:#f6f8f7;color:#355c4d;font-size:12px;font-weight:750;cursor:pointer}
+.actor-inventory>div>header,.actor-inventory>div>article{display:grid;grid-template-columns:minmax(200px,1.7fr) 70px 120px 180px;align-items:center;gap:10px;padding:10px 13px}
+.actor-inventory>div>header{background:#fbfcfb;color:#68776f;font-size:10px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}
+.actor-inventory>div>article{border-top:1px solid #e5ebe8;color:#4f6158;font-size:12px}
+.actor-inventory article strong,.actor-inventory article small{display:block}.actor-inventory article strong{color:#2e4339}.actor-inventory article small{margin-top:3px;color:#7a8781;overflow-wrap:anywhere}
+.actor-inventory article em{width:max-content;padding:4px 7px;border-radius:12px;font-size:10px;font-style:normal;font-weight:750;text-transform:capitalize}
+.actor-inventory article em.current{background:#e7f4ed;color:#286b52}.actor-inventory article em.pinned_previous{background:#fff1d8;color:#876126}.actor-inventory article em.unattributed{background:#fde8e5;color:#93453b}
+.actor-adoption>footer{padding:12px 18px;border-top:1px solid #e1e8e4;color:#61726a;font-size:11px;line-height:1.5}
+@media(max-width:950px){.actor-cohorts{grid-template-columns:1fr 1fr}.actor-inventory>div>header,.actor-inventory>div>article{grid-template-columns:minmax(180px,1fr) 65px 110px}.actor-inventory>div>header>span:last-child,.actor-inventory>div>article>span:last-child{display:none}}
+@media(max-width:650px){.actor-adoption-metrics{grid-template-columns:1fr 1fr}.actor-adoption-metrics span:nth-child(2){border-right:0}.actor-adoption-metrics span:nth-child(-n+2){border-bottom:1px solid #e1e8e4}.actor-cohorts{grid-template-columns:1fr}.actor-inventory>div>header,.actor-inventory>div>article{grid-template-columns:1fr 70px}.actor-inventory>div>header>span:nth-child(3),.actor-inventory>div>article>em{display:none}}

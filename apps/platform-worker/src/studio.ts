@@ -17,7 +17,25 @@ interface ReleaseInput {
 }
 
 export async function getStudio(env: Env, tenantId: string, blueprintId: string) {
-  const [blueprint, prompt, releases, runStats, activations] = await Promise.all([
+  const actorCohortCte = `WITH latest_execution AS (
+      SELECT id execution_id, instance_key, process_release_id, started_at,
+        ROW_NUMBER() OVER (PARTITION BY instance_key ORDER BY started_at DESC, id DESC) rank
+      FROM executions WHERE tenant_id=? AND blueprint_id=? AND instance_key IS NOT NULL
+    ), latest_migration AS (
+      SELECT instance_key, to_release_id, migrated_at,
+        ROW_NUMBER() OVER (PARTITION BY instance_key ORDER BY migrated_at DESC, id DESC) rank
+      FROM actor_release_migrations WHERE tenant_id=? AND blueprint_id=?
+    ), actor_release AS (
+      SELECT le.execution_id, le.instance_key, le.started_at last_active_at,
+        CASE WHEN lm.migrated_at IS NOT NULL
+          AND julianday(lm.migrated_at) >= julianday(le.started_at)
+          THEN lm.to_release_id ELSE le.process_release_id END effective_release_id,
+        lm.migrated_at
+      FROM latest_execution le
+      LEFT JOIN latest_migration lm ON lm.instance_key=le.instance_key AND lm.rank=1
+      WHERE le.rank=1
+    )`;
+  const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors] = await Promise.all([
     env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
@@ -35,7 +53,20 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       JOIN process_releases t ON t.id=a.to_release_id AND t.tenant_id=a.tenant_id
       LEFT JOIN tenant_members m ON m.id=a.activated_by AND m.tenant_id=a.tenant_id
       WHERE a.tenant_id=? AND a.blueprint_id=? ORDER BY a.activated_at DESC LIMIT 30`)
-      .bind(tenantId, blueprintId).all()
+      .bind(tenantId, blueprintId).all(),
+    env.DB.prepare(`${actorCohortCte}
+      SELECT ar.effective_release_id release_id, pr.version, pr.status, COUNT(*) actor_count,
+        MAX(COALESCE(ar.migrated_at, ar.last_active_at)) latest_evidence_at
+      FROM actor_release ar
+      LEFT JOIN process_releases pr ON pr.id=ar.effective_release_id AND pr.tenant_id=?
+      GROUP BY ar.effective_release_id, pr.version, pr.status
+      ORDER BY pr.version DESC`).bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all(),
+    env.DB.prepare(`${actorCohortCte}
+      SELECT ar.*, pr.version, pr.status
+      FROM actor_release ar
+      LEFT JOIN process_releases pr ON pr.id=ar.effective_release_id AND pr.tenant_id=?
+      ORDER BY julianday(COALESCE(ar.migrated_at, ar.last_active_at)) DESC LIMIT 50`)
+      .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all()
   ]);
   if (!blueprint) return null;
   const row = blueprint as Record<string, unknown>;
@@ -43,11 +74,35 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     String((release as Record<string, unknown>).id) === String(row.active_release_id ?? ""));
   const activeTools = parseToolNames((activeRelease as Record<string, unknown> | undefined)?.tool_policy_json,
     JSON.parse(String(row.tools_json)) as string[]);
+  const activeReleaseId = String(row.active_release_id ?? "");
+  const cohorts = actorCohorts.results.map((cohort) => {
+    const item = cohort as Record<string, unknown>;
+    return { ...item, actor_count: Number(item.actor_count ?? 0), state: item.release_id
+      ? String(item.release_id) === activeReleaseId ? "current" : "pinned_previous"
+      : "unattributed" };
+  });
+  const actors = recentActors.results.map((actor) => {
+    const item = actor as Record<string, unknown>;
+    return { ...item, state: item.effective_release_id
+      ? String(item.effective_release_id) === activeReleaseId ? "current" : "pinned_previous"
+      : "unattributed" };
+  });
   return {
     blueprint,
     prompt,
     releases: releases.results, activations: activations.results,
     runStats: runStats.results,
+    actorAdoption: {
+      supported: !["instant", "workflow"].includes(String(row.execution_profile)),
+      knownActors: cohorts.reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
+      currentActors: cohorts.filter((cohort) => cohort.state === "current")
+        .reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
+      pinnedPreviousActors: cohorts.filter((cohort) => cohort.state === "pinned_previous")
+        .reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
+      unattributedActors: cohorts.filter((cohort) => cohort.state === "unattributed")
+        .reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
+      cohorts, actors
+    },
     activeTools,
     topology: topologyFor(String(row.execution_profile), String(row.autonomy), activeTools)
   };

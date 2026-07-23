@@ -528,6 +528,40 @@ function Studio({
           busy={busy} setBusy={setBusy} onReload={load} onNotice={onNotice}/>
       )}
       {tab === "releases" && (
+        <div className="release-operations">
+        {data.actorAdoption.supported && <section className="actor-adoption panel">
+          <div className="section-head"><div><span className="eyebrow"><Boxes size={14}/> DURABLE ACTOR FLEET</span>
+            <h2>Release adoption</h2>
+            <p>Known sticky actors by their latest execution and explicit migration evidence.</p></div>
+            <em>{data.actorAdoption.currentActors}/{data.actorAdoption.knownActors} current</em>
+          </div>
+          <div className="actor-adoption-metrics">
+            <span><strong>{data.actorAdoption.knownActors}</strong><small>Known actors</small></span>
+            <span><strong>{data.actorAdoption.currentActors}</strong><small>Current release</small></span>
+            <span className={data.actorAdoption.pinnedPreviousActors ? "attention" : ""}>
+              <strong>{data.actorAdoption.pinnedPreviousActors}</strong><small>Pinned previous</small></span>
+            <span className={data.actorAdoption.unattributedActors ? "risk" : ""}>
+              <strong>{data.actorAdoption.unattributedActors}</strong><small>Unattributed</small></span>
+          </div>
+          <div className="actor-cohorts">{data.actorAdoption.cohorts.map((cohort) =>
+            <article className={cohort.state} key={cohort.release_id ?? "unattributed"}>
+              <span><strong>{cohort.version ? `Release v${cohort.version}` : "Unattributed release"}</strong>
+                <small>{cohort.release_id ?? "No process-release evidence"}</small></span>
+              <em>{cohort.actor_count} actor{cohort.actor_count === 1 ? "" : "s"}</em>
+            </article>)}
+            {!data.actorAdoption.cohorts.length && <p>No durable actor has been created for this process yet.</p>}
+          </div>
+          {data.actorAdoption.actors.length > 0 && <details className="actor-inventory">
+            <summary>Inspect {data.actorAdoption.actors.length} recent actor identities</summary>
+            <div><header><span>Actor identity</span><span>Release</span><span>State</span><span>Last evidence</span></header>
+              {data.actorAdoption.actors.map((actor) => <article key={actor.instance_key}>
+                <span><strong>{actorIdentityLabel(actor.instance_key)}</strong><small>{actor.instance_key}</small></span>
+                <span>v{actor.version ?? "?"}</span><em className={actor.state}>{actor.state.replaceAll("_", " ")}</em>
+                <span>{actor.migrated_at ?? actor.last_active_at}</span>
+              </article>)}</div>
+          </details>}
+          <footer>Inventory is derived from tenant-scoped D1 evidence. Workrr does not enumerate Durable Objects or add reads to normal conversation turns.</footer>
+        </section>}
         <div className="release-list panel">
           <div className="section-head">
             <div>
@@ -606,6 +640,7 @@ function Studio({
               <small>{activation.activated_by_name ?? activation.activated_by} · {activation.activated_at}</small>
             </article>)}
           </section>}
+        </div>
         </div>
       )}
       {tab === "retirement" && retirementData && <RetirementStudio processId={processId}
@@ -835,6 +870,13 @@ function toolPolicyCount(value: string | null | undefined) {
   if (!value) return 0;
   try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.length : 0; }
   catch { return 0; }
+}
+function actorIdentityLabel(instanceKey: string) {
+  const marker = [":thread:", ":consumer:", ":entity:", ":shard:", ":temporary:"]
+    .find((candidate) => instanceKey.includes(candidate));
+  if (!marker) return "Durable actor";
+  const identity = instanceKey.split(marker)[1];
+  return `${marker.slice(1, -1).replace("_", " ")} · ${identity || "unknown"}`;
 }
 const exampleInputSchema = {
   type: "object",

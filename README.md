@@ -45,6 +45,8 @@ D1 is the source of truth for published process and prompt releases. A durable A
 
 Authorized operators can inspect the installed and current release from an execution's Actor Memory panel and migrate only that conversation. Migration requires exact source and target release confirmation plus a reason, preserves actor-local memory, moves the prompt/model/contracts/tool-policy bundle together, and writes attributable D1 and audit evidence.
 
+Process Studio also provides a release-adoption inventory for durable actor fleets. It groups every known thread, consumer, entity, shard, or temporary actor into current, pinned-previous, or unattributed cohorts and exposes the 50 most recent identities for investigation. The inventory is derived from indexed execution and explicit migration evidence; it does not enumerate Durable Objects or add a D1 read to ordinary conversation turns.
+
 Instant executions deliberately have no durable identity and load their release from D1. Workflow executions use Cloudflare Workflows for retryable, long-lived orchestration and reload the exact release captured in the execution record at admission. Queues absorb independent bursts; they are not used as a substitute for ordered actor state.
 
 Friendly model profiles are authoring defaults, not mutable runtime aliases. Draft creation records the exact Workers AI model ID in the release; instant Workers, durable Agents, Workflows, evaluation runs, governance exports, privacy reports, and process packages all consume or expose that pinned value. Changing a profile mapping affects only later drafts, and an unknown model fails closed.
