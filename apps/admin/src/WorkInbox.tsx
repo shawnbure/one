@@ -130,6 +130,11 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
           </span>)}
         </div>}
         <div className="decision-context"><span><ShieldCheck size={17}/><div><strong>{detail.impact} impact</strong><small>{detail.autonomy_level ? `${detail.autonomy_level} autonomy routed this proposal to review` : "Human authorization required by process policy"}</small></div></span><span><UserRound size={17}/><div><strong>{detail.assigned_to ?? "Unassigned"}</strong><small>Assigned reviewer</small></div></span></div>
+        {detail.status === "pending" && <div className={`approval-sla ${detail.overdue ? "overdue" : ""}`}>
+          <Clock3 size={17}/><span><strong>{detail.overdue ? "Response SLA overdue" : "Response SLA active"}</strong>
+            <small>{detail.due_at ? `Due ${formatDate(detail.due_at)} · open ${formatAge(detail.age_minutes)}` : "No response deadline is configured."}
+              {detail.sla_escalated_at ? ` · escalated ${formatDate(detail.sla_escalated_at)}` : ""}</small></span>
+        </div>}
         {detail.status === "pending" && canAssign(session) && <div className="assignment-control">
           <label htmlFor="approval-assignee">Responsible reviewer</label>
           <select id="approval-assignee" disabled={busy} value={detail.assigned_to ?? ""}
@@ -173,8 +178,11 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
   return <section className="inbox-page">
     <div className="page-title"><div><span className="eyebrow"><Inbox size={14}/> HUMAN CONTROL</span><h1>Work inbox</h1><p>Review consequential actions with the evidence and context needed to decide safely.</p></div><div className="assignment-chip"><UserRound size={15}/><span><small>VIEWING AS</small><strong>{session?.user.name ?? "Authorized reviewer"}</strong></span></div></div>
     <div className="inbox-tabs">{(["pending", "resolved", "all"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}<span>{value === "pending" ? items.filter((item) => item.status === "pending").length : value === "resolved" ? items.filter((item) => item.status !== "pending").length : items.length}</span></button>)}</div>
-    <div className="work-list panel">{filtered.length ? filtered.map((item) => <button key={item.id} className="work-row" onClick={() => setSelectedId(item.id)}><span className={`work-impact ${item.impact}`}><ShieldCheck size={18}/></span><span className="work-copy"><span><strong>{item.title ?? item.action_name.replaceAll("_", " ")}</strong><span className={`status ${item.status}`}><i/>{item.status}</span>{item.status === "pending" && item.review_state !== "decision_pending" &&
-      <span className={`review-state ${item.review_state}`}>{item.review_state.replaceAll("_", " ")}</span>}</span><small>{item.description ?? "Human authorization requested"}</small><em>{item.action_name.replaceAll("_", " ")} · Execution {item.execution_id.slice(0, 8)}</em></span><span className="work-meta"><small><Clock3 size={13}/>{formatDate(item.requested_at)}</small><strong>{item.assigned_to ?? "Unassigned"}</strong></span><ChevronRight size={18}/></button>) : <div className="work-empty"><Check size={25}/><strong>Nothing waiting here</strong><span>New human checkpoints will be routed into this queue.</span></div>}</div>
+    <div className="work-list panel">{filtered.length ? filtered.map((item) => <button key={item.id} className={`work-row ${item.overdue ? "overdue" : ""}`} onClick={() => setSelectedId(item.id)}><span className={`work-impact ${item.impact}`}><ShieldCheck size={18}/></span><span className="work-copy"><span><strong>{item.title ?? item.action_name.replaceAll("_", " ")}</strong><span className={`status ${item.status}`}><i/>{item.status}</span>{item.status === "pending" && item.review_state !== "decision_pending" &&
+      <span className={`review-state ${item.review_state}`}>{item.review_state.replaceAll("_", " ")}</span>}</span><small>{item.description ?? "Human authorization requested"}</small><em>{item.action_name.replaceAll("_", " ")} · Execution {item.execution_id.slice(0, 8)}</em></span><span className="work-meta"><small><Clock3 size={13}/>{item.status === "pending" && item.due_at
+        ? `${item.overdue ? "Overdue" : "Due"} ${formatDate(item.due_at)}`
+        : formatDate(item.requested_at)}</small><strong>{item.assigned_to ?? "Unassigned"}</strong>
+        {item.status === "pending" && <em>{formatAge(item.age_minutes)} open</em>}</span><ChevronRight size={18}/></button>) : <div className="work-empty"><Check size={25}/><strong>Nothing waiting here</strong><span>New human checkpoints will be routed into this queue.</span></div>}</div>
   </section>;
 }
 
@@ -220,4 +228,9 @@ function canEscalate(session: SessionData | null) {
 function formatDate(value: string): string {
   const date = new Date(value.endsWith("Z") || value.includes("+") ? value : `${value.replace(" ", "T")}Z`);
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+function formatAge(minutes = 0): string {
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return `${Math.floor(minutes / 1440)}d ${Math.floor((minutes % 1440) / 60)}h`;
 }

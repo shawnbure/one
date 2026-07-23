@@ -34,6 +34,7 @@ import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markTo
   processToolAction, retryToolAction } from "./tool-actions";
 import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
 import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
+import { escalateOverdueApprovals } from "./approval-sla";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
   updateConnectionLifecycle } from "./connection-operations";
 import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpportunities, listOpportunityRevisions,
@@ -1091,7 +1092,10 @@ app.post("/api/queue-jobs/:id/replay", requireRoles("admin", "owner", "operator"
 app.get("/api/approvals", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const status = c.req.query("status");
   const filter = status && ["pending", "approved", "rejected", "expired"].includes(status) ? " AND status = ?" : "";
-  const statement = c.env.DB.prepare(`SELECT * FROM approvals WHERE tenant_id = ?${filter}
+  const statement = c.env.DB.prepare(`SELECT *,
+    CASE WHEN status='pending' AND due_at IS NOT NULL AND datetime(due_at)<datetime('now') THEN 1 ELSE 0 END overdue,
+    MAX(0, CAST((julianday('now')-julianday(requested_at))*1440 AS INTEGER)) age_minutes
+    FROM approvals WHERE tenant_id = ?${filter}
     ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END,
       CASE WHEN status='pending' THEN COALESCE(due_at, '9999-12-31') END,
       COALESCE(last_activity_at, requested_at) DESC LIMIT 100`);
@@ -1101,7 +1105,9 @@ app.get("/api/approvals", requireRoles("admin", "builder", "owner", "operator", 
 
 app.get("/api/approvals/:id", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const [approval, audit, actions, messages] = await Promise.all([
-    c.env.DB.prepare(`SELECT a.*, e.blueprint_id, e.input_preview, e.output_preview, e.model
+    c.env.DB.prepare(`SELECT a.*, e.blueprint_id, e.input_preview, e.output_preview, e.model,
+      CASE WHEN a.status='pending' AND a.due_at IS NOT NULL AND datetime(a.due_at)<datetime('now') THEN 1 ELSE 0 END overdue,
+      MAX(0, CAST((julianday('now')-julianday(a.requested_at))*1440 AS INTEGER)) age_minutes
       FROM approvals a JOIN executions e ON e.id = a.execution_id
       WHERE a.id = ? AND a.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first(),
     c.env.DB.prepare(`SELECT actor_id, event_type, detail_json, created_at FROM audit_events
@@ -1841,6 +1847,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       expireKnowledgeSources(env, now),
       emitConnectionExpiryAlerts(env, now),
       escalateUnacknowledgedNotifications(env, now),
+      escalateOverdueApprovals(env, now),
       enqueueDueNotificationDeliveries(env, now),
       enqueueDueProcessDisposals(env, now),
       enforceAllTenantRetention(env, now),

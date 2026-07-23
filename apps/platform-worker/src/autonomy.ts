@@ -83,12 +83,19 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
   const actionName = proposedActions.length ? "review_proposed_tool_action" : "review_ai_outcome";
   const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO approvals
       (id, tenant_id, execution_id, action_name, action_input_json, status, requested_at, title,
-       description, impact, autonomy_level, action_risk)
-      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'medium', ?, 'medium')`)
+       description, impact, autonomy_level, action_risk, assigned_to, due_at)
+      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'medium', ?, 'medium',
+        (SELECT m.email FROM tenant_members m
+          LEFT JOIN tenant_lifecycle_settings l ON l.tenant_id=m.tenant_id
+          WHERE m.tenant_id=? AND m.status='active'
+            AND m.role IN ('admin','owner','operator','reviewer')
+          ORDER BY CASE WHEN m.id=l.support_owner_id THEN 0 WHEN m.role='owner' THEN 1
+            WHEN m.role='admin' THEN 2 WHEN m.role='operator' THEN 3 ELSE 4 END, m.id LIMIT 1),
+        datetime(?, '+4 hours'))`)
     .bind(approvalId, tenantId, executionId, actionName,
       JSON.stringify({ tools: blueprint.toolPolicies ?? blueprint.tools, proposedActions,
         proposedOutput: output.slice(0, 4000) }), now,
-      `Review ${blueprint.name} proposal`, plan.explanation, plan.effective).run();
+      `Review ${blueprint.name} proposal`, plan.explanation, plan.effective, tenantId, now).run();
   await env.DB.batch([
     env.DB.prepare(`UPDATE executions SET status='waiting_approval', autonomy_disposition='waiting_approval',
       approval_id=? WHERE id=? AND tenant_id=?`).bind(approvalId, executionId, tenantId),

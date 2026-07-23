@@ -32,6 +32,10 @@ export interface Approval {
   review_state: "decision_pending" | "information_requested" | "escalated";
   escalation_level: number;
   last_activity_at: string | null;
+  overdue?: number;
+  age_minutes?: number;
+  sla_escalated_at?: string | null;
+  sla_escalation_count?: number;
 }
 
 export interface SessionData {

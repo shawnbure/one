@@ -16,7 +16,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Opportunities | Manual-process intake, transparent impact/feasibility scoring, qualification, and secure conversion to paused draft processes |
 | Discover | Intake wizard, process templates, baseline capture, and opportunity scoring |
 | Process Studio | Visual topology, explicit execution profile, enforced five-level autonomy, immutable prompt/model/input-output contract releases, publish/rollback, and recurring process schedules with dispatch history |
-| Work Inbox | Evidence and rationale review, validated assignment, comments, information request/response, escalation, approval/decline, and audit trail |
+| Work Inbox | Evidence and rationale review, automatic accountable ownership, response SLA/aging, bounded overdue escalation, validated reassignment, comments, information request/response, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, deterministic outcome explanation, redacted evidence export, approved external-action queue, inputs/outputs, failures, and safe replay/recovery |
 | Accountable recovery | Automatically created failure/blocked/deferred tasks with owner, SLA, investigation state, risk acceptance, and completed-run closure proof |
 | Memory governance | Bounded actor-local conversation context plus operating-role inspection, correction, quarantine, restoration, and content deletion without copying message bodies into D1 or KV |
@@ -63,6 +63,8 @@ Every published release also declares an autonomy level that is enforced at runt
 The process `read_only` operating mode caps any non-observe release at `suggest`. `approval_only` forces every non-observe release through review. Execution records snapshot the effective level and disposition so later release changes cannot rewrite historical evidence. Approving or rejecting a pending item also resolves the associated execution and records the decision audit.
 
 The process `shadow` operating mode is a production-safe learning boundary. It runs the published model as `suggest`, records its proposal, suppresses tool approval/action delivery, and excludes the assistant response from durable actor memory. Authorized reviewers compare that proposal with the DLP-protected actual human outcome using `match`, `partial`, `miss`, or `unsafe` evidence. This lets a customer establish quality before increasing autonomy without presenting a proposal as completed work.
+
+Every runtime-created approval receives a four-hour response deadline and a responsible reviewer. Workrr prefers the configured active support owner and falls back deterministically to an eligible same-tenant owner, administrator, operator, or reviewer without a separate request-time lookup. Work Inbox displays due time, open age, and overdue state. Hourly Cron uses an indexed, 100-item ceiling and a conditional claim so each overdue approval receives one SLA escalation, one metadata-only audit event, and the existing tenant approval notification even when scheduled invocations overlap.
 
 ## Typed tool boundary
 
