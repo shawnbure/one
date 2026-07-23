@@ -208,13 +208,20 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [savingCase, setSavingCase] = useState(false);
   const [suiteRunning, setSuiteRunning] = useState(false);
   const [sampleExecution, setSampleExecution] = useState("");
+  const [candidateProfile, setCandidateProfile] = useState("fast");
+  const [trialRunning, setTrialRunning] = useState(false);
   const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "", format: "text" as "text" | "json", maxChars: 2000 });
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
   ).length;
   async function inspect(id: string) {
     setSelected(id);
-    try { setDetail((await api.evaluation(id)).data); }
+    try {
+      const next = (await api.evaluation(id)).data;
+      setDetail(next);
+      const baseline = next.runs[0]?.model_profile;
+      setCandidateProfile((current) => current !== baseline ? current : (next.modelProfiles.find((profile) => profile.id !== baseline)?.id ?? current));
+    }
     catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation detail could not load"); }
   }
   async function run(id: string) {
@@ -275,6 +282,16 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       await onReload();
       onNotice("The stored, truncated execution preview was promoted into a regression case.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "Production sample could not be promoted"); }
+  }
+  async function compareModels() {
+    if (!selected) return;
+    setTrialRunning(true);
+    try {
+      const result = await api.queueModelTrial(selected, { candidateProfile });
+      await inspect(selected);
+      onNotice(`${result.data.baselineProfile} vs ${result.data.candidateProfile} queued as an isolated Workflow trial.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Model comparison could not be queued"); }
+    finally { setTrialRunning(false); }
   }
   const latest = detail?.runs[0];
   const previous = detail?.runs.find((run) => run.release_id !== latest?.release_id) ?? detail?.runs[1];
@@ -344,13 +361,17 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
             <article><small>PREVIOUS COMPARISON</small><strong>{previous ? `v${previous.release_version ?? "?"} · ${(Number(previous.score) * 100).toFixed(0)}%` : "No baseline"}</strong><span>{delta === null ? "Run another release to compare" : `${delta >= 0 ? "+" : ""}${delta.toFixed(0)} percentage points`}</span></article>
             <article><small>RELEASE COST</small><strong>{latest ? money(Number(latest.estimated_cost_usd)) : "$0.0000"}</strong><span>{latest ? `${number(Number(latest.total_tokens))} model tokens` : "No inference recorded"}</span></article>
           </div>
+          <div className="model-trials">
+            <div className="section-head"><div><h3>Cloudflare model shadow comparison</h3><p>Run identical release prompts and cases without changing the live process model.</p></div><span className="trial-controls"><select value={candidateProfile} onChange={(event) => setCandidateProfile(event.target.value)}>{detail.modelProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label} · {profile.use}</option>)}</select><button disabled={trialRunning} onClick={() => void compareModels()}><GitCompare size={15}/>{trialRunning ? "Queueing…" : "Compare model"}</button></span></div>
+            {detail.modelTrials.length ? detail.modelTrials.slice(0, 4).map((trial) => <article key={trial.id}><span><strong>{trial.baseline_profile} baseline</strong><small>{trial.baseline_score === null ? "Waiting" : `${(Number(trial.baseline_score) * 100).toFixed(0)}% · ${money(Number(trial.baseline_cost_usd))} · ${number(Number(trial.baseline_tokens))} tokens`}</small></span><GitCompare size={17}/><span><strong>{trial.candidate_profile} candidate</strong><small>{trial.candidate_score === null ? "Waiting" : `${(Number(trial.candidate_score) * 100).toFixed(0)}% · ${money(Number(trial.candidate_cost_usd))} · ${number(Number(trial.candidate_tokens))} tokens`}</small></span><span className={`connection-state ${trial.status}`}><i/>{trial.status}</span><p>{trial.recommendation ?? trial.error ?? "Workflow trial is running"}</p></article>) : <p className="empty-copy">No model trials yet. The release baseline remains unchanged until you create and publish a new release.</p>}
+          </div>
           <div className="suite-history">
             <div className="section-head"><div><h3>Durable suite history</h3><p>Cloudflare Workflows preserve retries and completion outside the browser request.</p></div></div>
             {detail.suites.length ? detail.suites.slice(0, 5).map((suite) => <article key={suite.id}><Workflow size={16}/><span><strong>{suite.mode} · {suite.id.slice(0, 8)}</strong><small>{suite.completed_at ?? suite.started_at ?? suite.created_at}</small></span><span className={`connection-state ${suite.status}`}><i/>{suite.status}</span><strong>{suite.score === null ? "—" : `${(Number(suite.score) * 100).toFixed(0)}%`}</strong></article>) : <p className="empty-copy">No durable suites queued yet. The quick Run action remains available for small interactive checks.</p>}
           </div>
           <div className="golden-layout">
             <div className="golden-cases"><div className="section-head"><div><h3>Golden cases</h3><p>Anonymized inputs and deterministic output properties.</p></div></div>
-              {detail.cases.map((item) => { const result = latest ? detail.caseResults.find((row) => row.run_id === latest.id && row.case_id === item.id) : null; const human = result ? detail.humanReviews.find((row) => row.case_result_id === result.id) : null; return <article key={item.id}><span className={`eval-icon ${result?.status ?? "attention"}`}>{result?.status === "passing" ? <CheckCircle2 size={17}/> : <AlertTriangle size={17}/>}</span><span><strong>{item.name}</strong><small>{assertionLabel(item.assertions_json)} · {item.source}</small>{result && <span className="human-score"><small>Human score: {human ? `${human.score}/5 · ${human.verdict.replaceAll("_", " ")}` : "not reviewed"}</small><button onClick={() => void review(result.id, 5, "acceptable")}>Accept</button><button onClick={() => void review(result.id, 3, "needs_work")}>Needs work</button><button onClick={() => void review(result.id, 1, "unsafe")}>Unsafe</button></span>}</span><span className={`connection-state ${result?.status ?? "attention"}`}><i/>{result?.status ?? "not run"}</span>{result && <small>{result.latency_ms} ms · {result.passed_assertions}/{result.assertion_count}</small>}</article>; })}
+              {detail.cases.map((item) => { const result = latest ? detail.caseResults.find((row) => row.run_id === latest.id && row.case_id === item.id) : null; const human = result ? detail.humanReviews.find((row) => row.case_result_id === result.id) : null; const redaction = redactionLabel(item.redaction_json); return <article key={item.id}><span className={`eval-icon ${result?.status ?? "attention"}`}>{result?.status === "passing" ? <CheckCircle2 size={17}/> : <AlertTriangle size={17}/>}</span><span><strong>{item.name}</strong><small>{assertionLabel(item.assertions_json)} · {item.source}{redaction ? ` · ${redaction}` : ""}</small>{result && <span className="human-score"><small>Human score: {human ? `${human.score}/5 · ${human.verdict.replaceAll("_", " ")}` : "not reviewed"}</small><button onClick={() => void review(result.id, 5, "acceptable")}>Accept</button><button onClick={() => void review(result.id, 3, "needs_work")}>Needs work</button><button onClick={() => void review(result.id, 1, "unsafe")}>Unsafe</button></span>}</span><span className={`connection-state ${result?.status ?? "attention"}`}><i/>{result?.status ?? "not run"}</span>{result && <small>{result.latency_ms} ms · {result.passed_assertions}/{result.assertion_count}</small>}</article>; })}
             </div>
             <div className="case-builder"><div className="section-head"><div><h3>Add golden case</h3><p>Use anonymized facts only.</p></div><Plus size={16}/></div>
               <label>Case name<input value={caseForm.name} onChange={(event) => setCaseForm({ ...caseForm, name: event.target.value })}/></label>
@@ -372,6 +393,10 @@ function phrases(value: string) { return value.split(",").map((item) => item.tri
 function assertionLabel(value: string) {
   try { const items = JSON.parse(value) as Array<{ type: string }>; return `${items.length} assertions · ${items.map((item) => item.type.replaceAll("_", " ")).join(" · ")}`; }
   catch { return "Assertions require review"; }
+}
+function redactionLabel(value: string) {
+  try { const item = JSON.parse(value) as { count?: number }; return item.count ? `${item.count} sensitive value${item.count === 1 ? "" : "s"} masked` : ""; }
+  catch { return ""; }
 }
 function money(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value || 0); }
 function number(value: number) { return new Intl.NumberFormat().format(value || 0); }

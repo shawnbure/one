@@ -1,4 +1,4 @@
-import type { PromptBundle } from "@workrr/contracts";
+import { modelProfiles, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { assertBudgetAvailable } from "./usage";
@@ -29,7 +29,7 @@ interface ReleaseRow {
 }
 
 export async function runEvaluation(env: Env, tenantId: string, actorId: string, scenarioId: string, requestedReleaseId?: string,
-  requestedRunId?: string) {
+  requestedRunId?: string, requestedModelProfile?: string, updateScenario = true) {
   await assertBudgetAvailable(env, tenantId);
   const scenario = await env.DB.prepare(`SELECT e.*, b.active_release_id, b.operating_mode, b.prompt_release_id
     FROM evaluation_scenarios e JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
@@ -43,6 +43,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
   const cases = await env.DB.prepare(`SELECT id, name, input_text, assertions_json, weight FROM evaluation_cases
     WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1 ORDER BY created_at, id LIMIT 10`).bind(tenantId, scenarioId).all<EvaluationCase>();
   const guardrails = release ? parseList(release.guardrails_json) : [];
+  const modelProfile = requestedModelProfile && requestedModelProfile in modelProfiles ? requestedModelProfile : release?.model_profile;
   const controls = [
     { check: "release_belongs_to_process", passed: Boolean(release) },
     { check: "system_prompt_defined", passed: Boolean(release?.system_prompt?.trim()) },
@@ -70,7 +71,8 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
     for (const item of cases.results) {
       const started = performance.now();
       try {
-        const result = await runModel(env, release.model_profile, prompt, item.input_text, `evaluation:${release.id}:${item.id}`);
+        const result = await runModel(env, modelProfile!, prompt, item.input_text,
+          `evaluation:${release.id}:${modelProfile}:${item.id}`);
         const assertions = parseAssertions(item.assertions_json);
         const evidence = assertions.map((assertion) => evaluateAssertion(result.output, assertion));
         const passed = evidence.filter((check) => check.passed).length;
@@ -116,14 +118,15 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
   const statements = [
     env.DB.prepare(`INSERT INTO evaluation_runs
       (id, tenant_id, scenario_id, blueprint_id, release_id, status, passed_assertions, assertion_count, evidence_json,
-       triggered_by, score, case_count, input_tokens, output_tokens, total_tokens, estimated_cost_usd)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       triggered_by, score, case_count, input_tokens, output_tokens, total_tokens, estimated_cost_usd, model_profile)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET status = excluded.status, passed_assertions = excluded.passed_assertions,
         assertion_count = excluded.assertion_count, evidence_json = excluded.evidence_json, score = excluded.score,
         case_count = excluded.case_count, input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
-        total_tokens = excluded.total_tokens, estimated_cost_usd = excluded.estimated_cost_usd`).bind(runId, tenantId, scenario.id, scenario.blueprint_id,
+        total_tokens = excluded.total_tokens, estimated_cost_usd = excluded.estimated_cost_usd,
+        model_profile = excluded.model_profile`).bind(runId, tenantId, scenario.id, scenario.blueprint_id,
         releaseId || null, status, passedAssertions, assertionCount, JSON.stringify(evidence), actorId, score, caseResults.length,
-        inputTokens, outputTokens, totalTokens, estimatedCost),
+        inputTokens, outputTokens, totalTokens, estimatedCost, modelProfile ?? null),
     ...caseResults.map((item) => env.DB.prepare(`INSERT INTO evaluation_case_results
       (id, tenant_id, run_id, case_id, release_id, status, passed_assertions, assertion_count, output_preview, model,
        input_tokens, output_tokens, total_tokens, estimated_cost_usd, latency_ms, evidence_json, error)
@@ -135,14 +138,14 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
         evidence_json = excluded.evidence_json, error = excluded.error`).bind(item.id, tenantId, runId, item.caseId, releaseId,
         item.status, item.passed, item.total, item.output, item.model, item.inputTokens, item.outputTokens, item.totalTokens,
         item.cost, item.latencyMs, JSON.stringify(item.evidence), item.error)),
-    env.DB.prepare("UPDATE evaluation_scenarios SET status = ?, assertion_count = ?, last_run_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
-      .bind(status, assertionCount, scenario.id, tenantId),
+    ...(updateScenario ? [env.DB.prepare("UPDATE evaluation_scenarios SET status = ?, assertion_count = ?, last_run_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
+      .bind(status, assertionCount, scenario.id, tenantId)] : []),
     env.DB.prepare(`INSERT OR REPLACE INTO audit_events (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
       VALUES (?, ?, ?, 'evaluation.run', 'evaluation_scenario', ?, ?)`).bind(`audit-evaluation-${runId}`, tenantId, actorId, scenario.id,
-        JSON.stringify({ runId, releaseId, status, score, threshold, passedAssertions, assertionCount, caseCount: caseResults.length }))
+        JSON.stringify({ runId, releaseId, modelProfile, status, score, threshold, passedAssertions, assertionCount, caseCount: caseResults.length }))
   ];
   await env.DB.batch(statements);
-  return { id: runId, scenarioId, releaseId, status, score, threshold, passedAssertions, assertionCount,
+  return { id: runId, scenarioId, releaseId, modelProfile, status, score, threshold, passedAssertions, assertionCount,
     caseCount: caseResults.length, inputTokens, outputTokens, totalTokens, estimatedCostUsd: estimatedCost, evidence };
 }
 
@@ -151,9 +154,9 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
     env.DB.prepare(`SELECT e.*, b.name process_name, b.active_release_id FROM evaluation_scenarios e
       JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
       WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first(),
-    env.DB.prepare(`SELECT id, name, input_text, assertions_json, weight, enabled, source, created_at
+    env.DB.prepare(`SELECT id, name, input_text, assertions_json, weight, enabled, source, redaction_json, created_at
       FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? ORDER BY created_at, id`).bind(tenantId, scenarioId).all(),
-    env.DB.prepare(`SELECT r.id, r.release_id, r.status, r.score, r.passed_assertions, r.assertion_count, r.case_count,
+    env.DB.prepare(`SELECT r.id, r.release_id, r.model_profile, r.status, r.score, r.passed_assertions, r.assertion_count, r.case_count,
       r.input_tokens, r.output_tokens, r.total_tokens, r.estimated_cost_usd, r.triggered_by, r.created_at,
       pr.version release_version FROM evaluation_runs r LEFT JOIN process_releases pr ON pr.id = r.release_id
       WHERE r.tenant_id = ? AND r.scenario_id = ? ORDER BY r.created_at DESC LIMIT 12`).bind(tenantId, scenarioId).all()
@@ -164,17 +167,22 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
     output_preview, model, total_tokens, estimated_cost_usd, latency_ms, evidence_json, error
     FROM evaluation_case_results WHERE tenant_id = ? AND run_id IN (${runIds.map(() => "?").join(",")})
     ORDER BY created_at, case_id`).bind(tenantId, ...runIds).all() : { results: [] };
-  const [suites, reviews] = await Promise.all([
+  const [suites, reviews, modelTrials] = await Promise.all([
     env.DB.prepare(`SELECT id, release_id, evaluation_run_id, mode, status, score, error, started_at, completed_at, created_at
       FROM evaluation_suite_runs WHERE tenant_id = ? AND scenario_id = ? ORDER BY created_at DESC LIMIT 20`)
       .bind(tenantId, scenarioId).all(),
     runIds.length ? env.DB.prepare(`SELECT h.id, h.case_result_id, h.reviewer_id, h.score, h.verdict, h.notes, h.updated_at
       FROM evaluation_human_reviews h JOIN evaluation_case_results c ON c.id = h.case_result_id
       WHERE h.tenant_id = ? AND c.run_id IN (${runIds.map(() => "?").join(",")}) ORDER BY h.updated_at DESC`)
-      .bind(tenantId, ...runIds).all() : Promise.resolve({ results: [] })
+      .bind(tenantId, ...runIds).all() : Promise.resolve({ results: [] }),
+    env.DB.prepare(`SELECT id, release_id, baseline_profile, candidate_profile, status, baseline_score, candidate_score,
+      baseline_cost_usd, candidate_cost_usd, baseline_tokens, candidate_tokens, recommendation, error, completed_at, created_at
+      FROM evaluation_model_trials WHERE tenant_id = ? AND scenario_id = ? ORDER BY created_at DESC LIMIT 12`)
+      .bind(tenantId, scenarioId).all()
   ]);
   return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results,
-    suites: suites.results, humanReviews: reviews.results };
+    suites: suites.results, humanReviews: reviews.results, modelTrials: modelTrials.results,
+    modelProfiles: Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile })) };
 }
 
 export async function createEvaluationCase(env: Env, tenantId: string, scenarioId: string, input: {
@@ -198,15 +206,55 @@ export async function createEvaluationCase(env: Env, tenantId: string, scenarioI
     .bind(tenantId, scenarioId).first<{ count: number }>();
   if (Number(count?.count) >= 10) throw new Error("Evaluation scenarios support up to 10 synchronous curated cases");
   const id = crypto.randomUUID();
+  const redacted = redactSensitiveText(input.input.trim().slice(0, 20_000));
   await env.DB.prepare(`INSERT INTO evaluation_cases
-    (id, tenant_id, scenario_id, name, input_text, assertions_json, source) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, tenantId, scenarioId, input.name.trim(), input.input.trim().slice(0, 20_000), JSON.stringify(assertions), source).run();
+    (id, tenant_id, scenario_id, name, input_text, assertions_json, source, redaction_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, tenantId, scenarioId, input.name.trim(), redacted.text, JSON.stringify(assertions), source,
+      JSON.stringify({ count: redacted.count, types: redacted.types })).run();
   const rows = await env.DB.prepare("SELECT assertions_json FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1")
     .bind(tenantId, scenarioId).all<{ assertions_json: string }>();
   const assertionCount = 4 + rows.results.reduce((sum, row) => sum + parseAssertions(row.assertions_json).length, 0);
   await env.DB.prepare("UPDATE evaluation_scenarios SET assertion_count = ?, status = 'not_run' WHERE id = ? AND tenant_id = ?")
     .bind(assertionCount, scenarioId, tenantId).run();
-  return { id, assertionCount, assertions };
+  return { id, assertionCount, assertions, redaction: { count: redacted.count, types: redacted.types } };
+}
+
+export async function queueModelTrial(env: Env, tenantId: string, actorId: string, scenarioId: string, candidateProfile: string,
+  requestedReleaseId?: string) {
+  await assertBudgetAvailable(env, tenantId);
+  if (!(candidateProfile in modelProfiles)) throw new Error("Select a supported Cloudflare model profile");
+  const scenario = await env.DB.prepare(`SELECT e.id, e.blueprint_id, b.active_release_id FROM evaluation_scenarios e
+    JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
+    WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId)
+    .first<{ id: string; blueprint_id: string; active_release_id: string | null }>();
+  if (!scenario) throw new Error("Evaluation scenario not found");
+  const releaseId = requestedReleaseId || scenario.active_release_id;
+  if (!releaseId) throw new Error("Select or publish a process release before comparing models");
+  const release = await env.DB.prepare(`SELECT id, model_profile FROM process_releases
+    WHERE id = ? AND tenant_id = ? AND blueprint_id = ?`).bind(releaseId, tenantId, scenario.blueprint_id)
+    .first<{ id: string; model_profile: string }>();
+  if (!release) throw new Error("Release does not belong to this process");
+  if (release.model_profile === candidateProfile) throw new Error("Choose a candidate profile different from the release baseline");
+  const trialId = crypto.randomUUID();
+  const baselineRunId = crypto.randomUUID();
+  const candidateRunId = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO evaluation_model_trials
+    (id, tenant_id, scenario_id, blueprint_id, release_id, workflow_instance_id, baseline_profile, candidate_profile,
+     baseline_run_id, candidate_run_id, triggered_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(trialId, tenantId, scenarioId, scenario.blueprint_id, releaseId, trialId, release.model_profile, candidateProfile,
+      baselineRunId, candidateRunId, actorId).run();
+  try {
+    await env.EVALUATION_WORKFLOW.create({
+      id: trialId as `${string}-${string}-${string}-${string}-${string}`,
+      params: { kind: "model_comparison", tenantId, actorId, trialId, scenarioId, releaseId,
+        baselineProfile: release.model_profile, candidateProfile, baselineRunId, candidateRunId }
+    });
+  } catch (error) {
+    await env.DB.prepare(`UPDATE evaluation_model_trials SET status = 'error', error = ?, completed_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ?`).bind((error instanceof Error ? error.message : String(error)).slice(0, 500), trialId, tenantId).run();
+    throw error;
+  }
+  return { id: trialId, status: "queued", releaseId, baselineProfile: release.model_profile, candidateProfile };
 }
 
 export async function queueEvaluationSuite(env: Env, tenantId: string, actorId: string, scenarioId: string,
@@ -338,4 +386,25 @@ function cleanPhrases(value: unknown) {
 function parseList(value: string): string[] {
   try { const result = JSON.parse(value); return Array.isArray(result) ? result.filter((item): item is string => typeof item === "string") : []; }
   catch { return []; }
+}
+
+export function redactSensitiveText(value: string) {
+  const found = new Set<string>();
+  let count = 0;
+  const patterns: Array<{ type: string; token: string; expression: RegExp }> = [
+    { type: "email", token: "[REDACTED_EMAIL]", expression: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi },
+    { type: "ssn", token: "[REDACTED_SSN]", expression: /\b\d{3}-\d{2}-\d{4}\b/g },
+    { type: "phone", token: "[REDACTED_PHONE]", expression: /(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\d)/g },
+    { type: "payment_card", token: "[REDACTED_PAYMENT_CARD]", expression: /\b(?:\d[ -]*?){13,19}\b/g },
+    { type: "secret", token: "[REDACTED_SECRET]", expression: /\b(?:sk|api|token|secret)[-_][A-Za-z0-9_-]{12,}\b/gi }
+  ];
+  let text = value;
+  for (const pattern of patterns) {
+    text = text.replace(pattern.expression, () => {
+      count += 1;
+      found.add(pattern.type);
+      return pattern.token;
+    });
+  }
+  return { text, count, types: [...found] };
 }

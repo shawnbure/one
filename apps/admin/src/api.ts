@@ -204,8 +204,8 @@ export interface UsageData {
 }
 export interface EvaluationDetail {
   scenario: { id: string; name: string; process_name: string; status: string; gate_threshold: number; active_release_id: string | null };
-  cases: Array<{ id: string; name: string; input_text: string; assertions_json: string; weight: number; enabled: number; source: string; created_at: string }>;
-  runs: Array<{ id: string; release_id: string; release_version: number | null; status: string; score: number;
+  cases: Array<{ id: string; name: string; input_text: string; assertions_json: string; weight: number; enabled: number; source: string; redaction_json: string; created_at: string }>;
+  runs: Array<{ id: string; release_id: string; release_version: number | null; model_profile: string | null; status: string; score: number;
     passed_assertions: number; assertion_count: number; case_count: number; total_tokens: number; estimated_cost_usd: number; created_at: string }>;
   caseResults: Array<{ id: string; run_id: string; case_id: string; status: string; passed_assertions: number; assertion_count: number;
     output_preview: string | null; model: string | null; total_tokens: number; estimated_cost_usd: number; latency_ms: number;
@@ -214,6 +214,11 @@ export interface EvaluationDetail {
     status: string; score: number | null; error: string | null; started_at: string | null; completed_at: string | null; created_at: string }>;
   humanReviews: Array<{ id: string; case_result_id: string; reviewer_id: string; score: number;
     verdict: "acceptable" | "needs_work" | "unsafe"; notes: string | null; updated_at: string }>;
+  modelTrials: Array<{ id: string; release_id: string; baseline_profile: string; candidate_profile: string; status: string;
+    baseline_score: number | null; candidate_score: number | null; baseline_cost_usd: number | null; candidate_cost_usd: number | null;
+    baseline_tokens: number | null; candidate_tokens: number | null; recommendation: string | null; error: string | null;
+    completed_at: string | null; created_at: string }>;
+  modelProfiles: Array<{ id: string; label: string; model: string; use: string }>;
 }
 
 export class ApiError extends Error {
@@ -359,6 +364,9 @@ export const api = {
   queueEvaluationSuite: (id: string, body: { releaseId?: string; mode?: "regression" | "shadow" } = {}) =>
     request<{ data: { id: string; status: string; releaseId: string; mode: string } }>(
       `/api/evaluations/${encodeURIComponent(id)}/suites`, { method: "POST", body: JSON.stringify(body) }),
+  queueModelTrial: (id: string, body: { candidateProfile: string; releaseId?: string }) =>
+    request<{ data: { id: string; status: string; baselineProfile: string; candidateProfile: string } }>(
+      `/api/evaluations/${encodeURIComponent(id)}/model-trials`, { method: "POST", body: JSON.stringify(body) }),
   promoteEvaluationSample: (id: string, body: { executionId: string; name?: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(

@@ -11,7 +11,7 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, reviewEvaluationResult, runEvaluation } from "./evaluation";
+import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
 
 export { ProcessAgent } from "./agent";
@@ -454,6 +454,24 @@ app.post("/api/evaluations/:id/samples", requireRoles("admin", "builder", "owner
     return c.json({ data: result }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Execution sample could not be promoted" }, 400);
+  }
+});
+
+app.post("/api/evaluations/:id/model-trials", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  const body: { candidateProfile?: string; releaseId?: string } =
+    await c.req.json<{ candidateProfile?: string; releaseId?: string }>().catch(() => ({}));
+  if (!body.candidateProfile) return c.json({ error: "Candidate model profile is required" }, 400);
+  try {
+    const result = await queueModelTrial(c.env, c.get("tenantId"), c.get("actorId"), scenarioId,
+      body.candidateProfile, body.releaseId);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_model_trial.queued",
+      "evaluation_model_trial", result.id, { scenarioId, releaseId: result.releaseId,
+        baselineProfile: result.baselineProfile, candidateProfile: result.candidateProfile });
+    return c.json({ data: result }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Model comparison could not be queued" }, 400);
   }
 });
 

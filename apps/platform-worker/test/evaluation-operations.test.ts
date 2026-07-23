@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { queueEvaluationSuite, reviewEvaluationResult } from "../src/evaluation";
+import { queueEvaluationSuite, queueModelTrial, reviewEvaluationResult } from "../src/evaluation";
 
 function operationsEnvironment(options: { caseResultExists?: boolean; workflowFails?: boolean } = {}) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
@@ -17,7 +17,7 @@ function operationsEnvironment(options: { caseResultExists?: boolean; workflowFa
           if (sql.includes("FROM evaluation_scenarios")) return {
             id: "scenario-1", blueprint_id: "process-1", active_release_id: "release-1"
           };
-          if (sql.includes("FROM process_releases")) return { id: "release-1" };
+          if (sql.includes("FROM process_releases")) return { id: "release-1", model_profile: "balanced" };
           if (sql.includes("FROM evaluation_case_results")) return options.caseResultExists === false ? null : { id: "result-1" };
           return null;
         },
@@ -64,5 +64,22 @@ describe("durable evaluation operations", () => {
     expect(result).toMatchObject({ caseResultId: "result-1", score: 3, verdict: "needs_work" });
     expect(writes.some(({ sql, values }) => sql.includes("evaluation_human_reviews") &&
       values.includes("tenant-1") && values.includes("reviewer-1"))).toBe(true);
+  });
+
+  it("queues an isolated candidate profile without changing the release", async () => {
+    const { env, writes, create } = operationsEnvironment();
+    const result = await queueModelTrial(env, "tenant-1", "actor-1", "scenario-1", "fast");
+    expect(result).toMatchObject({ baselineProfile: "balanced", candidateProfile: "fast", status: "queued" });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ kind: "model_comparison", baselineProfile: "balanced", candidateProfile: "fast" })
+    }));
+    expect(writes.some(({ sql }) => sql.includes("INSERT INTO evaluation_model_trials"))).toBe(true);
+    expect(writes.some(({ sql }) => sql.includes("UPDATE agent_blueprints"))).toBe(false);
+  });
+
+  it("rejects comparing a release to its same model profile", async () => {
+    const { env, create } = operationsEnvironment();
+    await expect(queueModelTrial(env, "tenant-1", "actor-1", "scenario-1", "balanced")).rejects.toThrow("different");
+    expect(create).not.toHaveBeenCalled();
   });
 });

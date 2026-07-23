@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { runEvaluation } from "../src/evaluation";
+import { redactSensitiveText, runEvaluation } from "../src/evaluation";
 import { runModel } from "../src/model";
 
 vi.mock("../src/model", () => ({ runModel: vi.fn() }));
@@ -79,7 +79,7 @@ describe("release-specific evaluation evidence", () => {
     expect(result.totalTokens).toBe(120);
     expect(result.estimatedCostUsd).toBeGreaterThan(0);
     expect(runModel).toHaveBeenCalledWith(expect.anything(), "balanced", expect.objectContaining({ releaseId: "prompt-1" }),
-      goldenCase.input_text, "evaluation:release-live:case-1");
+      goldenCase.input_text, "evaluation:release-live:balanced:case-1");
     expect(writes.some(({ sql, values }) => sql.includes("INSERT INTO evaluation_case_results") &&
       values.includes("release-live") && values.includes(120))).toBe(true);
   });
@@ -94,5 +94,15 @@ describe("release-specific evaluation evidence", () => {
     expect(result.status).toBe("failing");
     expect(result.score).toBeLessThan(1);
     expect(result.evidence.cases[0]).toMatchObject({ status: "failing", passed: 2, total: 3 });
+  });
+
+  it("redacts common sensitive values before a case is persisted", () => {
+    const result = redactSensitiveText("Email sam@example.com, SSN 123-45-6789, phone (602) 555-0100, card 4111 1111 1111 1111");
+    expect(result.text).toContain("[REDACTED_EMAIL]");
+    expect(result.text).toContain("[REDACTED_SSN]");
+    expect(result.text).toContain("[REDACTED_PHONE]");
+    expect(result.text).toContain("[REDACTED_PAYMENT_CARD]");
+    expect(result).toMatchObject({ count: 4 });
+    expect(result.text).not.toContain("sam@example.com");
   });
 });

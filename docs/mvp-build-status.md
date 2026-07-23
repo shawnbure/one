@@ -25,7 +25,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 | Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, and optional hard limit |
-| Evaluation lab | Curated golden cases, expected/prohibited output assertions, exact-release model runs, weighted scoring, release comparison, durable Workflow suites, human scorecards, explicit redacted production-sample promotion, evidence, and budgeted usage |
+| Evaluation lab | Curated golden cases, expected/prohibited output assertions, exact-release model runs, weighted scoring, release comparison, durable Workflow suites, side-by-side Cloudflare model trials, automatic sensitive-pattern masking, human scorecards, explicit production-sample promotion, evidence, and budgeted usage |
 
 ## Execution architecture
 
@@ -105,6 +105,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 15. `0015_evaluation_lab.sql`: curated golden cases, case-level results, release scores, inference usage, and comparison evidence.
 16. `0016_evaluation_operations.sql`: durable suite lifecycle, Workflow correlation, and tenant-scoped human review scorecards.
 17. `0017_evaluation_score_backfill.sql`: truthful percentage scores for evaluation evidence created before case-level scoring.
+18. `0018_model_trials_and_redaction.sql`: isolated model-profile trials, profile-attributed evidence, and persisted redaction metadata.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -141,7 +142,9 @@ For changes to identity, tenant scoping, release publication, approval decisions
 
 The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy or launch customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
 
-Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs use a dedicated Cloudflare Workflow, survive browser disconnection, retry the exact-release regression idempotently, and persist their lifecycle separately from case evidence. Every case invokes the selected Workers AI model, records assertion evidence and token/cost estimates, and participates in the tenant hard budget. Production inputs are never sampled automatically: an authorized user may explicitly promote only the already-stored, truncated execution preview into a case. Much larger batch datasets should add Workflow fan-out rather than extending one inference step indefinitely.
+Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs use a dedicated Cloudflare Workflow, survive browser disconnection, retry the exact-release regression idempotently, and persist their lifecycle separately from case evidence. Model trials execute the immutable release prompt and identical cases once with the release baseline profile and once with a candidate Cloudflare profile; both arms are costed and scored without changing the live process or release-gate state. Every model call participates in the tenant hard budget.
+
+Production inputs are never sampled automatically. An authorized user may explicitly promote only the already-stored, truncated execution preview into a case. Before persistence, Workrr masks common email, phone, SSN, payment-card, and secret-token patterns and records redaction counts/types. This is a safety net, not a substitute for customer data-classification policy or a full DLP engine. Much larger batch datasets should add Workflow fan-out rather than extending one inference step indefinitely.
 
 ## Remaining aggressive-MVP work
 
@@ -149,7 +152,7 @@ The foundation is usable, but these are the highest-value next slices:
 
 1. Automate the Cloudflare Access allow-policy handoff for customer members after the in-product idempotent baseline launch; D1 membership, branding, controls, first process, baseline, evaluation, and draft release provisioning are implemented.
 2. Add the first provider-specific OAuth lifecycle on top of the implemented Cloudflare secret-reference and generic signed-webhook connector foundation.
-3. Add richer multi-dimension rubrics, automated privacy redaction, model-to-model shadow comparison, and Workflow fan-out for large datasets. Durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
+3. Add richer multi-dimension rubrics, customer-configurable DLP policies, and Workflow fan-out for large datasets. Automatic common-pattern masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
 4. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
 5. Add authenticated email delivery; Queue-backed signed webhook delivery is implemented.
 6. Production Access bootstrap and a scripted, reviewable environment promotion command.
