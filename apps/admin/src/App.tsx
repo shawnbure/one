@@ -44,7 +44,6 @@ import "./export.css";
 import "./setup.css";
 import "./notifications.css";
 import "./usage.css";
-import "./readability.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";

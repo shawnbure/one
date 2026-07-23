@@ -102,6 +102,68 @@ select,
   line-height: 1.5;
 }
 
+/* Dense operational surfaces need the same floor as forms and navigation.
+   These selectors intentionally override legacy prototype declarations in live.css. */
+.empty-approval strong,
+.empty-approval span,
+.assignment-chip strong,
+.work-copy strong,
+.work-meta strong,
+.evidence-block p,
+.decision-context strong,
+.decision-context small,
+.review-side dt,
+.review-side dd,
+.audit-line strong,
+.audit-line small,
+.activity-metrics small,
+.run-row strong,
+.affinity-note strong,
+.affinity-note small,
+.portfolio-card dt,
+.portfolio-card dd,
+.foundation-card strong,
+.foundation-card em,
+.knowledge-list strong,
+.knowledge-list small,
+.knowledge-list em,
+.evaluation-list strong,
+.evaluation-list small,
+.readiness-row strong,
+.readiness-row small,
+.data-flow strong,
+.control-row strong,
+.control-row small,
+.model-inventory strong,
+.model-inventory small,
+.model-inventory em,
+.retention strong,
+.retention small,
+.retention em,
+.api-row,
+.api-row button,
+.webhook-row strong,
+.webhook-row small {
+  font-size: 13px !important;
+  line-height: 1.5;
+}
+
+.review-side h3,
+.activity-metrics small,
+.runs-head,
+.run-facts small,
+.payload-card label,
+.configuration h3,
+.release-version small,
+.connection-state,
+.ready-badge,
+.attention-badge,
+.api-head {
+  font-size: 12px !important;
+  line-height: 1.4;
+  letter-spacing: .04em;
+}
+
 button,
 input,
 select { min-height: 36px; }
@@ -124,7 +186,21 @@ a:focus-visible {
 .run-facts { grid-template-columns: repeat(5, 1fr); }
 
 @media (max-width: 1200px) {
-  body { min-width: 980px; }
   .shell { grid-template-columns: 220px 1fr; }
   aside { width: 220px; }
+}
+
+@media (max-width: 760px) {
+  body { min-width: 0; }
+  .shell { display: block; }
+  aside { position: static; width: auto; min-height: auto; padding: 18px; }
+  aside nav { grid-template-columns: 1fr 1fr; }
+  .aside-bottom { margin-top: 16px; }
+  main { grid-column: auto; }
+  header { padding: 0 18px; }
+  .content { padding: 18px; }
+  .hero { align-items: flex-start; gap: 16px; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .grid-main { grid-template-columns: 1fr; }
+  .side-stack { grid-template-columns: 1fr; }
 }
