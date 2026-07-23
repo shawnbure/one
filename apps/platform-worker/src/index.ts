@@ -8,6 +8,7 @@ import { createDraftRelease, getStudio, publishRelease } from "./studio";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
+import { applyOnboarding, exportCustomerManifest, getOnboarding } from "./onboarding";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -30,10 +31,31 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/health", (c) => c.json({ ok: true, service: "workrr-platform", environment: c.env.ENVIRONMENT }));
 
-app.get("/api/session", (c) => c.json({
-  user: { id: c.get("actorId"), email: c.get("actorEmail"), name: c.get("actorName"), role: c.get("role") },
-  tenantId: c.get("tenantId")
-}));
+app.get("/api/session", async (c) => {
+  const tenant = await c.env.DB.prepare(`SELECT t.name, s.accent_color FROM tenants t LEFT JOIN tenant_settings s ON s.tenant_id = t.id
+    WHERE t.id = ?`).bind(c.get("tenantId")).first<{ name: string; accent_color: string | null }>();
+  return c.json({
+    user: { id: c.get("actorId"), email: c.get("actorEmail"), name: c.get("actorName"), role: c.get("role") },
+    tenantId: c.get("tenantId"), tenantName: tenant?.name ?? c.get("tenantId"), accentColor: tenant?.accent_color ?? "#1f7a5b"
+  });
+});
+
+app.get("/api/onboarding", requireRoles("admin", "owner", "viewer"), async (c) =>
+  c.json({ data: await getOnboarding(c.env, c.get("tenantId")) }));
+
+app.put("/api/onboarding", requireRoles("admin"), async (c) => {
+  try {
+    const data = await applyOnboarding(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "tenant.onboarding.updated", "tenant", c.get("tenantId"), { settings: data.settings });
+    return c.json({ data });
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Onboarding update failed" }, 400); }
+});
+
+app.get("/api/onboarding/export", requireRoles("admin", "owner"), async (c) => {
+  c.header("content-disposition", `attachment; filename="workrr-customer-manifest-${c.get("tenantId")}.json"`);
+  c.header("cache-control", "no-store");
+  return c.json(await exportCustomerManifest(c.env, c.get("tenantId")));
+});
 
 app.get("/api/members", requireRoles("admin", "owner", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role, status, created_at, last_seen_at

@@ -32,6 +32,8 @@ export interface Approval {
 export interface SessionData {
   user: { id: string; email: string; name: string; role: string };
   tenantId: string;
+  tenantName: string;
+  accentColor: string;
 }
 
 export interface ApprovalDetail extends Approval {
@@ -175,6 +177,10 @@ export interface ValueData {
   byProcess: Array<Record<string, string | number>>;
   discoveries: Array<Record<string, string | number>>;
 }
+export interface OnboardingData {
+  settings: null | { organization_name: string; support_email: string; accent_color: string; default_model_profile: string; data_region: string; initialized_at: string | null };
+  checklist: Array<{ id: string; label: string; ready: boolean }>;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -310,4 +316,7 @@ export const api = {
   value: () => request<{ data: ValueData }>("/api/value"),
   runEvaluation: (id: string) => request<{ data: { id: string; status: string; passedAssertions: number; assertionCount: number } }>(`/api/evaluations/${id}/run`, { method: "POST" }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
+  onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
+  updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
+    request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
 };

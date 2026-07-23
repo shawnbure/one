@@ -40,6 +40,7 @@ import "./wizard.css";
 import "./team.css";
 import "./export.css";
 import "./readability.css";
+import "./setup.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";
@@ -47,6 +48,7 @@ import { FoundationView } from "./FoundationViews";
 import { ApiLogsView } from "./ApiLogsView";
 import { CreateProcessWizard } from "./CreateProcessWizard";
 import { TeamRolesView } from "./TeamRolesView";
+import { CustomerSetupView } from "./CustomerSetupView";
 
 const previewProcesses: AgentBlueprint[] = [
   {
@@ -237,7 +239,7 @@ export function App() {
         <div className="workspace">
           <span className="avatar">A</span>
           <div>
-            <strong>Acme Operations</strong>
+            <strong>{session?.tenantName ?? "Customer environment"}</strong>
             <small>Dedicated environment</small>
           </div>
           <ChevronDown size={15} />
@@ -272,6 +274,10 @@ export function App() {
           <button onClick={() => setActive("Governance")}>
             <Settings2 size={17} />
             Settings
+          </button>
+          <button onClick={() => setActive("Customer setup")}>
+            <Settings2 size={17} />
+            Customer setup
           </button>
           <button onClick={() => setActive("Team & roles")}>
             <Users size={17} />
@@ -323,7 +329,9 @@ export function App() {
               <X size={14} />
             </button>
           )}
-          {active === "Team & roles" ? (
+          {active === "Customer setup" ? (
+            <CustomerSetupView session={session} onNotice={setNotice} />
+          ) : active === "Team & roles" ? (
             <TeamRolesView session={session} onNotice={setNotice} />
           ) : active === "Work inbox" ? (
             <WorkInbox
