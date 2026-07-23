@@ -5,6 +5,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 ## What is implemented
 
 - A polished React operations console with process discovery, Process Studio, Work Inbox, execution activity, governance, team roles, API logs, model profiles, and value reporting.
+- Six implementation-ready customer starters spanning triage, document intake, knowledge assistance, lead qualification, approved external action, and scheduled reconciliation. Creation rejects incomplete starter shells and presents the full catalog in a readable, responsive wizard.
 - A keyboard-accessible command center that searches authorized workspaces and processes, opens exact employee or operator destinations, and excludes administrative surfaces and non-runnable processes from consumer results.
 - An accessible account menu that makes the server-resolved organization, role, environment, and Cloudflare Access identity visible, with a same-origin secure sign-out path.
 - Managed deployment visibility using Cloudflare Worker Version Metadata plus an exact D1 migration compatibility check, surfaced in Customer Setup without touching agent request paths.

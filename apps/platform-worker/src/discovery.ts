@@ -42,6 +42,7 @@ export async function createProcessFromTemplate(env: Env, tenantId: string, acto
   const template = await env.DB.prepare("SELECT * FROM process_templates WHERE id = ?").bind(input.templateId).first<TemplateRow>();
   if (!template) throw new Error("Process template not found");
   const starter = parseStarterKit(template.starter_json);
+  validateStarterKit(starter);
   const id = processIdOverride ?? `${slug(input.name)}-${crypto.randomUUID().slice(0, 6)}`;
   const now = new Date().toISOString();
   const score = opportunityScore(input.baseline);
@@ -355,6 +356,22 @@ export function parseStarterKit(value: string): StarterKit {
   } catch {
     return emptyStarterKit();
   }
+}
+
+export function validateStarterKit(starter: StarterKit) {
+  const missing: string[] = [];
+  if (starter.topology.length < 4) missing.push("delivery topology");
+  if (starter.currentSteps.length < 2 || starter.futureSteps.length < 2) missing.push("current and future steps");
+  if (starter.discoveryQuestions.length < 2) missing.push("discovery questions");
+  if (!starter.systems.length) missing.push("system boundaries");
+  if (!starter.exceptions.length) missing.push("exception policy");
+  if (!starter.successMetrics.length) missing.push("success measures");
+  if (!starter.adapterInstructions.length) missing.push("adapter guidance");
+  if (starter.testCases.length < 2 ||
+      starter.testCases.some((item) => !item.contains.length || !item.prohibited.length)) {
+    missing.push("two complete acceptance examples");
+  }
+  if (missing.length) throw new Error(`Process starter is incomplete: ${missing.join(", ")}`);
 }
 
 function parsePrivacy(value: unknown) {

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./readability.css", import.meta.url), "utf8");
+const wizardCss = readFileSync(new URL("./wizard-readability.css", import.meta.url), "utf8");
 const contractStart = css.indexOf("Product-wide legibility contract");
 const contract = css.slice(contractStart);
 
@@ -32,5 +33,15 @@ describe("product readability contract", () => {
   it("provides a compact mobile navigation state", () => {
     expect(css).toContain("aside:not(.mobile-open) > nav");
     expect(css).toContain(".mobile-nav-toggle");
+  });
+
+  it("keeps the six-template creation wizard readable and scroll-safe", () => {
+    expect(wizardCss).toContain("width: min(1040px");
+    expect(wizardCss).toContain("overflow-y: auto");
+    expect(wizardCss).toContain(".template-grid { grid-template-columns: repeat(3");
+    expect(wizardCss).toContain(".template-grid small");
+    expect(wizardCss).toContain("font-size: 13px");
+    expect(wizardCss).toContain("@media (max-width: 820px)");
+    expect(wizardCss).toContain(".template-grid { grid-template-columns: 1fr; }");
   });
 });

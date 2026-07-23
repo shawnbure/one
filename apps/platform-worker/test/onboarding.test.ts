@@ -13,10 +13,10 @@ const template = {
   tools_json: '["lookup_customer"]',
   starter_json: JSON.stringify({
     version: 1,
-    topology: ["Request", "Agent", "Approval"],
+    topology: ["Request", "Agent", "Approval", "Outcome"],
     currentSteps: ["Read request", "Draft response"],
     futureSteps: ["Validate request", "Prepare governed response"],
-    discoveryQuestions: ["Who approves the response?"],
+    discoveryQuestions: ["Who approves the response?", "Which requests require escalation?"],
     systems: ["Customer records"],
     exceptions: ["Missing customer identity"],
     successMetrics: ["Response preparation time"],

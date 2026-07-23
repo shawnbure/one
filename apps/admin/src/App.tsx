@@ -55,6 +55,7 @@ import { AccountMenu } from "./AccountMenu";
 import { authorizedWorkspaceLabels, processVisibleInCommands, type CommandSearchItem } from "./command-search";
 import "./live.css";
 import "./wizard.css";
+import "./wizard-readability.css";
 import "./team.css";
 import "./export.css";
 import "./setup.css";
