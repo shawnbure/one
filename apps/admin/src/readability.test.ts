@@ -46,4 +46,11 @@ describe("product readability contract", () => {
     expect(wizardCss).toContain("@media (max-width: 820px)");
     expect(wizardCss).toContain(".template-grid { grid-template-columns: 1fr; }");
   });
+
+  it("keeps inbound email configuration responsive and readable", () => {
+    expect(css).toContain(".email-route-create");
+    expect(css).toContain(".email-route-row");
+    expect(css).toContain("@media (max-width: 700px)");
+    expect(css).toContain(".webhook-create, .webhook-row { grid-template-columns: 1fr; }");
+  });
 });

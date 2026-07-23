@@ -46,6 +46,8 @@ export async function requestProcessRetirement(env: Env, tenantId: string, actor
       .bind(now, blueprintId, tenantId),
     env.DB.prepare(`UPDATE webhook_endpoints SET status='disabled' WHERE blueprint_id=? AND tenant_id=?`)
       .bind(blueprintId, tenantId),
+    env.DB.prepare(`UPDATE inbound_email_routes SET status='disabled', updated_at=?
+      WHERE blueprint_id=? AND tenant_id=?`).bind(now, blueprintId, tenantId),
     audit(env, tenantId, actorId, "process.retirement_requested", blueprintId, { retirementId: id, reason })
   ]);
   return { id, status: "requested", processPaused: true };
@@ -163,6 +165,8 @@ export async function disposeProcess(env: Env, tenantId: string, retirementId: s
         WHERE tenant_id=? AND blueprint_id=?`).bind(now, tenantId, blueprintId),
       env.DB.prepare(`UPDATE webhook_endpoints SET status='disabled' WHERE tenant_id=? AND blueprint_id=?`)
         .bind(tenantId, blueprintId),
+      env.DB.prepare(`UPDATE inbound_email_routes SET status='disabled', updated_at=?
+        WHERE tenant_id=? AND blueprint_id=?`).bind(now, tenantId, blueprintId),
       env.DB.prepare(`UPDATE agent_blueprints SET status='paused', operating_mode='paused',
         description='Retired process — operational configuration retained for audit.', updated_at=?
         WHERE tenant_id=? AND id=?`).bind(now, tenantId, blueprintId)
@@ -265,6 +269,8 @@ export async function finalizeProcessDisposal(env: Env, tenantId: string, retire
       WHERE tenant_id=? AND blueprint_id=?`).bind(now, tenantId, blueprintId),
     env.DB.prepare(`UPDATE webhook_endpoints SET status='disabled' WHERE tenant_id=? AND blueprint_id=?`)
       .bind(tenantId, blueprintId),
+    env.DB.prepare(`UPDATE inbound_email_routes SET status='disabled', updated_at=?
+      WHERE tenant_id=? AND blueprint_id=?`).bind(now, tenantId, blueprintId),
     env.DB.prepare(`UPDATE agent_blueprints SET status='paused', operating_mode='paused',
       description='Retired process — operational configuration retained for audit.', updated_at=?
       WHERE tenant_id=? AND id=?`).bind(now, tenantId, blueprintId)

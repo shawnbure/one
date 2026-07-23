@@ -3,9 +3,9 @@ import { getDeploymentVerification } from "./deployment-verification";
 
 export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
-  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
-    tenantControl, dlpRules, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
-    env.DB.prepare(`SELECT b.id, b.name, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
+  const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, emailRoutes,
+    credentials, tenantControl, dlpRules, dlpEvents, tools, modelPolicy, governanceReviews] = await Promise.all([
+    env.DB.prepare(`SELECT b.id, b.name, b.execution_profile, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
       b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id,
       r.evaluation_status, r.evaluated_at,
       (SELECT MAX(e.completed_at) FROM executions e
@@ -29,6 +29,12 @@ export async function getGovernance(env: Env, tenantId: string) {
     env.DB.prepare(`SELECT id, name, blueprint_id, status, accepted_events_json, created_at, last_received_at,
       CASE WHEN secret_binding = 'WEBHOOK_INBOX_SECRET' THEN ? ELSE 0 END secret_configured
       FROM webhook_endpoints WHERE tenant_id = ? ORDER BY name`).bind(env.WEBHOOK_INBOX_SECRET ? 1 : 0, tenantId).all(),
+    env.DB.prepare(`SELECT r.id, r.name, r.address, r.blueprint_id, b.name process_name,
+      b.execution_profile, r.allowed_sender_domains_json, r.status, r.created_at,
+      r.updated_at, r.last_received_at
+      FROM inbound_email_routes r JOIN agent_blueprints b
+        ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
+      WHERE r.tenant_id=? ORDER BY r.name`).bind(tenantId).all(),
     env.DB.prepare(`SELECT id, name, provider, secret_binding, purpose, last_validated_at,
       CASE WHEN secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END configured
       FROM integration_credential_refs WHERE tenant_id = ? ORDER BY name`)
@@ -89,6 +95,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     incidents: incidents.results,
     tenantControl: tenantControl ?? { mode: "active", incident_id: null, reason: null, updated_by: "system", updated_at: null },
     webhooks: webhooks.results,
+    emailRoutes: emailRoutes.results,
     credentials: credentialRows,
     dlpRules: dlpRules.results,
     dlpEvents: dlpEvents.results,

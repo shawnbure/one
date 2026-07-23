@@ -10,7 +10,7 @@ export interface PrivacyArchitectureReport {
   posture: string[];
   services: Array<{ service: string; purpose: string; data: string; boundary: string }>;
   processes: Row[];
-  dataSources: { knowledge: Row[]; inboundWebhooks: Row[] };
+  dataSources: { knowledge: Row[]; inboundWebhooks: Row[]; inboundEmail: Row[] };
   storageAndRetention: Array<{ store: string; content: string; retention: string; deletion: string }>;
   models: Array<{ profile: string; modelId: string; provider: string; processes: number }>;
   externalDestinations: Row[];
@@ -27,7 +27,7 @@ export interface PrivacyArchitectureReport {
 
 export async function getPrivacyArchitectureReport(env: Env, tenantId: string, generatedBy: string,
   readiness: PrivacyArchitectureReport["readiness"]): Promise<PrivacyArchitectureReport> {
-  const [tenant, processes, knowledge, webhooks, retention, connections, tools, notifications, approvals,
+  const [tenant, processes, knowledge, webhooks, emailRoutes, retention, connections, tools, notifications, approvals,
     governanceReviews] =
     await Promise.all([
       env.DB.prepare("SELECT id, name FROM tenants WHERE id=?").bind(tenantId).first<Row>(),
@@ -43,6 +43,11 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       env.DB.prepare(`SELECT name, status, accepted_events_json, blueprint_id, last_received_at,
         CASE WHEN secret_binding IS NOT NULL THEN 1 ELSE 0 END signature_required
         FROM webhook_endpoints WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>(),
+      env.DB.prepare(`SELECT name, address, status, blueprint_id, execution_profile,
+        allowed_sender_domains_json, last_received_at
+        FROM inbound_email_routes r JOIN agent_blueprints b
+          ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
+        WHERE r.tenant_id=? ORDER BY r.name`).bind(tenantId).all<Row>(),
       env.DB.prepare(`SELECT name, data_class, retention_days, deletion_mode
         FROM retention_policies WHERE tenant_id=? ORDER BY data_class`).bind(tenantId).all<Row>(),
       env.DB.prepare(`SELECT name, kind, owner, status, access_mode, scopes_json,
@@ -124,7 +129,9 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       status: row.status, executionProfile: row.execution_profile, autonomy: row.autonomy,
       operatingMode: row.operating_mode
     })),
-    dataSources: { knowledge: knowledge.results, inboundWebhooks: webhooks.results },
+    dataSources: {
+      knowledge: knowledge.results, inboundWebhooks: webhooks.results, inboundEmail: emailRoutes.results
+    },
     storageAndRetention: [
       ...retention.results.map((row) => ({
         store: "Policy-defined tenant data", content: String(row.data_class),
@@ -202,7 +209,9 @@ ${section("Operating posture", `<div class="posture">${report.posture.map((item)
 ${section("Cloudflare architecture", rows(report.services))}
 ${section("AI processes and human oversight", rows(report.processes) + `<p><strong>${report.humanOversight.pendingDecisions}</strong> pending decisions · <strong>${report.humanOversight.consequentialActions}</strong> enabled write tools</p>`)}
 ${section("Models", rows(report.models))}
-${section("Data sources", "<h3>Knowledge</h3>" + rows(report.dataSources.knowledge) + "<h3>Inbound webhooks</h3>" + rows(report.dataSources.inboundWebhooks))}
+${section("Data sources", "<h3>Knowledge</h3>" + rows(report.dataSources.knowledge) +
+  "<h3>Inbound webhooks</h3>" + rows(report.dataSources.inboundWebhooks) +
+  "<h3>Inbound email</h3>" + rows(report.dataSources.inboundEmail))}
 ${section("Storage, retention, and deletion", rows(report.storageAndRetention))}
 ${section("Connections and credential scopes", rows(report.credentials))}
 ${section("External destinations", rows(report.externalDestinations))}

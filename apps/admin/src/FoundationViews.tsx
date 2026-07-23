@@ -14,6 +14,7 @@ import {
   KeyRound,
   Link2,
   LockKeyhole,
+  Mail,
   RefreshCw,
   Plus,
   ShieldCheck,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation, type RetentionOperationsData,
   type ProviderAcceptanceData, type RetentionPreview, type SessionData, type ToolAdapterDefinition, type ToolDefinition,
-  type WebhookReceipt } from "./api";
+  type EmailReceipt, type WebhookReceipt } from "./api";
 import "./governed-standards.css";
 import "./provider-acceptance.css";
 
@@ -75,6 +76,12 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
   const [editingWebhook, setEditingWebhook] = useState<string | null>(null);
   const [webhookReceipts, setWebhookReceipts] = useState<Record<string, WebhookReceipt[]>>({});
   const [webhookForm, setWebhookForm] = useState({ name: "", blueprintId: "", acceptedEvents: "request.created" });
+  const [emailBusy, setEmailBusy] = useState<string | null>(null);
+  const [editingEmailRoute, setEditingEmailRoute] = useState<string | null>(null);
+  const [emailReceipts, setEmailReceipts] = useState<Record<string, EmailReceipt[]>>({});
+  const [emailForm, setEmailForm] = useState({
+    name: "", address: "", blueprintId: "", allowedSenderDomains: ""
+  });
   const [toolForm, setToolForm] = useState({
     name: "", description: "", owner: "", adapterKind: "mock", connectionId: "", handlerKey: "",
     accessMode: "read", riskLevel: "low", dataClassification: "internal", rateLimitPerMinute: "60",
@@ -249,6 +256,53 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
       setWebhookReceipts((current) => ({ ...current, [id]: result.data.receipts }));
     } catch (error) { onNotice(error instanceof Error ? error.message : "Webhook receipts could not be loaded"); }
     finally { setWebhookBusy(null); }
+  }
+  async function saveEmailRoute(event: React.FormEvent) {
+    event.preventDefault();
+    setEmailBusy("create");
+    try {
+      const body = {
+        name: emailForm.name, address: emailForm.address, blueprintId: emailForm.blueprintId,
+        allowedSenderDomains: emailForm.allowedSenderDomains.split(",")
+          .map((value) => value.trim()).filter(Boolean)
+      };
+      if (editingEmailRoute) await api.updateEmailRoute(editingEmailRoute, body);
+      else await api.createEmailRoute(body);
+      setEmailForm({ name: "", address: "", blueprintId: "", allowedSenderDomains: "" });
+      setEditingEmailRoute(null);
+      await onReload();
+      onNotice(editingEmailRoute ? "Disabled email route updated." :
+        "Email route created disabled. Connect this address to the Worker in Cloudflare Email Routing before activation.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Email route could not be saved"); }
+    finally { setEmailBusy(null); }
+  }
+  function editEmailRoute(route: GovernanceData["emailRoutes"][number]) {
+    setEditingEmailRoute(route.id);
+    setEmailForm({
+      name: route.name, address: route.address, blueprintId: route.blueprint_id,
+      allowedSenderDomains: parseArray(route.allowed_sender_domains_json).join(", ")
+    });
+  }
+  async function toggleEmailRoute(id: string, status: "active" | "disabled") {
+    setEmailBusy(id);
+    try {
+      await api.setEmailRouteStatus(id, status);
+      await onReload();
+      onNotice(`Email intake ${status === "active" ? "activated" : "disabled"}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Email route status could not be changed"); }
+    finally { setEmailBusy(null); }
+  }
+  async function loadEmailReceipts(id: string) {
+    if (emailReceipts[id]) {
+      setEmailReceipts((current) => { const next = { ...current }; delete next[id]; return next; });
+      return;
+    }
+    setEmailBusy(id);
+    try {
+      const result = await api.emailReceipts(id);
+      setEmailReceipts((current) => ({ ...current, [id]: result.data }));
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Email receipts could not be loaded"); }
+    finally { setEmailBusy(null); }
   }
   const microsoft = data.connections.find((item) => item.name === "Microsoft 365");
   const microsoftConnected = microsoft && Number(microsoft.secret_configured) === 1;
@@ -549,6 +603,77 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
           </article>
         ))}
         {!data.webhooks.length && <p className="empty-copy">No inbound webhook endpoints are configured.</p>}
+      </div>
+      <div className="webhook-section email-channel-section">
+        <div className="section-head">
+          <div>
+            <h2>Inbound email</h2>
+            <p>Cloudflare Email Routing intake with sender allowlists, DLP, sticky identity, Queue buffering, and metadata-only receipts.</p>
+          </div>
+        </div>
+        {canManageWebhooks && <form className="webhook-create email-route-create panel" onSubmit={saveEmailRoute}>
+          <div><strong>{editingEmailRoute ? "Edit disabled email route" : "Create email process route"}</strong>
+            <small>Workrr never stores raw MIME or attachments. Configure the exact address as a Cloudflare Email Routing rule to this Worker.</small></div>
+          <label>Name<input required minLength={3} maxLength={80} value={emailForm.name}
+            onChange={(event) => setEmailForm({ ...emailForm, name: event.target.value })}
+            placeholder="Customer operations inbox"/></label>
+          <label>Routed address<input required type="email" maxLength={254} value={emailForm.address}
+            onChange={(event) => setEmailForm({ ...emailForm, address: event.target.value })}
+            placeholder="requests@workrr.ai"/></label>
+          <label>Process<select required value={emailForm.blueprintId}
+            onChange={(event) => setEmailForm({ ...emailForm, blueprintId: event.target.value })}>
+            <option value="">Select a process</option>{data.processes
+              .filter((process) => String(process.execution_profile) !== "entity")
+              .map((process) => <option key={String(process.id)} value={String(process.id)}>
+                {String(process.name)} · {String(process.execution_profile).replaceAll("_", " ")}
+              </option>)}
+          </select></label>
+          <label>Authorized sender domains<input required maxLength={500} value={emailForm.allowedSenderDomains}
+            onChange={(event) => setEmailForm({ ...emailForm, allowedSenderDomains: event.target.value })}
+            placeholder="customer.com, partner.org"/></label>
+          <button className="primary" disabled={emailBusy === "create"}>
+            <Plus size={14}/>{emailBusy === "create" ? "Saving…" :
+              editingEmailRoute ? "Save configuration" : "Create email route"}
+          </button>
+          {editingEmailRoute && <button type="button" onClick={() => {
+            setEditingEmailRoute(null);
+            setEmailForm({ name: "", address: "", blueprintId: "", allowedSenderDomains: "" });
+          }}>Cancel</button>}
+        </form>}
+        {data.emailRoutes.map((route) => (
+          <article className="webhook-row email-route-row panel" key={route.id}>
+            <span className="foundation-icon"><Mail size={17}/></span>
+            <span><strong>{route.name}</strong><small>{route.address} → {route.process_name}</small></span>
+            <span><small>IDENTITY</small><strong>{route.execution_profile.replaceAll("_", " ")}</strong></span>
+            <span><small>ALLOWLIST</small><strong>{parseArray(route.allowed_sender_domains_json).join(", ")}</strong></span>
+            <span className={`connection-state ${route.status === "active" ? "healthy" : "attention"}`}>
+              <i/>{route.status}
+            </span>
+            <span className="webhook-actions">
+              <button disabled={emailBusy === route.id} onClick={() => void loadEmailReceipts(route.id)}>
+                {emailReceipts[route.id] ? "Hide receipts" : "Receipts"}
+              </button>
+              {canManageWebhooks && <button disabled={emailBusy === route.id}
+                onClick={() => void toggleEmailRoute(route.id, route.status === "active" ? "disabled" : "active")}>
+                {route.status === "active" ? "Disable" : "Activate"}
+              </button>}
+              {canManageWebhooks && route.status === "disabled" &&
+                <button disabled={emailBusy === route.id} onClick={() => editEmailRoute(route)}>Edit</button>}
+            </span>
+            {emailReceipts[route.id] && <div className="webhook-receipts">
+              <div><strong>Recent receipts</strong>
+                <small>Latest 50 · sender, subject, message ID, raw body, and attachments are never displayed</small></div>
+              {emailReceipts[route.id]!.map((receipt) => <span key={receipt.id}>
+                <strong>{receipt.status.replaceAll("_", " ")}</strong>
+                <small>{receipt.execution_id ? `Execution ${receipt.execution_id.slice(0, 12)}` :
+                  "Stopped before execution"} · {dateTime(receipt.received_at)}</small>
+                <em>{receipt.attachment_count ? `${receipt.attachment_count} attachment(s) omitted` : "No attachments"}</em>
+              </span>)}
+              {!emailReceipts[route.id]!.length && <p>No email receipts have been retained for this route.</p>}
+            </div>}
+          </article>
+        ))}
+        {!data.emailRoutes.length && <p className="empty-copy">No inbound email process routes are configured.</p>}
       </div>
     </section>
   );

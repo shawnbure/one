@@ -67,7 +67,7 @@ export async function updateRetentionControls(env: Env, tenantId: string, actorI
 export async function previewRetention(env: Env, tenantId: string, now = new Date()) {
   const policy = await control(env, tenantId);
   const cutoffs = cutoffMap(policy, now);
-  const [executions, approvals, messages, notifications, helpRequests, logs, actors] = await Promise.all([
+  const [executions, approvals, messages, notifications, helpRequests, logs, emailReceipts, actors] = await Promise.all([
     count(env, `SELECT COUNT(*) count FROM executions WHERE tenant_id=? AND datetime(started_at)<datetime(?)
       AND input_preview!='[retention expired]' AND NOT EXISTS (SELECT 1 FROM process_retirements r
         WHERE r.tenant_id=executions.tenant_id AND r.blueprint_id=executions.blueprint_id AND r.legal_hold=1
@@ -89,6 +89,8 @@ export async function previewRetention(env: Env, tenantId: string, now = new Dat
       AND detail!='[retention expired]'`, tenantId, cutoffs.helpRequest),
     count(env, `SELECT COUNT(*) count FROM api_logs WHERE tenant_id=? AND datetime(created_at)<datetime(?)`,
       tenantId, cutoffs.apiLog),
+    count(env, `SELECT COUNT(*) count FROM inbound_email_receipts
+      WHERE tenant_id=? AND datetime(received_at)<datetime(?)`, tenantId, cutoffs.apiLog),
     env.DB.prepare(`SELECT COUNT(DISTINCT instance_key) count FROM executions WHERE tenant_id=?
       AND instance_key IS NOT NULL AND datetime(started_at)<datetime(?)
       AND NOT EXISTS (SELECT 1 FROM process_retirements r WHERE r.tenant_id=executions.tenant_id
@@ -98,6 +100,7 @@ export async function previewRetention(env: Env, tenantId: string, now = new Dat
   ]);
   return { legalHold: Boolean(policy.legal_hold), cutoffs,
     eligible: { executions, approvals, approvalMessages: messages, notifications, helpRequests, apiLogs: logs,
+      emailReceipts,
       durableActors: Number(actors?.count ?? 0) } };
 }
 
@@ -207,7 +210,9 @@ export async function finalizeRetentionWorkflow(env: Env, tenantId: string, runI
         WHERE tenant_id=? AND datetime(created_at)<datetime(?) AND detail!='[retention expired]'`)
         .bind(tenantId, cutoffs.helpRequest),
       env.DB.prepare(`DELETE FROM api_logs WHERE tenant_id=? AND datetime(created_at)<datetime(?)`)
-        .bind(tenantId, cutoffs.apiLog)
+        .bind(tenantId, cutoffs.apiLog),
+      env.DB.prepare(`DELETE FROM inbound_email_receipts
+        WHERE tenant_id=? AND datetime(received_at)<datetime(?)`).bind(tenantId, cutoffs.apiLog)
     ];
   const results = await env.DB.batch(statements);
   const completedAt = new Date().toISOString();
@@ -218,6 +223,7 @@ export async function finalizeRetentionWorkflow(env: Env, tenantId: string, runI
       notificationContent: Number(results[3]?.meta.changes ?? 0),
       helpRequestContent: Number(results[4]?.meta.changes ?? 0),
       apiLogs: Number(results[5]?.meta.changes ?? 0),
+      emailReceipts: Number(results[6]?.meta.changes ?? 0),
       auditRetained: true,
       enforcedAt: String(run.started_at)
     };

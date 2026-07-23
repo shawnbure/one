@@ -534,6 +534,7 @@ export interface GovernanceData {
   dlpEvents: Array<{ direction: string; stage: string; detector: string; action: string; match_count: number;
     execution_id: string | null; blueprint_id: string | null; created_at: string }>;
   webhooks: WebhookEndpoint[];
+  emailRoutes: EmailRoute[];
   models: Array<{
     profile: string;
     modelId: string;
@@ -697,6 +698,28 @@ export interface WebhookReceipt {
   execution_status: string | null;
   received_at: string;
   completed_at: string | null;
+}
+
+export interface EmailRoute {
+  id: string;
+  name: string;
+  address: string;
+  blueprint_id: string;
+  process_name: string;
+  execution_profile: string;
+  allowed_sender_domains_json: string;
+  status: "active" | "disabled";
+  created_at: string;
+  updated_at: string;
+  last_received_at: string | null;
+}
+
+export interface EmailReceipt {
+  id: string;
+  execution_id: string | null;
+  status: "accepted" | "duplicate" | "blocked" | "rejected" | "enqueue_failed";
+  attachment_count: number;
+  received_at: string;
 }
 export interface ProcessTemplate {
   id: string;
@@ -1408,6 +1431,19 @@ export const api = {
       `/api/webhooks/${encodeURIComponent(id)}/status`,
       { method: "PATCH", body: JSON.stringify({ status }) },
     ),
+  createEmailRoute: (body: { name: string; address: string; blueprintId: string; allowedSenderDomains: string[] }) =>
+    request<{ data: { id: string; status: string } }>(
+      "/api/email-routes", { method: "POST", body: JSON.stringify(body) }),
+  updateEmailRoute: (id: string,
+    body: { name: string; address: string; blueprintId: string; allowedSenderDomains: string[] }) =>
+    request<{ data: { id: string; status: string } }>(
+      `/api/email-routes/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  setEmailRouteStatus: (id: string, status: "active" | "disabled") =>
+    request<{ data: { id: string; status: string } }>(
+      `/api/email-routes/${encodeURIComponent(id)}/status`,
+      { method: "PATCH", body: JSON.stringify({ status }) }),
+  emailReceipts: (id: string) =>
+    request<{ data: EmailReceipt[] }>(`/api/email-routes/${encodeURIComponent(id)}/receipts`),
   processTemplates: () =>
     request<{ data: ProcessTemplate[] }>("/api/process-templates"),
   opportunities: () => request<{ data: ProcessOpportunity[] }>("/api/opportunities"),

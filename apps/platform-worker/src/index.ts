@@ -80,6 +80,8 @@ import { emitMaintenanceDegradedAlerts, runScheduledMaintenance } from "./mainte
 import { emitBudgetThresholdAlerts } from "./budget-alerts";
 import { emitGovernanceReviewAlerts } from "./governance-review-alerts";
 import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
+import { createEmailRoute, listEmailReceipts, listEmailRoutes, receiveProcessEmail,
+  setEmailRouteStatus, updateEmailRoute } from "./email-channel";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -2081,6 +2083,61 @@ app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "
   return c.json({ data: results });
 });
 
+app.get("/api/email-routes", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await listEmailRoutes(c.env, c.get("tenantId")) }));
+
+app.post("/api/email-routes", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    return c.json({ data: await createEmailRoute(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Email route could not be created";
+    return c.json({ error: message }, message.includes("UNIQUE") ? 409 : 400);
+  }
+});
+
+app.put("/api/email-routes/:id", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const routeId = c.req.param("id");
+    if (!routeId) return c.json({ error: "Email route ID is required" }, 400);
+    return c.json({ data: await updateEmailRoute(
+      c.env, c.get("tenantId"), c.get("actorId"), routeId, await c.req.json()
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Email route could not be updated";
+    return c.json({ error: message }, message.includes("not found") ? 404 : message.includes("UNIQUE") ? 409 : 400);
+  }
+});
+
+app.patch("/api/email-routes/:id/status", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const routeId = c.req.param("id");
+    if (!routeId) return c.json({ error: "Email route ID is required" }, 400);
+    const body = await c.req.json<{ status?: "active" | "disabled" }>();
+    if (!body.status || !["active", "disabled"].includes(body.status)) {
+      return c.json({ error: "Valid status is required" }, 400);
+    }
+    return c.json({ data: await setEmailRouteStatus(
+      c.env, c.get("tenantId"), c.get("actorId"), routeId, body.status
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Email route status could not be changed";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 409);
+  }
+});
+
+app.get("/api/email-routes/:id/receipts",
+  requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+    try {
+      const routeId = c.req.param("id");
+      if (!routeId) return c.json({ error: "Email route ID is required" }, 400);
+      return c.json({ data: await listEmailReceipts(c.env, c.get("tenantId"), routeId) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Email receipts could not be loaded" }, 404);
+    }
+  });
+
 app.post("/api/webhooks", requireRoles("admin", "builder", "owner"), async (c) => {
   try {
     return c.json({ data: await createWebhookEndpoint(
@@ -2334,6 +2391,7 @@ app.get("/api/system/version", requireRoles("admin", "owner", "operator", "build
 
 const handler: ExportedHandler<Env, WorkrrQueueJob> = {
   fetch: app.fetch,
+  email: receiveProcessEmail,
   async queue(batch, env) {
     for (const message of batch.messages) {
       if (message.body.kind === "notification_delivery") {

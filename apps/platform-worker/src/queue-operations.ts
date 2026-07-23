@@ -1,7 +1,7 @@
 import type { QueueJob } from "@workrr/contracts";
 import type { Env } from "./types";
 
-export type QueueSource = "api" | "webhook" | "schedule" | "replay";
+export type QueueSource = "api" | "webhook" | "email" | "schedule" | "replay";
 
 export async function enqueueProcessJob(
   env: Env,
@@ -11,17 +11,21 @@ export async function enqueueProcessJob(
 ) {
   const tenantId = job.tenantId ?? "demo";
   const queueJobId = crypto.randomUUID();
-  await env.DB.prepare(`INSERT INTO process_queue_jobs
+  const claim = await env.DB.prepare(`INSERT INTO process_queue_jobs
     (id, tenant_id, execution_id, blueprint_id, source, status, replayed_from)
-    VALUES (?, ?, ?, ?, ?, 'queued', ?)`)
+    VALUES (?, ?, ?, ?, ?, 'queued', ?)
+    ON CONFLICT(tenant_id, execution_id) DO UPDATE SET status='queued', last_error=NULL,
+      completed_at=NULL, updated_at=CURRENT_TIMESTAMP
+    WHERE process_queue_jobs.status='enqueue_failed'`)
     .bind(queueJobId, tenantId, job.executionId, job.blueprintId, source, replayedFrom ?? null).run();
+  if (claim.meta.changes !== 1) throw new Error("Execution already has a Queue delivery record");
   try {
     await env.PROCESS_QUEUE.send(job, { contentType: "json" });
   } catch (error) {
     await env.DB.prepare(`UPDATE process_queue_jobs SET status = 'enqueue_failed', last_error = ?,
       completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ?`)
-      .bind(errorMessage(error), queueJobId, tenantId).run();
+      WHERE execution_id = ? AND tenant_id = ?`)
+      .bind(errorMessage(error), job.executionId, tenantId).run();
     throw error;
   }
   return queueJobId;

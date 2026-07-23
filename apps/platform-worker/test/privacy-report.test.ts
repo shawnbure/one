@@ -13,7 +13,7 @@ const report: PrivacyArchitectureReport = {
   posture: ["Customer-dedicated Cloudflare deployment.", "Secrets are excluded."],
   services: [{ service: "Cloudflare D1", purpose: "Evidence", data: "Run summaries", boundary: "Tenant scoped" }],
   processes: [{ name: "Invoice review", autonomy: "approve", businessOwner: "Finance" }],
-  dataSources: { knowledge: [{ name: "Policy" }], inboundWebhooks: [] },
+  dataSources: { knowledge: [{ name: "Policy" }], inboundWebhooks: [], inboundEmail: [] },
   storageAndRetention: [{ store: "D1", content: "Evidence", retention: "30 days", deletion: "scheduled" }],
   models: [{ profile: "balanced", modelId: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     provider: "Cloudflare Workers AI", processes: 1 }],

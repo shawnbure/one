@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 82, name: "0082_governance_review_alerts.sql", applied_at: "2026-07-23 22:00:00"
+            id: 83, name: "0083_inbound_email_channels.sql", applied_at: "2026-07-23 22:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -703,6 +703,30 @@ describe("control-plane security boundary", () => {
     }), env as never, executionCtx as never);
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("FROM process_queue_jobs q JOIN executions"))).toBe(false);
+  });
+
+  it("allows email-channel inspection but restricts routing changes to builders and owners", async () => {
+    const viewer = environment("viewer");
+    const read = await app.fetch(new Request("http://localhost/api/email-routes", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(read.status).toBe(200);
+
+    const change = await app.fetch(new Request("http://localhost/api/email-routes", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ name: "Unauthorized route", address: "mail@example.com",
+        blueprintId: "process-1", allowedSenderDomains: ["example.com"] })
+    }), viewer.env as never, executionCtx as never);
+    expect(change.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("INSERT INTO inbound_email_routes"))).toBe(false);
+
+    const consumer = environment("consumer");
+    const consumerRead = await app.fetch(new Request("http://localhost/api/email-routes", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), consumer.env as never, executionCtx as never);
+    expect(consumerRead.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("FROM inbound_email_routes"))).toBe(false);
   });
 
   it("prevents reviewers and viewers from retrying or cancelling approved action delivery", async () => {
