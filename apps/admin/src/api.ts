@@ -207,9 +207,13 @@ export interface EvaluationDetail {
   cases: Array<{ id: string; name: string; input_text: string; assertions_json: string; weight: number; enabled: number; source: string; created_at: string }>;
   runs: Array<{ id: string; release_id: string; release_version: number | null; status: string; score: number;
     passed_assertions: number; assertion_count: number; case_count: number; total_tokens: number; estimated_cost_usd: number; created_at: string }>;
-  caseResults: Array<{ run_id: string; case_id: string; status: string; passed_assertions: number; assertion_count: number;
+  caseResults: Array<{ id: string; run_id: string; case_id: string; status: string; passed_assertions: number; assertion_count: number;
     output_preview: string | null; model: string | null; total_tokens: number; estimated_cost_usd: number; latency_ms: number;
     evidence_json: string; error: string | null }>;
+  suites: Array<{ id: string; release_id: string; evaluation_run_id: string | null; mode: "regression" | "shadow";
+    status: string; score: number | null; error: string | null; started_at: string | null; completed_at: string | null; created_at: string }>;
+  humanReviews: Array<{ id: string; case_result_id: string; reviewer_id: string; score: number;
+    verdict: "acceptable" | "needs_work" | "unsafe"; notes: string | null; updated_at: string }>;
 }
 
 export class ApiError extends Error {
@@ -352,6 +356,16 @@ export const api = {
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(`/api/evaluations/${encodeURIComponent(id)}/cases`,
       { method: "POST", body: JSON.stringify(body) }),
+  queueEvaluationSuite: (id: string, body: { releaseId?: string; mode?: "regression" | "shadow" } = {}) =>
+    request<{ data: { id: string; status: string; releaseId: string; mode: string } }>(
+      `/api/evaluations/${encodeURIComponent(id)}/suites`, { method: "POST", body: JSON.stringify(body) }),
+  promoteEvaluationSample: (id: string, body: { executionId: string; name?: string; expectedPhrases: string[];
+    prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
+    request<{ data: { id: string; assertionCount: number } }>(
+      `/api/evaluations/${encodeURIComponent(id)}/samples`, { method: "POST", body: JSON.stringify(body) }),
+  reviewEvaluationResult: (id: string, body: { score: number; verdict: "acceptable" | "needs_work" | "unsafe"; notes?: string }) =>
+    request<{ data: { id: string; caseResultId: string; score: number; verdict: string } }>(
+      `/api/evaluation-results/${encodeURIComponent(id)}/review`, { method: "PUT", body: JSON.stringify(body) }),
   testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>

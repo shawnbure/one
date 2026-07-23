@@ -1,6 +1,7 @@
 import type { PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
 import type { Env } from "./types";
+import { assertBudgetAvailable } from "./usage";
 
 type Assertion =
   | { type: "contains_all" | "contains_any" | "not_contains_any"; value: string[] }
@@ -27,7 +28,9 @@ interface ReleaseRow {
   published_at: string;
 }
 
-export async function runEvaluation(env: Env, tenantId: string, actorId: string, scenarioId: string, requestedReleaseId?: string) {
+export async function runEvaluation(env: Env, tenantId: string, actorId: string, scenarioId: string, requestedReleaseId?: string,
+  requestedRunId?: string) {
+  await assertBudgetAvailable(env, tenantId);
   const scenario = await env.DB.prepare(`SELECT e.*, b.active_release_id, b.operating_mode, b.prompt_release_id
     FROM evaluation_scenarios e JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first<Record<string, string | number | null>>();
@@ -46,7 +49,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
     { check: "guardrails_defined", passed: guardrails.length > 0 },
     { check: "golden_cases_defined", passed: cases.results.length > 0 }
   ];
-  const runId = crypto.randomUUID();
+  const runId = requestedRunId ?? crypto.randomUUID();
   const caseResults: Array<{
     id: string; caseId: string; name: string; status: "passing" | "failing" | "error"; passed: number; total: number;
     output: string | null; model: string | null; inputTokens: number; outputTokens: number; totalTokens: number;
@@ -78,7 +81,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
         }
         const rate = rates.get(result.model)!;
         caseResults.push({
-          id: crypto.randomUUID(), caseId: item.id, name: item.name, status: passed === assertions.length && assertions.length > 0 ? "passing" : "failing",
+          id: `${runId}:${item.id}`, caseId: item.id, name: item.name, status: passed === assertions.length && assertions.length > 0 ? "passing" : "failing",
           passed, total: assertions.length, output: result.output.slice(0, 2000), model: result.model,
           inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens,
           cost: (result.inputTokens * rate.input + result.outputTokens * rate.output) / 1_000_000,
@@ -86,7 +89,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
         });
       } catch (error) {
         caseResults.push({
-          id: crypto.randomUUID(), caseId: item.id, name: item.name, status: "error", passed: 0,
+          id: `${runId}:${item.id}`, caseId: item.id, name: item.name, status: "error", passed: 0,
           total: Math.max(1, parseAssertions(item.assertions_json).length), output: null, model: null,
           inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, latencyMs: Math.round(performance.now() - started),
           evidence: [], error: (error instanceof Error ? error.message : String(error)).slice(0, 500), weight: Number(item.weight) || 1
@@ -114,19 +117,28 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
     env.DB.prepare(`INSERT INTO evaluation_runs
       (id, tenant_id, scenario_id, blueprint_id, release_id, status, passed_assertions, assertion_count, evidence_json,
        triggered_by, score, case_count, input_tokens, output_tokens, total_tokens, estimated_cost_usd)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(runId, tenantId, scenario.id, scenario.blueprint_id,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET status = excluded.status, passed_assertions = excluded.passed_assertions,
+        assertion_count = excluded.assertion_count, evidence_json = excluded.evidence_json, score = excluded.score,
+        case_count = excluded.case_count, input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+        total_tokens = excluded.total_tokens, estimated_cost_usd = excluded.estimated_cost_usd`).bind(runId, tenantId, scenario.id, scenario.blueprint_id,
         releaseId || null, status, passedAssertions, assertionCount, JSON.stringify(evidence), actorId, score, caseResults.length,
         inputTokens, outputTokens, totalTokens, estimatedCost),
     ...caseResults.map((item) => env.DB.prepare(`INSERT INTO evaluation_case_results
       (id, tenant_id, run_id, case_id, release_id, status, passed_assertions, assertion_count, output_preview, model,
        input_tokens, output_tokens, total_tokens, estimated_cost_usd, latency_ms, evidence_json, error)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(item.id, tenantId, runId, item.caseId, releaseId,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET status = excluded.status, passed_assertions = excluded.passed_assertions,
+        assertion_count = excluded.assertion_count, output_preview = excluded.output_preview, model = excluded.model,
+        input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens, total_tokens = excluded.total_tokens,
+        estimated_cost_usd = excluded.estimated_cost_usd, latency_ms = excluded.latency_ms,
+        evidence_json = excluded.evidence_json, error = excluded.error`).bind(item.id, tenantId, runId, item.caseId, releaseId,
         item.status, item.passed, item.total, item.output, item.model, item.inputTokens, item.outputTokens, item.totalTokens,
         item.cost, item.latencyMs, JSON.stringify(item.evidence), item.error)),
     env.DB.prepare("UPDATE evaluation_scenarios SET status = ?, assertion_count = ?, last_run_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
       .bind(status, assertionCount, scenario.id, tenantId),
-    env.DB.prepare(`INSERT INTO audit_events (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
-      VALUES (?, ?, ?, 'evaluation.run', 'evaluation_scenario', ?, ?)`).bind(crypto.randomUUID(), tenantId, actorId, scenario.id,
+    env.DB.prepare(`INSERT OR REPLACE INTO audit_events (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+      VALUES (?, ?, ?, 'evaluation.run', 'evaluation_scenario', ?, ?)`).bind(`audit-evaluation-${runId}`, tenantId, actorId, scenario.id,
         JSON.stringify({ runId, releaseId, status, score, threshold, passedAssertions, assertionCount, caseCount: caseResults.length }))
   ];
   await env.DB.batch(statements);
@@ -148,16 +160,26 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
   ]);
   if (!scenario) return null;
   const runIds = runs.results.map((row) => String((row as Record<string, unknown>).id));
-  const results = runIds.length ? await env.DB.prepare(`SELECT run_id, case_id, status, passed_assertions, assertion_count,
+  const results = runIds.length ? await env.DB.prepare(`SELECT id, run_id, case_id, status, passed_assertions, assertion_count,
     output_preview, model, total_tokens, estimated_cost_usd, latency_ms, evidence_json, error
     FROM evaluation_case_results WHERE tenant_id = ? AND run_id IN (${runIds.map(() => "?").join(",")})
     ORDER BY created_at, case_id`).bind(tenantId, ...runIds).all() : { results: [] };
-  return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results };
+  const [suites, reviews] = await Promise.all([
+    env.DB.prepare(`SELECT id, release_id, evaluation_run_id, mode, status, score, error, started_at, completed_at, created_at
+      FROM evaluation_suite_runs WHERE tenant_id = ? AND scenario_id = ? ORDER BY created_at DESC LIMIT 20`)
+      .bind(tenantId, scenarioId).all(),
+    runIds.length ? env.DB.prepare(`SELECT h.id, h.case_result_id, h.reviewer_id, h.score, h.verdict, h.notes, h.updated_at
+      FROM evaluation_human_reviews h JOIN evaluation_case_results c ON c.id = h.case_result_id
+      WHERE h.tenant_id = ? AND c.run_id IN (${runIds.map(() => "?").join(",")}) ORDER BY h.updated_at DESC`)
+      .bind(tenantId, ...runIds).all() : Promise.resolve({ results: [] })
+  ]);
+  return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results,
+    suites: suites.results, humanReviews: reviews.results };
 }
 
 export async function createEvaluationCase(env: Env, tenantId: string, scenarioId: string, input: {
   name?: string; input?: string; expectedPhrases?: string[]; prohibitedPhrases?: string[]; format?: "text" | "json"; maxChars?: number;
-}) {
+}, source = "curated") {
   const scenario = await env.DB.prepare("SELECT id FROM evaluation_scenarios WHERE id = ? AND tenant_id = ?")
     .bind(scenarioId, tenantId).first();
   if (!scenario) throw new Error("Evaluation scenario not found");
@@ -177,14 +199,85 @@ export async function createEvaluationCase(env: Env, tenantId: string, scenarioI
   if (Number(count?.count) >= 10) throw new Error("Evaluation scenarios support up to 10 synchronous curated cases");
   const id = crypto.randomUUID();
   await env.DB.prepare(`INSERT INTO evaluation_cases
-    (id, tenant_id, scenario_id, name, input_text, assertions_json, source) VALUES (?, ?, ?, ?, ?, ?, 'curated')`)
-    .bind(id, tenantId, scenarioId, input.name.trim(), input.input.trim().slice(0, 20_000), JSON.stringify(assertions)).run();
+    (id, tenant_id, scenario_id, name, input_text, assertions_json, source) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, tenantId, scenarioId, input.name.trim(), input.input.trim().slice(0, 20_000), JSON.stringify(assertions), source).run();
   const rows = await env.DB.prepare("SELECT assertions_json FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1")
     .bind(tenantId, scenarioId).all<{ assertions_json: string }>();
   const assertionCount = 4 + rows.results.reduce((sum, row) => sum + parseAssertions(row.assertions_json).length, 0);
   await env.DB.prepare("UPDATE evaluation_scenarios SET assertion_count = ?, status = 'not_run' WHERE id = ? AND tenant_id = ?")
     .bind(assertionCount, scenarioId, tenantId).run();
   return { id, assertionCount, assertions };
+}
+
+export async function queueEvaluationSuite(env: Env, tenantId: string, actorId: string, scenarioId: string,
+  requestedReleaseId?: string, mode: "regression" | "shadow" = "regression") {
+  await assertBudgetAvailable(env, tenantId);
+  const scenario = await env.DB.prepare(`SELECT e.id, e.blueprint_id, b.active_release_id FROM evaluation_scenarios e
+    JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
+    WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId)
+    .first<{ id: string; blueprint_id: string; active_release_id: string | null }>();
+  if (!scenario) throw new Error("Evaluation scenario not found");
+  const releaseId = requestedReleaseId || scenario.active_release_id;
+  if (!releaseId) throw new Error("Select or publish a process release before starting a suite");
+  const release = await env.DB.prepare("SELECT id FROM process_releases WHERE id = ? AND tenant_id = ? AND blueprint_id = ?")
+    .bind(releaseId, tenantId, scenario.blueprint_id).first();
+  if (!release) throw new Error("Release does not belong to this process");
+  const suiteId = crypto.randomUUID();
+  const evaluationRunId = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO evaluation_suite_runs
+    (id, tenant_id, scenario_id, blueprint_id, release_id, workflow_instance_id, mode, triggered_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(suiteId, tenantId, scenarioId, scenario.blueprint_id, releaseId, suiteId, mode, actorId).run();
+  try {
+    await env.EVALUATION_WORKFLOW.create({
+      id: suiteId as `${string}-${string}-${string}-${string}-${string}`,
+      params: { tenantId, actorId, suiteId, scenarioId, releaseId, evaluationRunId }
+    });
+  } catch (error) {
+    await env.DB.prepare("UPDATE evaluation_suite_runs SET status = 'error', error = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
+      .bind((error instanceof Error ? error.message : String(error)).slice(0, 500), suiteId, tenantId).run();
+    throw error;
+  }
+  return { id: suiteId, workflowInstanceId: suiteId, evaluationRunId, status: "queued", releaseId, mode };
+}
+
+export async function reviewEvaluationResult(env: Env, tenantId: string, reviewerId: string, caseResultId: string, input: {
+  score?: number; verdict?: "acceptable" | "needs_work" | "unsafe"; notes?: string;
+}) {
+  const score = Number(input.score);
+  if (!Number.isInteger(score) || score < 1 || score > 5 ||
+      !input.verdict || !["acceptable", "needs_work", "unsafe"].includes(input.verdict)) {
+    throw new Error("A 1–5 score and valid verdict are required");
+  }
+  const result = await env.DB.prepare("SELECT id FROM evaluation_case_results WHERE id = ? AND tenant_id = ?")
+    .bind(caseResultId, tenantId).first();
+  if (!result) throw new Error("Evaluation case result not found");
+  const id = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO evaluation_human_reviews
+    (id, tenant_id, case_result_id, reviewer_id, score, verdict, notes) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(case_result_id, reviewer_id) DO UPDATE SET score = excluded.score, verdict = excluded.verdict,
+      notes = excluded.notes, updated_at = CURRENT_TIMESTAMP`)
+    .bind(id, tenantId, caseResultId, reviewerId, score, input.verdict, input.notes?.trim().slice(0, 1000) || null).run();
+  return { id, caseResultId, score, verdict: input.verdict };
+}
+
+export async function promoteExecutionSample(env: Env, tenantId: string, scenarioId: string, input: {
+  executionId?: string; name?: string; expectedPhrases?: string[]; prohibitedPhrases?: string[];
+  format?: "text" | "json"; maxChars?: number;
+}) {
+  if (!input.executionId) throw new Error("Execution ID is required");
+  const sample = await env.DB.prepare(`SELECT e.id, e.input_preview FROM executions e JOIN evaluation_scenarios s
+    ON s.blueprint_id = e.blueprint_id AND s.tenant_id = e.tenant_id
+    WHERE e.id = ? AND e.tenant_id = ? AND s.id = ? AND e.status = 'completed'`)
+    .bind(input.executionId, tenantId, scenarioId).first<{ id: string; input_preview: string | null }>();
+  if (!sample?.input_preview) throw new Error("Completed execution sample not found or its preview is empty");
+  return createEvaluationCase(env, tenantId, scenarioId, {
+    name: input.name || `Production sample ${sample.id.slice(0, 8)}`,
+    input: sample.input_preview,
+    expectedPhrases: input.expectedPhrases,
+    prohibitedPhrases: input.prohibitedPhrases,
+    format: input.format,
+    maxChars: input.maxChars
+  }, "production_sample");
 }
 
 export async function evaluateReleaseGate(env: Env, tenantId: string, actorId: string, blueprintId: string, releaseId: string) {

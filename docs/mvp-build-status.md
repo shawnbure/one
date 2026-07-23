@@ -25,7 +25,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 | Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, and optional hard limit |
-| Evaluation lab | Curated golden cases, expected/prohibited output assertions, exact-release model runs, weighted scoring, release comparison, evidence, and budgeted usage |
+| Evaluation lab | Curated golden cases, expected/prohibited output assertions, exact-release model runs, weighted scoring, release comparison, durable Workflow suites, human scorecards, explicit redacted production-sample promotion, evidence, and budgeted usage |
 
 ## Execution architecture
 
@@ -103,6 +103,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 13. `0013_connector_delivery.sql`: secret references, signed webhook policy, and delivery attempt evidence.
 14. `0014_customer_bootstrap.sql`: idempotent customer launch evidence and provisioned baseline references.
 15. `0015_evaluation_lab.sql`: curated golden cases, case-level results, release scores, inference usage, and comparison evidence.
+16. `0016_evaluation_operations.sql`: durable suite lifecycle, Workflow correlation, and tenant-scoped human review scorecards.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -139,7 +140,7 @@ For changes to identity, tenant scoping, release publication, approval decisions
 
 The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewers cannot change administrative policy or launch customer baselines, onboarding retries do not duplicate processes, first processes start paused with draft releases, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, durable identity keys remain sticky only within the intended scope, and release-specific golden cases enforce expected/prohibited output assertions while capturing usage. These tests run locally with mocked model calls and no external deliveries.
 
-Evaluation runs are synchronous for the MVP and deliberately limited to ten enabled curated cases per scenario. Every case invokes the selected Workers AI model against the exact process release, records assertion evidence and token/cost estimates, and participates in the tenant hard budget. Larger datasets should move to Cloudflare Workflows with an asynchronous completion gate rather than extending a request indefinitely.
+Interactive evaluation runs are deliberately limited to ten enabled curated cases per scenario. Durable suite runs use a dedicated Cloudflare Workflow, survive browser disconnection, retry the exact-release regression idempotently, and persist their lifecycle separately from case evidence. Every case invokes the selected Workers AI model, records assertion evidence and token/cost estimates, and participates in the tenant hard budget. Production inputs are never sampled automatically: an authorized user may explicitly promote only the already-stored, truncated execution preview into a case. Much larger batch datasets should add Workflow fan-out rather than extending one inference step indefinitely.
 
 ## Remaining aggressive-MVP work
 
@@ -147,7 +148,7 @@ The foundation is usable, but these are the highest-value next slices:
 
 1. Automate the Cloudflare Access allow-policy handoff for customer members after the in-product idempotent baseline launch; D1 membership, branding, controls, first process, baseline, evaluation, and draft release provisioning are implemented.
 2. Add the first provider-specific OAuth lifecycle on top of the implemented Cloudflare secret-reference and generic signed-webhook connector foundation.
-3. Add human-scored rubrics, production shadow samples, and asynchronous Workflow-backed evaluation suites. Curated golden cases, typed expected/prohibited assertions, scoring, exact-release publish gates, and release comparison are implemented.
+3. Add richer multi-dimension rubrics, automated privacy redaction, model-to-model shadow comparison, and Workflow fan-out for large datasets. Durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
 4. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
 5. Add authenticated email delivery; Queue-backed signed webhook delivery is implemented.
 6. Production Access bootstrap and a scripted, reviewable environment promotion command.

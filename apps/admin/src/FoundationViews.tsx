@@ -18,6 +18,7 @@ import {
   Plus,
   ShieldCheck,
   Users,
+  Workflow,
   XCircle,
 } from "lucide-react";
 import { api, type EvaluationDetail, type GovernanceData } from "./api";
@@ -205,6 +206,8 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<EvaluationDetail | null>(null);
   const [savingCase, setSavingCase] = useState(false);
+  const [suiteRunning, setSuiteRunning] = useState(false);
+  const [sampleExecution, setSampleExecution] = useState("");
   const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "", format: "text" as "text" | "json", maxChars: 2000 });
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
@@ -242,6 +245,36 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       onNotice("Golden case added; the scenario must be rerun before release promotion.");
     } catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation case could not be created"); }
     finally { setSavingCase(false); }
+  }
+  async function queueSuite() {
+    if (!selected) return;
+    setSuiteRunning(true);
+    try {
+      const result = await api.queueEvaluationSuite(selected);
+      await inspect(selected);
+      onNotice(`Durable regression suite queued (${result.data.id.slice(0, 8)}). It will continue if the request disconnects.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation suite could not be queued"); }
+    finally { setSuiteRunning(false); }
+  }
+  async function review(resultId: string, score: number, verdict: "acceptable" | "needs_work" | "unsafe") {
+    try {
+      await api.reviewEvaluationResult(resultId, { score, verdict });
+      if (selected) await inspect(selected);
+      onNotice("Human quality score saved to the release evidence.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Human review could not be saved"); }
+  }
+  async function promoteSample() {
+    if (!selected || !sampleExecution.trim()) return;
+    try {
+      await api.promoteEvaluationSample(selected, {
+        executionId: sampleExecution.trim(), expectedPhrases: phrases(caseForm.expected),
+        prohibitedPhrases: phrases(caseForm.prohibited), format: caseForm.format, maxChars: caseForm.maxChars
+      });
+      setSampleExecution("");
+      await inspect(selected);
+      await onReload();
+      onNotice("The stored, truncated execution preview was promoted into a regression case.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Production sample could not be promoted"); }
   }
   const latest = detail?.runs[0];
   const previous = detail?.runs.find((run) => run.release_id !== latest?.release_id) ?? detail?.runs[1];
@@ -305,15 +338,19 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       </div>
       {selected && <div className="evaluation-lab panel">
         {!detail ? <div className="loading-card">Loading evaluation lab…</div> : <>
-          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span>{detail.cases.length} cases</span></div>
+          <div className="section-head"><div><h2>{detail.scenario.name}</h2><p>{detail.scenario.process_name} · exact-release golden-case regression</p></div><span className="evaluation-lab-actions"><span>{detail.cases.length} cases</span><button disabled={suiteRunning} onClick={() => void queueSuite()}><Workflow size={15}/>{suiteRunning ? "Queueing…" : "Run durable suite"}</button></span></div>
           <div className="comparison-strip">
             <article><small>LATEST RELEASE</small><strong>{latest ? `v${latest.release_version ?? "?"} · ${(Number(latest.score) * 100).toFixed(0)}%` : "Not run"}</strong><span className={`connection-state ${latest?.status ?? "attention"}`}><i/>{latest?.status ?? "not run"}</span></article>
             <article><small>PREVIOUS COMPARISON</small><strong>{previous ? `v${previous.release_version ?? "?"} · ${(Number(previous.score) * 100).toFixed(0)}%` : "No baseline"}</strong><span>{delta === null ? "Run another release to compare" : `${delta >= 0 ? "+" : ""}${delta.toFixed(0)} percentage points`}</span></article>
             <article><small>RELEASE COST</small><strong>{latest ? money(Number(latest.estimated_cost_usd)) : "$0.0000"}</strong><span>{latest ? `${number(Number(latest.total_tokens))} model tokens` : "No inference recorded"}</span></article>
           </div>
+          <div className="suite-history">
+            <div className="section-head"><div><h3>Durable suite history</h3><p>Cloudflare Workflows preserve retries and completion outside the browser request.</p></div></div>
+            {detail.suites.length ? detail.suites.slice(0, 5).map((suite) => <article key={suite.id}><Workflow size={16}/><span><strong>{suite.mode} · {suite.id.slice(0, 8)}</strong><small>{suite.completed_at ?? suite.started_at ?? suite.created_at}</small></span><span className={`connection-state ${suite.status}`}><i/>{suite.status}</span><strong>{suite.score === null ? "—" : `${(Number(suite.score) * 100).toFixed(0)}%`}</strong></article>) : <p className="empty-copy">No durable suites queued yet. The quick Run action remains available for small interactive checks.</p>}
+          </div>
           <div className="golden-layout">
             <div className="golden-cases"><div className="section-head"><div><h3>Golden cases</h3><p>Anonymized inputs and deterministic output properties.</p></div></div>
-              {detail.cases.map((item) => { const result = latest ? detail.caseResults.find((row) => row.run_id === latest.id && row.case_id === item.id) : null; return <article key={item.id}><span className={`eval-icon ${result?.status ?? "attention"}`}>{result?.status === "passing" ? <CheckCircle2 size={17}/> : <AlertTriangle size={17}/>}</span><span><strong>{item.name}</strong><small>{assertionLabel(item.assertions_json)} · {item.source}</small></span><span className={`connection-state ${result?.status ?? "attention"}`}><i/>{result?.status ?? "not run"}</span>{result && <small>{result.latency_ms} ms · {result.passed_assertions}/{result.assertion_count}</small>}</article>; })}
+              {detail.cases.map((item) => { const result = latest ? detail.caseResults.find((row) => row.run_id === latest.id && row.case_id === item.id) : null; const human = result ? detail.humanReviews.find((row) => row.case_result_id === result.id) : null; return <article key={item.id}><span className={`eval-icon ${result?.status ?? "attention"}`}>{result?.status === "passing" ? <CheckCircle2 size={17}/> : <AlertTriangle size={17}/>}</span><span><strong>{item.name}</strong><small>{assertionLabel(item.assertions_json)} · {item.source}</small>{result && <span className="human-score"><small>Human score: {human ? `${human.score}/5 · ${human.verdict.replaceAll("_", " ")}` : "not reviewed"}</small><button onClick={() => void review(result.id, 5, "acceptable")}>Accept</button><button onClick={() => void review(result.id, 3, "needs_work")}>Needs work</button><button onClick={() => void review(result.id, 1, "unsafe")}>Unsafe</button></span>}</span><span className={`connection-state ${result?.status ?? "attention"}`}><i/>{result?.status ?? "not run"}</span>{result && <small>{result.latency_ms} ms · {result.passed_assertions}/{result.assertion_count}</small>}</article>; })}
             </div>
             <div className="case-builder"><div className="section-head"><div><h3>Add golden case</h3><p>Use anonymized facts only.</p></div><Plus size={16}/></div>
               <label>Case name<input value={caseForm.name} onChange={(event) => setCaseForm({ ...caseForm, name: event.target.value })}/></label>
@@ -322,6 +359,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <label>Prohibited phrases <small>comma separated</small><input value={caseForm.prohibited} onChange={(event) => setCaseForm({ ...caseForm, prohibited: event.target.value })}/></label>
               <div className="case-fields"><label>Format<select value={caseForm.format} onChange={(event) => setCaseForm({ ...caseForm, format: event.target.value as "text" | "json" })}><option value="text">Text</option><option value="json">Valid JSON</option></select></label><label>Max characters<input type="number" min="1" max="50000" value={caseForm.maxChars} onChange={(event) => setCaseForm({ ...caseForm, maxChars: Number(event.target.value) })}/></label></div>
               <button className="primary" disabled={savingCase} onClick={() => void addCase()}>{savingCase ? "Adding…" : "Add regression case"}</button>
+              <div className="sample-promoter"><strong>Promote a production sample</strong><small>Explicitly reuse only Workrr’s stored, truncated input preview. Required/prohibited assertions above apply.</small><input placeholder="Completed execution ID" value={sampleExecution} onChange={(event) => setSampleExecution(event.target.value)}/><button disabled={!sampleExecution.trim()} onClick={() => void promoteSample()}>Promote redacted preview</button></div>
             </div>
           </div>
         </>}

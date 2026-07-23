@@ -33,7 +33,10 @@
       "dead_letter_queue": "workrr-process-jobs-dlq"
     }]
   },
-  "workflows": [{ "name": "workrr-process-workflow", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" }],
+  "workflows": [
+    { "name": "workrr-process-workflow", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" },
+    { "name": "workrr-evaluation-workflow", "binding": "EVALUATION_WORKFLOW", "class_name": "EvaluationWorkflow" }
+  ],
   "triggers": { "crons": ["0 * * * *"] },
   "vars": {
     "ENVIRONMENT": "production",
@@ -69,7 +72,10 @@
           "dead_letter_queue": "workrr-process-jobs-dev-dlq"
         }]
       },
-      "workflows": [{ "name": "workrr-process-workflow-dev", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" }],
+      "workflows": [
+        { "name": "workrr-process-workflow-dev", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" },
+        { "name": "workrr-evaluation-workflow-dev", "binding": "EVALUATION_WORKFLOW", "class_name": "EvaluationWorkflow" }
+      ],
       "triggers": { "crons": ["0 * * * *"] },
       "vars": {
         "ENVIRONMENT": "development",

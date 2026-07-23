@@ -11,11 +11,12 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, getEvaluationDetail, runEvaluation } from "./evaluation";
+import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, reviewEvaluationResult, runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
+export { EvaluationWorkflow } from "./evaluation-workflow";
 
 export const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
@@ -424,6 +425,48 @@ app.post("/api/evaluations/:id/cases", requireRoles("admin", "builder", "owner")
     return c.json({ data: result }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Evaluation case could not be created" }, 400);
+  }
+});
+
+app.post("/api/evaluations/:id/suites", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  const body: { releaseId?: string; mode?: "regression" | "shadow" } =
+    await c.req.json<{ releaseId?: string; mode?: "regression" | "shadow" }>().catch(() => ({}));
+  try {
+    const result = await queueEvaluationSuite(c.env, c.get("tenantId"), c.get("actorId"), scenarioId,
+      body.releaseId, body.mode === "shadow" ? "shadow" : "regression");
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_suite.queued",
+      "evaluation_suite", result.id, { scenarioId, releaseId: result.releaseId, mode: result.mode });
+    return c.json({ data: result }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Evaluation suite could not be queued" }, 400);
+  }
+});
+
+app.post("/api/evaluations/:id/samples", requireRoles("admin", "builder", "owner"), async (c) => {
+  const scenarioId = c.req.param("id");
+  if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
+  try {
+    const result = await promoteExecutionSample(c.env, c.get("tenantId"), scenarioId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_sample.promoted",
+      "evaluation_scenario", scenarioId, { caseId: result.id });
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Execution sample could not be promoted" }, 400);
+  }
+});
+
+app.put("/api/evaluation-results/:id/review", requireRoles("admin", "builder", "owner", "operator", "reviewer"), async (c) => {
+  const resultId = c.req.param("id");
+  if (!resultId) return c.json({ error: "Evaluation result ID is required" }, 400);
+  try {
+    const result = await reviewEvaluationResult(c.env, c.get("tenantId"), c.get("actorId"), resultId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_result.reviewed",
+      "evaluation_case_result", resultId, { score: result.score, verdict: result.verdict });
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Evaluation result review failed" }, 400);
   }
 });
 
