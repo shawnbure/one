@@ -182,6 +182,8 @@ export interface ValueData {
 export interface OnboardingData {
   settings: null | { organization_name: string; support_email: string; accent_color: string; default_model_profile: string; data_region: string; initialized_at: string | null };
   checklist: Array<{ id: string; label: string; ready: boolean }>;
+  bootstrap: null | { status: "started" | "completed" | "failed"; member_id: string | null; process_id: string | null;
+    started_at: string; completed_at: string | null; last_error: string | null };
 }
 export interface NotificationData {
   policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string;
@@ -338,6 +340,20 @@ export const api = {
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
+  bootstrapCustomer: (body: {
+    idempotencyKey: string;
+    organizationName: string;
+    supportEmail: string;
+    accentColor: string;
+    defaultModelProfile: string;
+    dataRegion: string;
+    member?: { email: string; name: string; role: string };
+    firstProcess: {
+      templateId: string; name: string; purpose: string; businessOwner: string; department: string; riskLevel: string;
+      baseline: { volumePerMonth: number; minutesPerItem: number; hourlyCost: number; errorRate: number };
+    };
+  }) => request<{ data: OnboardingData & { launch: { status: string; processId: string; memberId: string; alreadyCompleted: boolean } } }>(
+    "/api/onboarding/bootstrap", { method: "POST", body: JSON.stringify(body) }),
   notifications: () => request<{ data: NotificationData }>("/api/notifications"),
   updateNotificationPolicy: (id: string, body: { enabled?: boolean; destination?: string | null }) =>
     request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),

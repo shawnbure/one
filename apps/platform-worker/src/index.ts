@@ -8,7 +8,7 @@ import { createDraftRelease, getStudio, publishRelease } from "./studio";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
-import { applyOnboarding, exportCustomerManifest, getOnboarding } from "./onboarding";
+import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { runEvaluation } from "./evaluation";
@@ -53,6 +53,20 @@ app.put("/api/onboarding", requireRoles("admin"), async (c) => {
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "tenant.onboarding.updated", "tenant", c.get("tenantId"), { settings: data.settings });
     return c.json({ data });
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Onboarding update failed" }, 400); }
+});
+
+app.post("/api/onboarding/bootstrap", requireRoles("admin"), async (c) => {
+  try {
+    const data = await bootstrapCustomer(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "tenant.bootstrap.completed", "tenant", c.get("tenantId"), {
+      status: data.launch.status, processId: data.launch.processId, memberId: data.launch.memberId,
+      alreadyCompleted: data.launch.alreadyCompleted
+    });
+    return c.json({ data }, data.launch.alreadyCompleted ? 200 : 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Customer bootstrap failed" },
+      error instanceof BootstrapConflict ? 409 : 400);
+  }
 });
 
 app.get("/api/onboarding/export", requireRoles("admin", "owner"), async (c) => {
@@ -168,7 +182,7 @@ app.patch("/api/members/:id", requireRoles("admin"), async (c) => {
 
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
 
-app.get("/api/process-templates", requireRoles("admin", "builder", "owner"), async (c) => {
+app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, name, description, execution_profile, model_profile, autonomy,
     tools_json, category FROM process_templates ORDER BY category, name`).all();
   return c.json({ data: results });

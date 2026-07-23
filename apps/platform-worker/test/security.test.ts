@@ -79,4 +79,14 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(409);
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies SET"))).toBe(false);
   });
+
+  it("prevents viewers from launching a customer baseline", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/onboarding/bootstrap", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ idempotencyKey: "forged-launch" })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("INSERT INTO tenant_bootstrap_runs"))).toBe(false);
+  });
 });

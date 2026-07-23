@@ -1,7 +1,7 @@
 import { createDraftRelease } from "./studio";
 import type { Env } from "./types";
 
-interface CreateProcessInput {
+export interface CreateProcessInput {
   templateId: string;
   name: string;
   purpose: string;
@@ -16,34 +16,49 @@ interface TemplateRow {
   instructions_json: string; guardrails_json: string; tools_json: string;
 }
 
-export async function createProcessFromTemplate(env: Env, tenantId: string, actorId: string, input: CreateProcessInput) {
+export async function createProcessFromTemplate(env: Env, tenantId: string, actorId: string, input: CreateProcessInput, processIdOverride?: string) {
   if (!input.name?.trim() || !input.purpose?.trim() || !input.templateId) throw new Error("Template, process name, and purpose are required");
+  if (![input.baseline.volumePerMonth, input.baseline.minutesPerItem, input.baseline.hourlyCost, input.baseline.errorRate].every(Number.isFinite) ||
+      input.baseline.volumePerMonth < 0 || input.baseline.minutesPerItem < 0 || input.baseline.hourlyCost < 0 ||
+      input.baseline.errorRate < 0 || input.baseline.errorRate > 1) {
+    throw new Error("Baseline values must be non-negative and error rate must be between 0 and 1");
+  }
   const template = await env.DB.prepare("SELECT * FROM process_templates WHERE id = ?").bind(input.templateId).first<TemplateRow>();
   if (!template) throw new Error("Process template not found");
-  const id = `${slug(input.name)}-${crypto.randomUUID().slice(0, 6)}`;
+  const id = processIdOverride ?? `${slug(input.name)}-${crypto.randomUUID().slice(0, 6)}`;
   const now = new Date().toISOString();
   const score = opportunityScore(input.baseline);
-  await env.DB.batch([
-    env.DB.prepare(`INSERT INTO agent_blueprints
+  const existing = await env.DB.prepare("SELECT id FROM agent_blueprints WHERE id = ? AND tenant_id = ?").bind(id, tenantId).first();
+  if (!existing) {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO agent_blueprints
       (id, tenant_id, name, description, execution_profile, model_profile, prompt_release_id, autonomy, status, tools_json,
        updated_at, business_owner, department, risk_level, operating_mode)
       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'draft', ?, ?, ?, ?, ?, 'paused')`)
-      .bind(id, tenantId, input.name.trim(), input.purpose.trim(), template.execution_profile, template.model_profile, template.autonomy, template.tools_json, now, input.businessOwner || "Unassigned", input.department || "Operations", input.riskLevel || "medium"),
-    env.DB.prepare(`INSERT INTO process_discovery
+        .bind(id, tenantId, input.name.trim(), input.purpose.trim(), template.execution_profile, template.model_profile, template.autonomy, template.tools_json, now, input.businessOwner || "Unassigned", input.department || "Operations", input.riskLevel || "medium"),
+      env.DB.prepare(`INSERT INTO process_discovery
       (id, tenant_id, blueprint_id, purpose, volume_per_month, minutes_per_item, hourly_cost, error_rate, opportunity_score, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), tenantId, id, input.purpose.trim(), input.baseline.volumePerMonth, input.baseline.minutesPerItem, input.baseline.hourlyCost, input.baseline.errorRate, score, actorId),
-    env.DB.prepare(`INSERT INTO evaluation_scenarios (id, tenant_id, blueprint_id, name, category, status, assertion_count)
+        .bind(crypto.randomUUID(), tenantId, id, input.purpose.trim(), input.baseline.volumePerMonth, input.baseline.minutesPerItem, input.baseline.hourlyCost, input.baseline.errorRate, score, actorId),
+      env.DB.prepare(`INSERT INTO evaluation_scenarios (id, tenant_id, blueprint_id, name, category, status, assertion_count)
       VALUES (?, ?, ?, 'Release safety baseline', 'release_gate', 'not_run', 4)`).bind(`eval-release-${id}`, tenantId, id)
-  ]);
-  const release = await createDraftRelease(env, tenantId, id, actorId, {
-    systemPrompt: template.system_prompt,
-    instructions: JSON.parse(template.instructions_json) as string[],
-    guardrails: JSON.parse(template.guardrails_json) as string[],
-    modelProfile: template.model_profile,
-    autonomy: template.autonomy,
-    releaseNotes: `Initial draft from ${input.templateId}`
-  });
+    ]);
+  }
+  const existingReleaseRow = await env.DB.prepare(`SELECT id, prompt_release_id, version, checksum, status
+    FROM process_releases WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version LIMIT 1`).bind(tenantId, id)
+    .first<{ id: string; prompt_release_id: string; version: number; checksum: string; status: "draft" }>();
+  const existingRelease = existingReleaseRow ? {
+    releaseId: existingReleaseRow.id, promptReleaseId: existingReleaseRow.prompt_release_id,
+    version: existingReleaseRow.version, checksum: existingReleaseRow.checksum, status: existingReleaseRow.status
+  } : null;
+  const release = existingRelease ?? await createDraftRelease(env, tenantId, id, actorId, {
+      systemPrompt: template.system_prompt,
+      instructions: JSON.parse(template.instructions_json) as string[],
+      guardrails: JSON.parse(template.guardrails_json) as string[],
+      modelProfile: template.model_profile,
+      autonomy: template.autonomy,
+      releaseNotes: `Initial draft from ${input.templateId}`
+    });
   return { id, name: input.name.trim(), status: "draft", opportunityScore: score, release };
 }
 
