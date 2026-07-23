@@ -141,6 +141,20 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("approval_messages"))).toBe(false);
   });
 
+  it("keeps tenant-wide execution activity and redacted evidence exports out of consumer sessions", async () => {
+    const consumer = environment("consumer");
+    for (const path of [
+      "/api/executions", "/api/executions/execution-1", "/api/executions/execution-1/evidence-export"
+    ]) {
+      const response = await app.fetch(new Request(`http://localhost${path}`, {
+        headers: { "x-workrr-user": "operator@example.com" }
+      }), consumer.env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+    }
+    expect(consumer.queries.some((sql) => sql.includes("FROM executions WHERE") ||
+      sql.includes("FROM executions e JOIN"))).toBe(false);
+  });
+
   it("prevents viewers from changing connection credential lifecycle metadata", async () => {
     const viewer = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/connections/connection-1/lifecycle", {

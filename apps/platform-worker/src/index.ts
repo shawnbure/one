@@ -45,6 +45,7 @@ import { disposeProcess, enqueueDueProcessDisposals, getProcessRetirement, reque
 import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperations, previewRetention,
   updateRetentionControls } from "./retention";
 import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConflict, updateHelpRequest } from "./help-center";
+import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence } from "./execution-evidence";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -850,7 +851,7 @@ app.get("/api/overview", async (c) => {
   });
 });
 
-app.get("/api/executions", async (c) => {
+app.get("/api/executions", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const status = c.req.query("status");
   const blueprintId = c.req.query("process");
   const filters: string[] = ["tenant_id = ?"];
@@ -864,37 +865,27 @@ app.get("/api/executions", async (c) => {
   return c.json({ data: results });
 });
 
-app.get("/api/executions/:id", async (c) => {
+app.get("/api/executions/:id", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const executionId = c.req.param("id");
-  const execution = await c.env.DB.prepare(`SELECT e.*, b.name blueprint_name,
-    COALESCE(e.autonomy_level, b.autonomy) autonomy, b.prompt_release_id
-    FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
-    WHERE e.id = ? AND e.tenant_id = ?`).bind(executionId, c.get("tenantId")).first();
-  if (!execution) return c.json({ error: "Execution not found" }, 404);
-  const [approvals, audit, citations, toolInvocations, toolActions] = await Promise.all([
-    c.env.DB.prepare("SELECT * FROM approvals WHERE tenant_id = ? AND execution_id = ? ORDER BY requested_at")
-      .bind(c.get("tenantId"), executionId).all(),
-    c.env.DB.prepare(`SELECT actor_id, event_type, target_type, target_id, detail_json, created_at FROM audit_events
-      WHERE tenant_id = ? AND ((target_type = 'execution' AND target_id = ?) OR
-      (target_type = 'approval' AND target_id IN (SELECT id FROM approvals WHERE execution_id = ?)) OR
-      (target_type = 'tool_action' AND target_id IN
-        (SELECT id FROM tool_action_dispatches WHERE tenant_id=? AND execution_id=?))) ORDER BY created_at`)
-      .bind(c.get("tenantId"), executionId, executionId, c.get("tenantId"), executionId).all(),
-    c.env.DB.prepare(`SELECT source_id, source_name, chunk_id, ordinal, score, provenance, excerpt, created_at
-      FROM execution_knowledge_citations WHERE tenant_id=? AND execution_id=? ORDER BY ordinal`)
-      .bind(c.get("tenantId"), executionId).all(),
-    c.env.DB.prepare(`SELECT id, tool_name, tool_version, status, execution_mode, access_mode, risk_level,
-      adapter_kind, input_json, output_json, error, started_at, completed_at
-      FROM tool_invocations WHERE tenant_id=? AND execution_id=? ORDER BY started_at`)
-      .bind(c.get("tenantId"), executionId).all(),
-    c.env.DB.prepare(`SELECT d.*, i.tool_name, i.handler_key, i.input_json, i.output_json
-      FROM tool_action_dispatches d JOIN tool_invocations i ON i.id=d.invocation_id AND i.tenant_id=d.tenant_id
-      WHERE d.tenant_id=? AND d.execution_id=? ORDER BY d.created_at`)
-      .bind(c.get("tenantId"), executionId).all()
-  ]);
-  return c.json({ data: execution, approvals: approvals.results, audit: audit.results,
-    citations: citations.results, toolInvocations: toolInvocations.results, toolActions: toolActions.results });
+  if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+  const evidence = await getExecutionEvidence(c.env, c.get("tenantId"), executionId);
+  if (!evidence) return c.json({ error: "Execution not found" }, 404);
+  return c.json({ data: evidence.execution, approvals: evidence.approvals, audit: evidence.audit,
+    citations: evidence.citations, toolInvocations: evidence.toolInvocations, toolActions: evidence.toolActions,
+    explanation: explainExecution(evidence) });
 });
+
+app.get("/api/executions/:id/evidence-export",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+    const executionId = c.req.param("id");
+    if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+    const evidence = await getExecutionEvidence(c.env, c.get("tenantId"), executionId);
+    if (!evidence) return c.json({ error: "Execution not found" }, 404);
+    const safeFilenameId = executionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "evidence";
+    c.header("content-disposition", `attachment; filename="workrr-execution-${safeFilenameId}.json"`);
+    c.header("cache-control", "no-store");
+    return c.json(exportRedactedExecutionEvidence(evidence));
+  });
 
 app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
   const sourceId = c.req.param("id");

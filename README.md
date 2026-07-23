@@ -5,7 +5,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 ## What is implemented
 
 - A polished React operations console with process discovery, Process Studio, Work Inbox, execution activity, governance, team roles, API logs, model profiles, and value reporting.
-- A Cloudflare Worker API with verified tenant and role context, immutable releases, execution history and replay, approvals, audit evidence, operating controls, and deployment exports.
+- A Cloudflare Worker API with verified tenant and role context, immutable releases, execution history and replay, deterministic “why did this happen?” explanations, redacted evidence exports, approvals, audit evidence, operating controls, and deployment exports.
 - Cloudflare Agents SDK durable actors with local SQLite conversation history and immutable prompt-release bundles.
 - Explicit routing for `conversation`, `consumer`, `entity`, `shared_shard`, `temporary_durable`, `instant`, and `workflow` execution profiles.
 - Workers AI model profiles with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations.

@@ -6,6 +6,8 @@ import {
   Box,
   CheckCircle2,
   Clock3,
+  CircleHelp,
+  Download,
   Filter,
   FileCode2,
   GitBranch,
@@ -18,6 +20,7 @@ import {
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
+  type ExecutionExplanation,
   type QueueOperationsData, type SessionData, type ToolActionDispatch, type ToolActionOperationsData,
   type ToolInvocation } from "./api";
 import "./queue-operations.css";
@@ -39,6 +42,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
   const [citations, setCitations] = useState<ExecutionKnowledgeCitation[]>([]);
   const [toolInvocations, setToolInvocations] = useState<ToolInvocation[]>([]);
   const [toolActions, setToolActions] = useState<ToolActionDispatch[]>([]);
+  const [explanation, setExplanation] = useState<ExecutionExplanation | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -63,6 +67,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
+      setExplanation(null);
       return;
     }
     void api
@@ -74,6 +79,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
         setCitations(result.citations);
         setToolInvocations(result.toolInvocations);
         setToolActions(result.toolActions);
+        setExplanation(result.explanation);
       })
       .catch((error: Error) => onNotice(error.message));
   }, [selectedId]);
@@ -173,15 +179,17 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                     Execution <code>{detail.id}</code>
                   </p>
                 </div>
-                <button
-                  disabled={
-                    busy || ["running", "queued"].includes(detail.status)
-                  }
-                  onClick={() => void retry()}
-                >
-                  <RefreshCw size={15} />
-                  {busy ? "Starting…" : "Replay safely"}
-                </button>
+                <div className="run-heading-actions">
+                  <a href={`/api/executions/${encodeURIComponent(detail.id)}/evidence-export`}>
+                    <Download size={15}/>Export redacted evidence
+                  </a>
+                  <button
+                    disabled={busy || ["running", "queued"].includes(detail.status)}
+                    onClick={() => void retry()}>
+                    <RefreshCw size={15} />
+                    {busy ? "Starting…" : "Replay safely"}
+                  </button>
+                </div>
               </div>
               <div className="run-facts">
                 <span>
@@ -207,6 +215,22 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                   <strong>{duration(detail)}</strong>
                 </span>
               </div>
+              {explanation && <section className="execution-explainer">
+                <div className="explainer-head"><span><CircleHelp size={20}/></span><div>
+                  <small>WHY DID THIS HAPPEN?</small><h2>{explanation.title}</h2>
+                  <p>{explanation.summary}</p></div>
+                  <em className={explanation.evidenceCompleteness}>{explanation.evidenceCompleteness} evidence</em>
+                </div>
+                <div className="explanation-reasons">{explanation.reasons.map((reason) =>
+                  <article className={reason.state} key={`${reason.label}-${reason.detail}`}>
+                    <i/><div><strong>{reason.label}</strong><p>{reason.detail}</p></div>
+                  </article>)}</div>
+                <div className="explanation-outcome">
+                  <span><small>EXTERNAL IMPACT</small><strong>{explanation.externalImpact}</strong></span>
+                  <span><small>SAFE NEXT ACTION</small><strong>{explanation.nextAction}</strong></span>
+                </div>
+                <footer>Generated from persisted execution evidence with deterministic rules · no additional model call</footer>
+              </section>}
               {detail.autonomy_disposition && (
                 <div className={`autonomy-evidence ${detail.autonomy_disposition}`}>
                   <ShieldCheck size={17} />

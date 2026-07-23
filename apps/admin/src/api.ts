@@ -158,6 +158,16 @@ export interface Execution {
   approval_id?: string | null;
   tool_policy_json?: string | null;
 }
+export interface ExecutionExplanation {
+  schemaVersion: number;
+  title: string;
+  summary: string;
+  reasons: Array<{ label: string; detail: string; state: "positive" | "neutral" | "attention" }>;
+  externalImpact: string;
+  nextAction: string;
+  evidenceCompleteness: "complete" | "partial";
+  generatedBy: "deterministic_evidence_rules";
+}
 export interface QueueOperation {
   id: string;
   execution_id: string;
@@ -773,7 +783,7 @@ export const api = {
     ),
   execution: (id: string) =>
     request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[]; citations: ExecutionKnowledgeCitation[];
-      toolInvocations: ToolInvocation[]; toolActions: ToolActionDispatch[] }>(
+      toolInvocations: ToolInvocation[]; toolActions: ToolActionDispatch[]; explanation: ExecutionExplanation }>(
       `/api/executions/${encodeURIComponent(id)}`,
     ),
   retryExecution: (id: string) =>
