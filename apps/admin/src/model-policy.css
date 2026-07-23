@@ -1,0 +1,30 @@
+.model-policy { grid-column: 1 / -1; overflow: hidden; }
+.model-policy > .section-head { padding: 19px 20px; border-bottom: 1px solid #e1e8e4; }
+.model-policy > div:not(.section-head) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border-bottom: 1px solid #e8eeeb;
+}
+.model-policy > div:last-child { border-bottom: 0; }
+.model-policy strong,
+.model-policy small { display: block; }
+.model-policy strong { color: #263d33; font-size: 14px; }
+.model-policy small {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: #65766e;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.model-policy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #376b57;
+  font-size: 13px;
+  font-weight: 800;
+}
+.model-policy-toggle input { width: 18px; height: 18px; }

@@ -4,6 +4,7 @@ import { normalizeProcessSchema } from "./contracts";
 import { releaseToolPolicies } from "./tools";
 import { modelProfiles, supportedWorkersAIModels, workersAIModelCatalog } from "@workrr/contracts";
 import { getAutonomySafety } from "./autonomy-safety";
+import { assertTenantModelAllowed } from "./model-governance";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -36,7 +37,8 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       LEFT JOIN latest_migration lm ON lm.instance_key=le.instance_key AND lm.rank=1
       WHERE le.rank=1
     )`;
-  const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors, launchReadiness] = await Promise.all([
+  const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors, launchReadiness,
+    approvedModels] = await Promise.all([
     env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
@@ -68,7 +70,9 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       LEFT JOIN process_releases pr ON pr.id=ar.effective_release_id AND pr.tenant_id=?
       ORDER BY julianday(COALESCE(ar.migrated_at, ar.last_active_at)) DESC LIMIT 50`)
       .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all(),
-    getProcessLaunchReadiness(env, tenantId, blueprintId)
+    getProcessLaunchReadiness(env, tenantId, blueprintId),
+    env.DB.prepare(`SELECT model_id FROM tenant_model_policies
+      WHERE tenant_id=? AND enabled=1 ORDER BY model_id`).bind(tenantId).all<{ model_id: string }>()
   ]);
   if (!blueprint) return null;
   const autonomySafety = await getAutonomySafety(env, tenantId, blueprintId);
@@ -107,6 +111,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       cohorts, actors
     },
     launchReadiness,
+    approvedModelIds: approvedModels.results.map((model) => model.model_id),
     autonomySafety,
     activeTools,
     topology: topologyFor(String(row.execution_profile), String(row.autonomy), activeTools)
@@ -124,6 +129,7 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   if (selectedModel.profile !== input.modelProfile) {
     throw new Error(`The selected model requires the ${selectedModel.profile} model profile`);
   }
+  await assertTenantModelAllowed(env, tenantId, modelId);
   const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
   const outputSchema = normalizeProcessSchema(input.outputSchema, "output");
   const [blueprint, toolPolicies] = await Promise.all([
@@ -162,6 +168,7 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
     .bind(releaseId, tenantId, blueprintId).first<Record<string, string | number>>();
   if (!release) throw new Error("Process release not found");
   if (release.status !== "draft") throw new Error("Only a draft release can be published; use governed rollback for retired releases");
+  await assertTenantModelAllowed(env, tenantId, String(release.model_id));
   const readiness = await getProcessLaunchReadiness(env, tenantId, blueprintId);
   if (!readiness.ready) throw new ProcessLaunchReadinessError(readiness);
   await evaluateReleaseGate(env, tenantId, actorId, blueprintId, releaseId);
@@ -245,6 +252,7 @@ export async function rollbackRelease(env: Env, tenantId: string, blueprintId: s
   if (target.evaluation_status !== "passing") {
     throw new Error("Rollback target must have passing evaluation evidence");
   }
+  await assertTenantModelAllowed(env, tenantId, String(target.model_id));
   if (!blueprint.active_release_id || blueprint.active_release_id === releaseId) {
     throw new Error("Rollback target is already active");
   }

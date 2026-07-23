@@ -3,6 +3,7 @@ import { runModel } from "./model";
 import type { Env } from "./types";
 import { applyAutonomySafetyCap } from "./autonomy-safety";
 import { assertBudgetAvailable } from "./usage";
+import { assertTenantModelAllowed } from "./model-governance";
 import { applyDlp, DlpBlockedError, loadDlpRules, scanSensitiveText, type DlpRule } from "./dlp";
 import { outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
 
@@ -112,6 +113,7 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     ? modelProfiles[requestedModelProfile as keyof typeof modelProfiles].model
     : release?.model_id ?? (modelProfile && modelProfile in modelProfiles
       ? modelProfiles[modelProfile as keyof typeof modelProfiles].model : null);
+  if (modelId) await assertTenantModelAllowed(env, tenantId, modelId);
   const modelGradedCases = cases.results.filter((item) =>
     parseAssertions(item.assertions_json).some((assertion) => assertion.type === "model_rubric")).length;
   if (modelGradedCases > 25) throw new Error("Evaluation suites support model grading on at most 25 cases");
@@ -247,6 +249,7 @@ async function evaluateModelRubrics(env: Env, tenantId: string, runId: string, p
   }, prepared.dlpRules);
   if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
   await assertBudgetAvailable(env, tenantId, String(prepared.scenario.blueprint_id));
+  await assertTenantModelAllowed(env, tenantId, modelProfiles.fast.model);
   const judged = await runModel(env, "fast", judgePrompt, protectedInput.modelText,
     `evaluation-judge:${prepared.releaseId}:${item.id}`);
   const protectedOutput = await applyDlp(env, tenantId, judged.output, {
@@ -1092,6 +1095,8 @@ export async function importEvaluationDataset(env: Env, tenantId: string, scenar
 export async function queueModelTrial(env: Env, tenantId: string, actorId: string, scenarioId: string, candidateProfile: string,
   requestedReleaseId?: string) {
   if (!(candidateProfile in modelProfiles)) throw new Error("Select a supported Cloudflare model profile");
+  await assertTenantModelAllowed(env, tenantId,
+    modelProfiles[candidateProfile as keyof typeof modelProfiles].model);
   const scenario = await env.DB.prepare(`SELECT e.id, e.blueprint_id, b.active_release_id FROM evaluation_scenarios e
     JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId)

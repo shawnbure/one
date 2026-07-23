@@ -1180,6 +1180,7 @@ function Governance({
   const [incidentForm, setIncidentForm] = useState({ title: "", severity: "medium", blueprintId: "", impact: "" });
   const [incidentBusy, setIncidentBusy] = useState(false);
   const [dlpBusy, setDlpBusy] = useState<string | null>(null);
+  const [modelPolicyBusy, setModelPolicyBusy] = useState<string | null>(null);
   const [retention, setRetention] = useState<RetentionOperationsData | null>(null);
   const [retentionPreview, setRetentionPreview] = useState<RetentionPreview | null>(null);
   const [retentionBusy, setRetentionBusy] = useState(false);
@@ -1191,6 +1192,18 @@ function Governance({
     helpRequestDays: 365, apiLogDays: 90
   });
   const canManageRetention = session?.user.role === "admin" || session?.user.role === "owner";
+  const canManageModels = session?.user.role === "admin" || session?.user.role === "owner";
+  async function changeModelPolicy(modelId: string, enabled: boolean) {
+    setModelPolicyBusy(modelId);
+    try {
+      await api.updateModelPolicy(modelId, enabled);
+      await onReload();
+      onNotice(enabled
+        ? "Cloudflare model approved for this organization."
+        : "Cloudflare model removed from future releases and evaluations.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Model policy could not change"); }
+    finally { setModelPolicyBusy(null); }
+  }
   async function loadRetention() {
     try {
       const [operations, preview] = await Promise.all([api.retention(), api.retentionPreview()]);
@@ -1466,6 +1479,20 @@ function Governance({
         </div>
       </div>
       <div className="governance-bottom">
+        <article className="model-policy panel">
+          <div className="section-head"><div><span className="eyebrow"><ShieldCheck size={14}/> ORGANIZATION MODEL POLICY</span>
+            <h2>Approved Cloudflare models</h2>
+            <p>Catalog availability does not grant customer approval. Active releases must move before a model can be removed.</p>
+          </div></div>
+          {data.modelPolicy.map((model) => <div key={model.model_id}>
+            <span><strong>{model.label}</strong><small>{model.model_id}</small>
+              <small>{Number(model.active_processes)} active process release{Number(model.active_processes) === 1 ? "" : "s"}</small></span>
+            <label className="model-policy-toggle"><input type="checkbox" checked={Boolean(model.enabled)}
+              disabled={!canManageModels || modelPolicyBusy === model.model_id}
+              onChange={(event) => void changeModelPolicy(model.model_id, event.target.checked)}/>
+              <span>{model.enabled ? "Approved" : "Not approved"}</span></label>
+          </div>)}
+        </article>
         <article className="model-inventory panel">
           <div className="section-head">
             <div>

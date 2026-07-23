@@ -11,6 +11,7 @@ import { listApiLogs } from "./api-logs";
 import { createWebhookEndpoint, listWebhookReceipts, setWebhookEndpointStatus,
   updateWebhookEndpoint } from "./webhook-operations";
 import { getGovernance } from "./governance";
+import { updateTenantModelPolicy } from "./model-governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { recordValueMeasurement, voidValueMeasurement } from "./value-evidence";
@@ -1700,6 +1701,23 @@ app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "rev
 
 app.get("/api/governance", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getGovernance(c.env, c.get("tenantId")) }));
+
+app.patch("/api/governance/models/:modelId", requireRoles("admin", "owner"), async (c) => {
+  const modelId = c.req.param("modelId");
+  try {
+    if (!modelId) return c.json({ error: "Cloudflare model is required" }, 400);
+    const body = await c.req.json<{ enabled?: boolean }>();
+    if (typeof body.enabled !== "boolean") return c.json({ error: "Model approval state is required" }, 400);
+    const result = await updateTenantModelPolicy(c.env, c.get("tenantId"), c.get("actorId"), modelId, body.enabled);
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+      result.enabled ? "model_policy.approved" : "model_policy.removed",
+      "workers_ai_model", modelId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Model policy could not be updated";
+    return c.json({ error: message }, message.includes("active process") ? 409 : message.includes("not found") ? 404 : 400);
+  }
+});
 
 app.get("/api/governance/retention", requireRoles("admin", "owner", "viewer"), async (c) =>
   c.json({ data: await getRetentionOperations(c.env, c.get("tenantId")) }));

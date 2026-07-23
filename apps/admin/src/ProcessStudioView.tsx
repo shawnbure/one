@@ -551,10 +551,16 @@ function Studio({
                   }}
                 >
                   {supportedWorkersAIModels.map((id) => (
-                    <option key={id} value={id}>{workersAIModelCatalog[id].label} · {workersAIModelCatalog[id].use}</option>
+                    <option key={id} value={id} disabled={!data.approvedModelIds.includes(id)}>
+                      {workersAIModelCatalog[id].label} · {workersAIModelCatalog[id].use}
+                      {!data.approvedModelIds.includes(id) ? " · not approved" : ""}
+                    </option>
                   ))}
                 </select>
               </label>
+              {!data.approvedModelIds.includes(modelId) && (
+                <p className="field-warning">An owner must approve this model in Governance before this release can be saved.</p>
+              )}
               <div className="model-evidence">
                 <Bot size={18} />
                 <span>

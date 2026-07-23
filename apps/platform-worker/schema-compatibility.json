@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 79,
-  "requiredMigrationName": "0079_budget_threshold_alerts.sql"
+  "requiredMigrationId": 80,
+  "requiredMigrationName": "0080_tenant_model_policy.sql"
 }

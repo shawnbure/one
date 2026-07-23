@@ -45,6 +45,7 @@ function bootstrapEnvironment() {
       sql,
       bind(...values: unknown[]) { bindings = values; return statement; },
       async first() {
+        if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
         if (sql.includes("SELECT * FROM tenant_bootstrap_runs")) return run;
         if (sql.includes("SELECT tenant_id, status, member_id")) return run;
         if (sql.includes("FROM tenant_settings")) return settings;

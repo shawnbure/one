@@ -3,6 +3,7 @@ import { rollbackRelease } from "../src/studio";
 
 function environment(target: Record<string, unknown> = {
   id: "release-old", version: 2, prompt_release_id: "prompt-old", model_profile: "balanced",
+  model_id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   autonomy: "approve", status: "retired", evaluation_status: "passing"
 }) {
   const writes: Array<{ sql: string; bindings: unknown[] }> = [];
@@ -12,6 +13,7 @@ function environment(target: Record<string, unknown> = {
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
+          if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
           if (sql.includes("SELECT active_release_id")) return { active_release_id: "release-current" };
           if (sql.includes("FROM process_releases WHERE id=?")) return target;
           return null;

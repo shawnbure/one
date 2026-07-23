@@ -397,6 +397,7 @@ export interface StudioData {
     checksum: string;
   };
   releases: ProcessRelease[];
+  approvedModelIds: string[];
   activations: Array<{
     id: string; from_release_id: string | null; to_release_id: string;
     activation_type: "initial" | "publish" | "rollback"; reason: string;
@@ -543,6 +544,8 @@ export interface GovernanceData {
     lastVerifiedAt: string | null;
     evidence: string | null;
   }>;
+  modelPolicy: Array<{ model_id: string; label: string; provider: string; status: string;
+    enabled: number; active_processes: number }>;
   readiness: Array<{
     id: string;
     label: string;
@@ -1331,6 +1334,10 @@ export const api = {
       { method: "POST" },
     ),
   governance: () => request<{ data: GovernanceData }>("/api/governance"),
+  updateModelPolicy: (modelId: string, enabled: boolean) =>
+    request<{ data: { modelId: string; enabled: boolean } }>(
+      `/api/governance/models/${encodeURIComponent(modelId)}`,
+      { method: "PATCH", body: JSON.stringify({ enabled }) }),
   retention: () => request<{ data: RetentionOperationsData }>("/api/governance/retention"),
   retentionPreview: () => request<{ data: RetentionPreview }>("/api/governance/retention/preview"),
   updateRetention: (body: {

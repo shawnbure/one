@@ -9,6 +9,7 @@ function environment() {
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
+          if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
           if (sql.includes("SELECT execution_profile")) return { execution_profile: "instant" };
           if (sql.includes("COALESCE(MAX(version)")) return { version: 3 };
           return null;

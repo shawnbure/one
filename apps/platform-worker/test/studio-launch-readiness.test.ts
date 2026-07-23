@@ -81,8 +81,10 @@ describe("process launch readiness", () => {
           bind(..._values: unknown[]) { return statement; },
           async first() {
             if (sql.includes("SELECT * FROM process_releases")) {
-              return { id: "release-1", status: "draft", prompt_release_id: "prompt-1", version: 1 };
+              return { id: "release-1", status: "draft", prompt_release_id: "prompt-1", version: 1,
+                model_id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" };
             }
+            if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
             if (sql.includes("baseline_configured")) {
               return {
                 id: "process-1", baseline_configured: 1, target_configured: 0,

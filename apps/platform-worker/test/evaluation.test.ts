@@ -38,6 +38,7 @@ function evaluationEnvironment(options: {
       const statement = {
         bind(...next: unknown[]) { values = next; return statement; },
         async first() {
+          if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
           if (sql.includes("FROM evaluation_scenarios")) return {
             ...scenario, case_count: selectedCases.length,
             model_graded_count: selectedCases.filter((item) => item.assertions_json.includes('"model_rubric"')).length

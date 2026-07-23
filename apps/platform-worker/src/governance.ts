@@ -4,7 +4,7 @@ import { getDeploymentVerification } from "./deployment-verification";
 export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
-    tenantControl, dlpRules, dlpEvents, tools] = await Promise.all([
+    tenantControl, dlpRules, dlpEvents, tools, modelPolicy] = await Promise.all([
     env.DB.prepare(`SELECT b.id, b.name, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
       b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id,
       r.evaluation_status, r.evaluated_at,
@@ -46,7 +46,16 @@ export async function getGovernance(env: Env, tenantId: string) {
       FROM tool_definitions t
       LEFT JOIN connections c ON c.id=t.connection_id AND c.tenant_id=t.tenant_id
       LEFT JOIN process_tool_bindings pt ON pt.tool_id=t.id AND pt.tenant_id=t.tenant_id AND pt.enabled=1
-      WHERE t.tenant_id=? GROUP BY t.id`).bind(tenantId).all()
+      WHERE t.tenant_id=? GROUP BY t.id`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT m.model_id, m.label, m.provider, m.status,
+      COALESCE(p.enabled,0) enabled,
+      (SELECT COUNT(*) FROM agent_blueprints b JOIN process_releases r
+        ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
+        WHERE b.tenant_id=? AND r.model_id=m.model_id) active_processes
+      FROM model_catalog m
+      LEFT JOIN tenant_model_policies p ON p.tenant_id=? AND p.model_id=m.model_id
+      WHERE m.status='active' ORDER BY m.input_usd_per_million, m.model_id`)
+      .bind(tenantId, tenantId).all()
   ]);
   const processRows = processes.results as Array<Record<string, unknown>>;
   const connectionRows = connections.results as Array<Record<string, unknown>>;
@@ -77,6 +86,7 @@ export async function getGovernance(env: Env, tenantId: string) {
     dlpEvents: dlpEvents.results,
     deploymentVerification,
     models,
+    modelPolicy: modelPolicy.results,
     readiness: [
       { id: "identity", label: "Cloudflare Access trust boundary", ready: Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD), detail: env.ACCESS_TEAM_DOMAIN ? "JWT verification configured" : "Access application configuration required", action: "Customer setup", actionLabel: "Open setup" },
       ...deploymentVerification.checks.map((check) => ({ ...check, action: check.id === "service-principal" ? "Team & roles" : "Customer setup", actionLabel: check.id === "service-principal" ? "Manage principals" : "Open verification" })),

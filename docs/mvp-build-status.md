@@ -111,6 +111,8 @@ Process Studio presents a curated exact-model selector for Cloudflare-hosted inf
 
 Governance derives model readiness from existing control-plane evidence rather than spending tokens on synthetic probes. Each exact model is marked ready when an active release has either a successful execution or passing evaluation within 30 days. The evidence is computed in the existing process inventory query, avoiding an additional D1 request, and legacy profile-only releases never count as verified.
 
+Owners and admins can now approve the exact Cloudflare-hosted models available to their organization. The policy is enforced when a draft is created, published, restored, evaluated, or compared; newly cataloged models remain unavailable until approved. Existing tenants are seeded with their current catalog to preserve behavior, while customer bootstrap establishes the same explicit baseline. Removal fails closed when an active release or any known sticky durable actor still uses the model, so ordinary runtime requests need no additional D1 policy read.
+
 Every incomplete deployment-readiness finding carries a stable remediation destination and a customer-readable action label. Governance routes operators directly to customer setup, service principals, processes, evaluations, connections, delivery, knowledge, tools, or API logs rather than leaving them to interpret a passive warning. Mutations remain protected by the destination surface's existing role checks.
 
 Do not add KV for prompts unless measurement proves a distinct global distribution need. It would add another consistency boundary without replacing durable conversation memory.
@@ -251,6 +253,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 77. `0077_qwen3_model_choice.sql`: current Cloudflare-hosted Qwen3 reasoning option with versioned cost/context evidence.
 78. `0078_process_budgets.sql`: tenant-scoped per-process monthly AI allocation, warning, and hard-limit policy.
 79. `0079_budget_threshold_alerts.sql`: monthly tenant/process threshold receipts and default accountable notification routing.
+80. `0080_tenant_model_policy.sql`: owner-controlled tenant Workers AI model approvals, seeded safely for existing tenants.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

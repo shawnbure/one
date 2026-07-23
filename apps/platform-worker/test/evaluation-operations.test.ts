@@ -13,6 +13,7 @@ function operationsEnvironment(options: { caseResultExists?: boolean; workflowFa
       const statement = {
         bind(...next: unknown[]) { values = next; return statement; },
         async first() {
+          if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
           if (sql.includes("FROM tenant_budgets")) return null;
           if (sql.includes("FROM evaluation_scenarios")) return {
             id: "scenario-1", blueprint_id: "process-1", active_release_id: "release-1"

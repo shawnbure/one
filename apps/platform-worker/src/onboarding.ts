@@ -150,6 +150,10 @@ export async function bootstrapCustomer(env: Env, tenantId: string, actorId: str
 
   try {
     await applyOnboarding(env, tenantId, actorId, canonical);
+    await env.DB.prepare(`INSERT OR IGNORE INTO tenant_model_policies
+      (tenant_id, model_id, enabled, updated_by)
+      SELECT ?, model_id, 1, ? FROM model_catalog WHERE status='active'`)
+      .bind(tenantId, actorId).run();
     await provisionDefaultControls(env, tenantId, actorId, checksum);
     let memberId = actorId;
     if (canonical.member) {
