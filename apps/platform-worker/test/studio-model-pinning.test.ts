@@ -66,4 +66,18 @@ describe("release model pinning", () => {
     })).rejects.toThrow("requires the balanced model profile");
     expect(writes).toHaveLength(0);
   });
+
+  it("permits an alternative Cloudflare-hosted model within its governed profile", async () => {
+    const { env, writes } = environment();
+    await createDraftRelease(env, "tenant-1", "process-1", "builder-1", {
+      systemPrompt: "Analyze the bounded request.",
+      instructions: [],
+      guardrails: [],
+      modelProfile: "reasoning",
+      modelId: "@cf/qwen/qwen3-30b-a3b-fp8",
+      autonomy: "suggest"
+    });
+    const release = writes.find(({ sql }) => sql.includes("INSERT INTO process_releases"));
+    expect(release?.bindings).toContain("@cf/qwen/qwen3-30b-a3b-fp8");
+  });
 });

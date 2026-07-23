@@ -248,6 +248,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 74. `0074_maintenance_run_evidence.sql`: bounded platform maintenance receipts with per-control health and failure evidence.
 75. `0075_maintenance_degraded_alerts.sql`: owned critical response policy for degraded hourly platform maintenance.
 76. `0076_agent_follow_up_notifications.sql`: owned in-app response policy for Durable Object actor follow-ups.
+77. `0077_qwen3_model_choice.sql`: current Cloudflare-hosted Qwen3 reasoning option with versioned cost/context evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

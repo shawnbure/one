@@ -151,7 +151,8 @@ export const modelProfiles = {
 export const supportedWorkersAIModels = [
   "@cf/meta/llama-3.1-8b-instruct-fp8",
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+  "@cf/qwen/qwen3-30b-a3b-fp8"
 ] as const;
 
 export type SupportedWorkersAIModel = typeof supportedWorkersAIModels[number];
@@ -180,5 +181,11 @@ export const workersAIModelCatalog: Record<SupportedWorkersAIModel, {
     profile: "reasoning",
     use: "Complex analysis",
     guidance: "Choose when analysis quality matters more than the fastest response."
+  },
+  "@cf/qwen/qwen3-30b-a3b-fp8": {
+    label: "Qwen3 30B A3B FP8",
+    profile: "reasoning",
+    use: "Efficient reasoning and agent tools",
+    guidance: "Choose for multilingual reasoning and tool-capable process work when lower inference cost matters."
   }
 };

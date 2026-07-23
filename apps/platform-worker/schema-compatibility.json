@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 76,
-  "requiredMigrationName": "0076_agent_follow_up_notifications.sql"
+  "requiredMigrationId": 77,
+  "requiredMigrationName": "0077_qwen3_model_choice.sql"
 }
