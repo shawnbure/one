@@ -31,6 +31,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Bounded actor-local conversational context with operator inspection, correction, quarantine, restoration, and content deletion; governance actions are revision-checked, audited, and never copied into D1 or KV.
 - Explicit routing for `conversation`, `consumer`, `entity`, `shared_shard`, `temporary_durable`, `instant`, and `workflow` execution profiles.
 - Workers AI model profiles whose exact allowlisted model ID is snapshotted into every immutable process release, with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations, plus an owner-governed Cloudflare AI Gateway handoff for explicitly approved third-party models.
+- Process Studio prompt budgeting that separates stored release content from bounded runtime context, shows section estimates/model headroom and observed model-call timing, and blocks oversized drafts without KV or another execution hot-path read.
 - Governed knowledge ingestion through R2 and tenant-namespaced Vectorize, including Cloudflare Workers AI conversion for PDF, Word, PowerPoint, Excel, HTML, and OpenDocument files. Only DLP-protected extracted text is retained; raw binary uploads are not stored.
 - D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
 - Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and bounded Cron dispatch for tenant-configured recurring processes.

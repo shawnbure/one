@@ -20,6 +20,7 @@ export async function runModel(
   pinnedModelId?: string | null,
   durableFacts: string[] = []
 ): Promise<{ output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
+  modelLatencyMs: number;
   toolInvocations: ToolInvocationEvidence[]; toolApprovalRequired: boolean;
   inferenceProvider: "workers_ai" | "ai_gateway"; gatewayId: string | null; gatewayStep: number | null;
   gatewayCacheStatus: string | null; gatewayLogId: string | null }> {
@@ -62,6 +63,7 @@ export async function runModel(
     ...history.map((item) => ({ role: item.role, content: item.content }) satisfies ModelMessage),
     { role: "user", content: input }
   ];
+  const modelStarted = performance.now();
   const { text, usage } = await generateText({
     model: workersAI(modelId, gatewayModel ? {
       ...(sessionAffinity ? { sessionAffinity } : {}),
@@ -79,6 +81,7 @@ export async function runModel(
     tools: runtime.tools,
     stopWhen: runtime.tools ? stepCountIs(4) : stepCountIs(1)
   });
+  const modelLatencyMs = Math.max(0, Math.round(performance.now() - modelStarted));
 
   return {
     output: text || "The model returned no text response.",
@@ -86,6 +89,7 @@ export async function runModel(
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
     totalTokens: usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+    modelLatencyMs,
     toolInvocations: runtime.evidence,
     toolApprovalRequired: runtime.evidence.some((item) => item.approvalRequired),
     inferenceProvider: gatewayModel ? "ai_gateway" : "workers_ai",

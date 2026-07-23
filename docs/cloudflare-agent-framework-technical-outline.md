@@ -1149,3 +1149,7 @@ The central distinction is:
 - **More included prompt tokens** will slow and increase the cost of inference.
 
 The product must expose this distinction in Agent Studio through bundle size, selected modules, section token counts, model context budget, and measured inference timing.
+
+Implemented boundary: Process Studio calculates system, instruction, guardrail, and total static estimates with a documented characters-divided-by-four heuristic. The selected model's governed D1 catalog limit determines the available context. Instant/Workflow releases reserve 10,000 tokens for bounded request, knowledge, tools, and output; sticky Agent profiles reserve 16,000 to also protect conversation and approved-fact context. Static release content is capped at 20,000 tokens and receives an attention state at 70% of its model-specific allocation. Draft creation, publication, and rollback enforce the same server-side calculation.
+
+Workers AI and approved Gateway calls record measured model-call latency with their existing token/provider evidence. Studio shows a seven-day active-release sample without copying prompt or business payload content. This adds control-plane queries only when Studio opens and adds no KV, Cache API, or new D1 read to a normal Agent turn.

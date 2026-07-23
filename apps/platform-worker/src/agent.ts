@@ -209,6 +209,7 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = [],
     dataClassification: DataClassification = "internal"): Promise<{
     output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
+    modelLatencyMs: number;
     turnCount: number; toolApprovalRequired: boolean; inferenceProvider: "workers_ai" | "ai_gateway";
     gatewayId: string | null; gatewayStep: number | null; gatewayCacheStatus: string | null;
     gatewayLogId: string | null;

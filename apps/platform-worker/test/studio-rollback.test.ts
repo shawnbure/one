@@ -16,6 +16,10 @@ function environment(target: Record<string, unknown> = {
           if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
           if (sql.includes("SELECT active_release_id")) return { active_release_id: "release-current" };
           if (sql.includes("FROM process_releases WHERE id=?")) return target;
+          if (sql.includes("FROM prompt_releases p")) return {
+            system_prompt: "Restore stable behavior.", instructions_json: "[]", guardrails_json: "[]",
+            context_tokens: 24_000, execution_profile: "conversation"
+          };
           return null;
         },
         async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; },

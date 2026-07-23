@@ -59,6 +59,7 @@ describe("model conversation context", () => {
       undefined, undefined, [], pinned);
     expect(workersModel).toHaveBeenCalledWith(pinned, {});
     expect(result.model).toBe(pinned);
+    expect(result.modelLatencyMs).toBeGreaterThanOrEqual(0);
   });
 
   it("routes an approved external model through the tenant gateway without response caching", async () => {

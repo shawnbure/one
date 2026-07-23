@@ -10,6 +10,7 @@ function environment() {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
           if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
+          if (sql.includes("SELECT context_tokens FROM model_catalog")) return { context_tokens: 24_000 };
           if (sql.includes("SELECT execution_profile")) return { execution_profile: "instant" };
           if (sql.includes("COALESCE(MAX(version)")) return { version: 3 };
           return null;
@@ -83,5 +84,17 @@ describe("release model pinning", () => {
     });
     const release = writes.find(({ sql }) => sql.includes("INSERT INTO process_releases"));
     expect(release?.bindings).toContain("@cf/qwen/qwen3-30b-a3b-fp8");
+  });
+
+  it("rejects a draft whose static prompt would consume reserved runtime context", async () => {
+    const { env, writes } = environment();
+    await expect(createDraftRelease(env, "tenant-1", "process-1", "builder-1", {
+      systemPrompt: "x".repeat(60_000),
+      instructions: [],
+      guardrails: [],
+      modelProfile: "balanced",
+      autonomy: "approve"
+    })).rejects.toThrow("Static prompt estimate exceeds");
+    expect(writes.some(({ sql }) => sql.includes("INSERT INTO prompt_releases"))).toBe(false);
   });
 });

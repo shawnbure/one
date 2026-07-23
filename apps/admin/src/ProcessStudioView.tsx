@@ -384,6 +384,10 @@ function Studio({
   ];
   const topologyChanged = JSON.stringify(businessSteps.map(({ type, label }) => ({ type, label }))) !==
     JSON.stringify(data.topology.businessSteps.map(({ type, label }) => ({ type, label })));
+  const draftPromptBudget = promptBudgetPreview({
+    systemPrompt, instructions: lines(instructions), guardrails: lines(guardrails),
+    contextTokens: data.modelContextTokens[modelId] ?? 0, executionProfile
+  });
   return (
     <section className="studio-page">
       <button className="back-link" onClick={onBack}>
@@ -536,15 +540,8 @@ function Studio({
                   Create an immutable draft without changing the active process.
                 </p>
               </div>
-              <span className="token-count">
-                ~
-                {Math.ceil(
-                  (systemPrompt.length +
-                    instructions.length +
-                    guardrails.length) /
-                    4,
-                )}{" "}
-                tokens
+              <span className={`token-count ${draftPromptBudget.status}`}>
+                ~{draftPromptBudget.estimatedStaticTokens.toLocaleString()} static tokens
               </span>
             </div>
             <label>
@@ -653,6 +650,40 @@ function Studio({
                 </span>
               </div>
             </div>
+            <section className={`prompt-budget-card ${draftPromptBudget.status}`}>
+              <header>
+                <div><h3>Prompt and context budget</h3>
+                  <p>Stored prompt size is separate from model input. Only this release bundle plus bounded runtime context is sent; no KV copy is used.</p></div>
+                <span>{draftPromptBudget.status === "exceeded" ? "Over budget" :
+                  draftPromptBudget.status === "attention" ? "Review size" : "Healthy headroom"}</span>
+              </header>
+              <div className="prompt-budget-meter" role="meter" aria-label="Static prompt budget used"
+                aria-valuemin={0} aria-valuemax={100}
+                aria-valuenow={Math.min(100, Math.round(draftPromptBudget.utilizationPercent))}>
+                <i style={{ width: `${Math.min(100, draftPromptBudget.utilizationPercent)}%` }}/>
+              </div>
+              <div className="prompt-budget-summary">
+                <span><strong>{draftPromptBudget.estimatedStaticTokens.toLocaleString()}</strong> estimated static tokens</span>
+                <span><strong>{draftPromptBudget.staticPromptBudgetTokens.toLocaleString()}</strong> release budget</span>
+                <span><strong>{draftPromptBudget.reservedRuntimeTokens.toLocaleString()}</strong> reserved for runtime</span>
+                <span><strong>{draftPromptBudget.contextTokens.toLocaleString()}</strong> model context</span>
+              </div>
+              <div className="prompt-section-grid">
+                {(["system", "instructions", "guardrails"] as const).map((section) =>
+                  <span key={section}><strong>{draftPromptBudget.sections[section].estimatedTokens.toLocaleString()}</strong>
+                    {section}<small>{draftPromptBudget.sections[section].characters.toLocaleString()} characters</small></span>)}
+              </div>
+              <p className="prompt-budget-note">Token counts are a conservative character-based estimate. The server enforces the same release budget when the draft is created.</p>
+              <div className="prompt-runtime-evidence">
+                <strong>Active release · last 7 days</strong>
+                {data.promptBudget?.measured.sampleCount ? <>
+                  <span>{data.promptBudget.measured.sampleCount} completed samples</span>
+                  <span>{formatNumber(data.promptBudget.measured.averageInputTokens)} average input tokens</span>
+                  <span>{formatNumber(data.promptBudget.measured.averageTotalTokens)} average total tokens</span>
+                  <span>{formatDuration(data.promptBudget.measured.averageModelLatencyMs)} average model-call time</span>
+                </> : <span>No completed model samples yet. Workrr will show observed tokens and timing after runs complete.</span>}
+              </div>
+            </section>
             <div className={`autonomy-guidance level-${autonomy}`}>
               <ShieldCheck size={17} />
               <span>
@@ -1166,6 +1197,41 @@ function lines(value: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+function promptBudgetPreview(input: {
+  systemPrompt: string; instructions: string[]; guardrails: string[];
+  contextTokens: number; executionProfile: string;
+}) {
+  const estimate = (value: string) => ({
+    characters: value.length, estimatedTokens: Math.ceil(value.length / 4)
+  });
+  const system = estimate(input.systemPrompt);
+  const instructionBudget = estimate(input.instructions.join("\n"));
+  const guardrailBudget = estimate(input.guardrails.map((item) => `Guardrail: ${item}`).join("\n"));
+  const estimatedStaticTokens = system.estimatedTokens + instructionBudget.estimatedTokens +
+    guardrailBudget.estimatedTokens;
+  const durable = ["conversation", "consumer", "entity", "shared_shard", "temporary_durable"]
+    .includes(input.executionProfile);
+  const contextTokens = Math.max(4_096, input.contextTokens || 4_096);
+  const requestedReserve = durable ? 16_000 : 10_000;
+  const reservedRuntimeTokens = Math.min(requestedReserve, Math.max(2_048, contextTokens - 2_048));
+  const staticPromptBudgetTokens = Math.min(20_000, Math.max(2_048, contextTokens - reservedRuntimeTokens));
+  const utilizationPercent = Math.round(estimatedStaticTokens / staticPromptBudgetTokens * 1_000) / 10;
+  return {
+    sections: { system, instructions: instructionBudget, guardrails: guardrailBudget },
+    contextTokens, reservedRuntimeTokens, staticPromptBudgetTokens, estimatedStaticTokens,
+    utilizationPercent,
+    status: estimatedStaticTokens > staticPromptBudgetTokens ? "exceeded" as const :
+      utilizationPercent >= 70 ? "attention" as const : "healthy" as const
+  };
+}
+function formatNumber(value: number | null) {
+  return value == null ? "—" : Math.round(value).toLocaleString();
+}
+function formatDuration(value: number | null) {
+  if (value == null) return "—";
+  if (value < 1_000) return `${Math.round(value)} ms`;
+  return `${(value / 1_000).toFixed(1)} sec`;
 }
 function prettySchema(value: string | null | undefined) {
   if (!value) return "";

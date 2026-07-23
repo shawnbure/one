@@ -405,6 +405,24 @@ export interface StudioData {
   };
   releases: ProcessRelease[];
   approvedModelIds: string[];
+  modelContextTokens: Record<string, number>;
+  promptBudget: {
+    sections: Record<"system" | "instructions" | "guardrails" | "total", {
+      characters: number; bytes: number; estimatedTokens: number;
+    }>;
+    contextTokens: number;
+    reservedRuntimeTokens: number;
+    staticPromptBudgetTokens: number;
+    estimatedStaticTokens: number;
+    remainingStaticTokens: number;
+    utilizationPercent: number;
+    status: "healthy" | "attention" | "exceeded";
+    estimator: "characters-divided-by-four";
+    measured: {
+      sampleCount: number; averageInputTokens: number | null; averageTotalTokens: number | null;
+      averageModelLatencyMs: number | null; windowDays: number;
+    };
+  } | null;
   activations: Array<{
     id: string; from_release_id: string | null; to_release_id: string;
     activation_type: "initial" | "publish" | "rollback"; reason: string;

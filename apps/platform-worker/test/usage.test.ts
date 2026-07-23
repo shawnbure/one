@@ -47,6 +47,7 @@ describe("usage budget enforcement", () => {
     expect(sql).toContain("input_usd_per_million");
     expect(sql).toContain("output_usd_per_million");
     expect(sql).toContain("estimated_cost_usd");
+    expect(sql).toContain("model_latency_ms");
   });
 });
 

@@ -68,7 +68,7 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
           .bind(result.outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
             result.inputTokens, result.model, result.outputTokens, result.model,
             result.inferenceProvider, result.gatewayId, result.gatewayStep, result.gatewayCacheStatus, result.gatewayLogId,
-            completedAt, event.instanceId, tenantId),
+            result.modelLatencyMs, completedAt, event.instanceId, tenantId),
         this.env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=? AND tenant_id=?")
           .bind(result.outputContractStatus, event.instanceId, tenantId),
         this.env.DB.prepare("UPDATE executions SET autonomy_level=?, autonomy_disposition=? WHERE id=? AND tenant_id=?")

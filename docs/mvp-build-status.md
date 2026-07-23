@@ -276,12 +276,21 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 89. `0089_ai_gateway_handoff.sql`: tenant AI Gateway policy, disabled external-model approval, and per-execution routing evidence.
 90. `0090_custom_dlp_entries.sql`: encrypted tenant-specific DLP phrases and revisioned policy metadata.
 91. `0091_data_egress_policies.sql`: release-pinned process classification and tenant-controlled external model/tool egress policy.
+92. `0092_model_latency_evidence.sql`: per-execution model-call latency for prompt/runtime budget evidence.
 
 ### Classification and egress boundary
 
 Every process release is pinned to one of `public`, `internal`, `confidential`, or `restricted`. A release cannot under-classify any bound tool. Native Workers AI remains available for every classification inside the customer Cloudflare deployment, while external AI Gateway handoff and external Microsoft/MCP tool traffic are independently controlled per classification. Runtime checks fail before provider access, missing policy rows fail closed, and owner/admin changes use optimistic revisions with metadata-only audit evidence.
 
 The Governance workspace exposes the complete matrix with conservative defaults: public permits both external routes, internal permits external tools but blocks external models, and confidential/restricted block both. Process packages carry their classification; configuration packages carry the tenant egress matrix while older packages preserve the destination policy. Opportunity conversion preserves the discovery classification, rollback restores the release-pinned classification, and the printable privacy/architecture report inventories both process classifications and current egress policy.
+
+### Prompt and context budget evidence
+
+Process Studio now makes the no-KV prompt design measurable. The behavior editor separately reports system, instruction, and guardrail characters and estimated tokens; the exact selected model's D1 catalog context limit; the release's static prompt allocation; and runtime headroom reserved for request input, approved knowledge, tool traffic, output, and—on sticky profiles—the bounded conversation/fact window. Durable profiles therefore preserve more runtime capacity than instant or Workflow profiles.
+
+The estimate uses the documented conservative characters-divided-by-four heuristic and is labeled as an estimate rather than a tokenizer claim. At 70% of the static allocation the UI asks the FDE to review size. Draft creation fails before persistence when the allocation is exceeded, and publish or rollback revalidates stored prompt/model evidence. No KV, Cache API, or repeated execution-path D1 policy lookup is introduced.
+
+Every real model call records its own measured latency alongside existing token and provider evidence. Process Studio summarizes the active release's completed seven-day sample with average input tokens, total tokens, and model-call time. Empty samples remain explicit rather than inventing performance. This is operational evidence only: prompt text and execution inputs are not copied into the metric.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

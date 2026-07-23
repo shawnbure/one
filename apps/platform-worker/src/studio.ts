@@ -7,6 +7,7 @@ import { getAutonomySafety } from "./autonomy-safety";
 import { assertTenantModelAllowed } from "./model-governance";
 import { requireAiGatewaySetting } from "./ai-gateway";
 import { assertExternalModelAllowed, dataClassifications, normalizeDataClassification } from "./data-governance";
+import { analyzePromptBudget, assertPromptBudget } from "./prompt-budget";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -57,8 +58,14 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at,
       input_schema_json, output_schema_json, tool_policy_json, topology_json, data_classification FROM process_releases
       WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
-    env.DB.prepare(`SELECT status, COUNT(*) count FROM executions WHERE tenant_id = ? AND blueprint_id = ?
-      AND started_at >= datetime('now','-7 days') GROUP BY status`).bind(tenantId, blueprintId).all(),
+    env.DB.prepare(`SELECT status, COUNT(*) count,
+      ROUND(AVG(CASE WHEN input_tokens > 0 THEN input_tokens END)) average_input_tokens,
+      ROUND(AVG(CASE WHEN total_tokens > 0 THEN total_tokens END)) average_total_tokens,
+      ROUND(AVG(model_latency_ms)) average_model_latency_ms
+      FROM executions WHERE tenant_id = ? AND blueprint_id = ?
+      AND process_release_id=(SELECT active_release_id FROM agent_blueprints WHERE tenant_id=? AND id=?)
+      AND started_at >= datetime('now','-7 days') GROUP BY status`)
+      .bind(tenantId, blueprintId, tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT a.*, f.version from_version, t.version to_version,
       m.display_name activated_by_name
       FROM release_activations a
@@ -81,8 +88,10 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       ORDER BY julianday(COALESCE(ar.migrated_at, ar.last_active_at)) DESC LIMIT 50`)
       .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId).all(),
     getProcessLaunchReadiness(env, tenantId, blueprintId),
-    env.DB.prepare(`SELECT model_id FROM tenant_model_policies
-      WHERE tenant_id=? AND enabled=1 ORDER BY model_id`).bind(tenantId).all<{ model_id: string }>()
+    env.DB.prepare(`SELECT p.model_id, m.context_tokens FROM tenant_model_policies p
+      JOIN model_catalog m ON m.model_id=p.model_id
+      WHERE p.tenant_id=? AND p.enabled=1 AND m.status='active' ORDER BY p.model_id`)
+      .bind(tenantId).all<{ model_id: string; context_tokens: number }>()
   ]);
   if (!blueprint) return null;
   const autonomySafety = await getAutonomySafety(env, tenantId, blueprintId);
@@ -104,6 +113,20 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       ? String(item.effective_release_id) === activeReleaseId ? "current" : "pinned_previous"
       : "unattributed" };
   });
+  const selectedRelease = (activeRelease as Record<string, unknown> | undefined) ??
+    releases.results[0] as Record<string, unknown> | undefined;
+  const selectedModelId = String(selectedRelease?.model_id ?? row.model_id ?? "");
+  const selectedContext = approvedModels.results.find((model) => model.model_id === selectedModelId)?.context_tokens;
+  const promptRow = prompt as Record<string, unknown> | null;
+  const promptBudget = promptRow && selectedContext ? analyzePromptBudget({
+    systemPrompt: String(promptRow.system_prompt ?? ""),
+    instructions: parseStringList(promptRow.instructions_json),
+    guardrails: parseStringList(promptRow.guardrails_json),
+    contextTokens: Number(selectedContext),
+    executionProfile: String(row.execution_profile)
+  }) : null;
+  const completedStats = runStats.results.find((item) =>
+    String((item as Record<string, unknown>).status) === "completed") as Record<string, unknown> | undefined;
   return {
     blueprint,
     prompt,
@@ -122,6 +145,21 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     },
     launchReadiness,
     approvedModelIds: approvedModels.results.map((model) => model.model_id),
+    modelContextTokens: Object.fromEntries(approvedModels.results.map((model) =>
+      [model.model_id, Number(model.context_tokens)])),
+    promptBudget: promptBudget ? {
+      ...promptBudget,
+      measured: {
+        sampleCount: Number(completedStats?.count ?? 0),
+        averageInputTokens: completedStats?.average_input_tokens == null ? null :
+          Number(completedStats.average_input_tokens),
+        averageTotalTokens: completedStats?.average_total_tokens == null ? null :
+          Number(completedStats.average_total_tokens),
+        averageModelLatencyMs: completedStats?.average_model_latency_ms == null ? null :
+          Number(completedStats.average_model_latency_ms),
+        windowDays: 7
+      }
+    } : null,
     autonomySafety,
     activeTools,
     topology: topologyFromRelease(
@@ -145,12 +183,20 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
   await assertTenantModelAllowed(env, tenantId, modelId);
   const inputSchema = normalizeProcessSchema(input.inputSchema, "input");
   const outputSchema = normalizeProcessSchema(input.outputSchema, "output");
-  const [blueprint, toolPolicies] = await Promise.all([
+  const [blueprint, toolPolicies, modelCatalog] = await Promise.all([
     env.DB.prepare("SELECT execution_profile, data_classification FROM agent_blueprints WHERE tenant_id = ? AND id = ?")
       .bind(tenantId, blueprintId).first<{ execution_profile: string; data_classification: string }>(),
-    releaseToolPolicies(env, tenantId, blueprintId)
+    releaseToolPolicies(env, tenantId, blueprintId),
+    env.DB.prepare(`SELECT context_tokens FROM model_catalog WHERE model_id=? AND status='active'`)
+      .bind(modelId).first<{ context_tokens: number }>()
   ]);
   if (!blueprint) throw new Error("Process not found");
+  if (!modelCatalog) throw new Error("Selected model context budget is unavailable");
+  assertPromptBudget({
+    systemPrompt: input.systemPrompt.trim(), instructions: input.instructions,
+    guardrails: input.guardrails, contextTokens: Number(modelCatalog.context_tokens),
+    executionProfile: blueprint.execution_profile
+  });
   const dataClassification = normalizeDataClassification(input.dataClassification ?? blueprint.data_classification ?? "internal");
   const classificationRank = dataClassifications.indexOf(dataClassification);
   const higherTool = toolPolicies.find((tool) =>
@@ -200,6 +246,7 @@ export async function publishRelease(env: Env, tenantId: string, blueprintId: st
   await assertTenantModelAllowed(env, tenantId, String(release.model_id));
   const readiness = await getProcessLaunchReadiness(env, tenantId, blueprintId);
   if (!readiness.ready) throw new ProcessLaunchReadinessError(readiness);
+  await assertStoredReleasePromptBudget(env, release);
   await evaluateReleaseGate(env, tenantId, actorId, blueprintId, releaseId);
   const now = new Date().toISOString();
   const active = await env.DB.prepare("SELECT active_release_id FROM agent_blueprints WHERE tenant_id=? AND id=?")
@@ -285,6 +332,7 @@ export async function rollbackRelease(env: Env, tenantId: string, blueprintId: s
     throw new Error("Rollback target must have passing evaluation evidence");
   }
   await assertTenantModelAllowed(env, tenantId, String(target.model_id));
+  await assertStoredReleasePromptBudget(env, target);
   if (!blueprint.active_release_id || blueprint.active_release_id === releaseId) {
     throw new Error("Rollback target is already active");
   }
@@ -376,10 +424,34 @@ async function sha256(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+async function assertStoredReleasePromptBudget(env: Env, release: Record<string, unknown>) {
+  const evidence = await env.DB.prepare(`SELECT p.system_prompt, p.instructions_json, p.guardrails_json,
+    m.context_tokens, b.execution_profile
+    FROM prompt_releases p
+    JOIN agent_blueprints b ON b.id=p.blueprint_id
+    JOIN model_catalog m ON m.model_id=?
+    WHERE p.id=?`).bind(release.model_id, release.prompt_release_id).first<Record<string, unknown>>();
+  if (!evidence) throw new Error("Release prompt budget evidence is unavailable");
+  assertPromptBudget({
+    systemPrompt: String(evidence.system_prompt ?? ""),
+    instructions: parseStringList(evidence.instructions_json),
+    guardrails: parseStringList(evidence.guardrails_json),
+    contextTokens: Number(evidence.context_tokens),
+    executionProfile: String(evidence.execution_profile)
+  });
+}
 function parseToolNames(value: unknown, fallback: string[]) {
   if (typeof value !== "string" || !value) return fallback;
   try {
     const parsed = JSON.parse(value) as Array<{ name?: unknown }>;
     return Array.isArray(parsed) ? parsed.map((tool) => String(tool.name ?? "")).filter(Boolean) : fallback;
   } catch { return fallback; }
+}
+
+function parseStringList(value: unknown): string[] {
+  try {
+    const parsed = JSON.parse(String(value ?? "[]"));
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch { return []; }
 }
