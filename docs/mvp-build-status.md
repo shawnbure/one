@@ -8,6 +8,8 @@ Workrr One is a customer-owned, Cloudflare-native private AI operations platform
 
 Repository CI uses one bounded Ubuntu job for `dev`, `main`, and pull requests. Superseded branch runs are cancelled, the job has a 12-minute ceiling, and it runs deterministic sequential-migration validation, high-confidence tracked-file secret detection, typechecking, the full test suite, and a Wrangler dry-run build. It deliberately avoids CodeQL and platform matrices so routine protection does not recreate the prior high Actions-minute burn.
 
+The FDE provisioning command derives environment-isolated D1, R2, Vectorize, Queue, and DLQ names from Wrangler configuration and checks the explicitly configured Cloudflare account before making changes. It defaults to a read-only plan, exact-matches inventory names, creates only missing resources, and requires a distinct typed confirmation for development or production. Deployment, migrations, secret configuration, Access policy, and live verification remain separate observable gates.
+
 The product is deliberately process-first. Agents are an execution primitive, not the organizing metaphor in the customer UI.
 
 ## Implemented product surfaces

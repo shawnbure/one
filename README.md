@@ -88,13 +88,19 @@ The single Ubuntu CI job validates sequential D1 migrations, scans tracked text 
 
 ## Provision and deploy
 
-Create the resources once per customer environment:
+Review the idempotent resource plan for the selected customer environment:
 
 ```bash
-npx wrangler d1 create workrr-platform
-npx wrangler queues create workrr-process-jobs
-npx wrangler queues create workrr-process-jobs-dlq
+npm run provision:plan -- --env dev
 ```
+
+The command derives D1, R2, Vectorize, primary Queue, and DLQ names from `wrangler.jsonc`, selects the configured Cloudflare account explicitly, and performs read-only inventory checks. Existing names are exact-matched so a DLQ cannot be mistaken for its primary Queue. To create only the missing resources:
+
+```bash
+npm run provision:plan -- --env dev --apply --confirm "PROVISION DEV"
+```
+
+Production requires the separate exact confirmation `PROVISION PRODUCTION`. Resource creation does not deploy code, apply D1 migrations, configure secrets, or alter Cloudflare Access. Wrangler can automatically provision draft D1 and R2 bindings during deployment, but the explicit plan remains the framework path because Queues and Vectorize still require named customer resources and GitHub deployments cannot write newly assigned resource IDs back to the repository.
 
 Copy the returned D1 ID into `apps/platform-worker/wrangler.jsonc`, then run:
 
