@@ -30,7 +30,8 @@ import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./p
 import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
   updateConnectionLifecycle } from "./connection-operations";
-import { convertOpportunity, createOpportunity, listOpportunities, qualifyOpportunity } from "./opportunities";
+import { convertOpportunity, createOpportunity, listOpportunities, listOpportunityRevisions,
+  OpportunityRevisionConflict, qualifyOpportunity, updateOpportunity } from "./opportunities";
 import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
 
 export { ProcessAgent } from "./agent";
@@ -427,6 +428,32 @@ app.post("/api/opportunities", requireRoles("admin", "builder", "owner", "operat
     ) }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Opportunity could not be captured" }, 400);
+  }
+});
+
+app.put("/api/opportunities/:id", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  try {
+    const opportunityId = c.req.param("id");
+    if (!opportunityId) return c.json({ error: "Opportunity id is required" }, 400);
+    const body = await c.req.json<Record<string, unknown> & { expectedRevision?: number; changeReason?: string }>();
+    return c.json({ data: await updateOpportunity(
+      c.env, c.get("tenantId"), c.get("actorId"), opportunityId,
+      Number(body.expectedRevision), String(body.changeReason ?? ""), body as never
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Opportunity evidence could not be revised";
+    return c.json({ error: message }, error instanceof OpportunityRevisionConflict ? 409 :
+      message === "Opportunity was not found" ? 404 : 400);
+  }
+});
+
+app.get("/api/opportunities/:id/revisions", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  try {
+    const opportunityId = c.req.param("id");
+    if (!opportunityId) return c.json({ error: "Opportunity id is required" }, 400);
+    return c.json({ data: await listOpportunityRevisions(c.env, c.get("tenantId"), opportunityId) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Opportunity history could not load" }, 404);
   }
 });
 

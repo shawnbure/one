@@ -36,6 +36,7 @@ export async function createOpportunity(env: Env, tenantId: string, actorId: str
   const normalized = await normalize(env, input);
   const scores = scoreOpportunity(normalized);
   const id = `opp-${crypto.randomUUID()}`;
+  const snapshot = opportunitySnapshot(normalized, scores, "captured");
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO process_opportunities
       (id, tenant_id, name, purpose, business_owner, department, current_steps, systems_json, exceptions_json,
@@ -49,9 +50,65 @@ export async function createOpportunity(env: Env, tenantId: string, actorId: str
         normalized.riskLevel, normalized.dataClassification, normalized.externalAction ? 1 : 0,
         normalized.humanJudgment, scores.impactScore, scores.feasibilityScore, scores.priorityScore,
         normalized.recommendedTemplateId, actorId),
+    env.DB.prepare(`INSERT INTO opportunity_revisions
+      (id, tenant_id, opportunity_id, revision, snapshot_json, change_reason, changed_by)
+      VALUES (?, ?, ?, 1, ?, 'Initial captured evidence', ?)`)
+      .bind(crypto.randomUUID(), tenantId, id, JSON.stringify(snapshot), actorId),
     audit(env, tenantId, actorId, "opportunity.captured", id, scores)
   ]);
   return { id, status: "captured", ...scores };
+}
+
+export async function updateOpportunity(env: Env, tenantId: string, actorId: string, opportunityId: string,
+  expectedRevision: number, changeReason: string, input: OpportunityInput) {
+  const current = await env.DB.prepare("SELECT revision, status FROM process_opportunities WHERE id=? AND tenant_id=?")
+    .bind(opportunityId, tenantId).first<{ revision: number; status: string }>();
+  if (!current) throw new Error("Opportunity was not found");
+  if (current.status === "converted") throw new Error("Converted opportunity evidence is immutable");
+  if (!Number.isInteger(expectedRevision) || expectedRevision !== Number(current.revision)) {
+    throw new OpportunityRevisionConflict("Opportunity changed since it was opened. Reload before saving.");
+  }
+  const reason = String(changeReason ?? "").trim();
+  if (!reason || reason.length > 500) throw new Error("A change reason of 500 characters or fewer is required");
+  const normalized = await normalize(env, input);
+  const scores = scoreOpportunity(normalized);
+  const nextRevision = expectedRevision + 1;
+  const snapshot = opportunitySnapshot(normalized, scores, "captured");
+  const results = await env.DB.batch([
+    env.DB.prepare(`UPDATE process_opportunities SET name=?, purpose=?, business_owner=?, department=?,
+      current_steps=?, systems_json=?, exceptions_json=?, volume_per_month=?, minutes_per_item=?, hourly_cost=?,
+      error_rate=?, risk_level=?, data_classification=?, external_action=?, human_judgment=?,
+      impact_score=?, feasibility_score=?, priority_score=?, recommended_template_id=?,
+      status='captured', qualification_note=NULL, qualified_by=NULL, qualified_at=NULL,
+      revision=?, updated_at=CURRENT_TIMESTAMP
+      WHERE id=? AND tenant_id=? AND revision=? AND status!='converted'`)
+      .bind(normalized.name, normalized.purpose, normalized.businessOwner, normalized.department,
+        normalized.currentSteps, JSON.stringify(normalized.systems), JSON.stringify(normalized.exceptions),
+        normalized.volumePerMonth, normalized.minutesPerItem, normalized.hourlyCost, normalized.errorRate,
+        normalized.riskLevel, normalized.dataClassification, normalized.externalAction ? 1 : 0,
+        normalized.humanJudgment, scores.impactScore, scores.feasibilityScore, scores.priorityScore,
+        normalized.recommendedTemplateId, nextRevision, opportunityId, tenantId, expectedRevision),
+    env.DB.prepare(`INSERT INTO opportunity_revisions
+      (id, tenant_id, opportunity_id, revision, snapshot_json, change_reason, changed_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), tenantId, opportunityId, nextRevision, JSON.stringify(snapshot), reason, actorId),
+    audit(env, tenantId, actorId, "opportunity.evidence_revised", opportunityId,
+      { fromRevision: expectedRevision, toRevision: nextRevision, changeReason: reason, qualificationReset: true })
+  ]);
+  if (Number((results[0] as { meta?: { changes?: number } }).meta?.changes) !== 1) {
+    throw new OpportunityRevisionConflict("Opportunity changed while it was being saved. Reload and try again.");
+  }
+  return { id: opportunityId, revision: nextRevision, status: "captured", ...scores };
+}
+
+export async function listOpportunityRevisions(env: Env, tenantId: string, opportunityId: string) {
+  const exists = await env.DB.prepare("SELECT id FROM process_opportunities WHERE id=? AND tenant_id=?")
+    .bind(opportunityId, tenantId).first();
+  if (!exists) throw new Error("Opportunity was not found");
+  const { results } = await env.DB.prepare(`SELECT revision, snapshot_json, change_reason, changed_by, created_at
+    FROM opportunity_revisions WHERE opportunity_id=? AND tenant_id=? ORDER BY revision DESC`)
+    .bind(opportunityId, tenantId).all();
+  return results;
 }
 
 export async function qualifyOpportunity(env: Env, tenantId: string, actorId: string, opportunityId: string,
@@ -150,10 +207,14 @@ async function normalize(env: Env, input: OpportunityInput): Promise<Opportunity
     const template = await env.DB.prepare("SELECT id FROM process_templates WHERE id=?").bind(recommendedTemplateId).first();
     if (!template) throw new Error("Recommended template was not found");
   }
-  return { ...input, name: text(input.name, "Opportunity name", 140), purpose: text(input.purpose, "Purpose", 1200),
+  return { name: text(input.name, "Opportunity name", 140), purpose: text(input.purpose, "Purpose", 1200),
     businessOwner: text(input.businessOwner, "Business owner", 160), department: text(input.department, "Department", 120),
     currentSteps: String(input.currentSteps ?? "").trim().slice(0, 3000), systems: list(input.systems),
-    exceptions: list(input.exceptions), recommendedTemplateId };
+    exceptions: list(input.exceptions), volumePerMonth: Number(input.volumePerMonth),
+    minutesPerItem: Number(input.minutesPerItem), hourlyCost: Number(input.hourlyCost),
+    errorRate: Number(input.errorRate), riskLevel: input.riskLevel,
+    dataClassification: input.dataClassification, externalAction: Boolean(input.externalAction),
+    humanJudgment: input.humanJudgment, recommendedTemplateId };
 }
 
 function audit(env: Env, tenantId: string, actorId: string, eventType: string, opportunityId: string, detail: unknown) {
@@ -162,6 +223,13 @@ function audit(env: Env, tenantId: string, actorId: string, eventType: string, o
     VALUES (?, ?, ?, ?, 'opportunity', ?, ?)`)
     .bind(crypto.randomUUID(), tenantId, actorId, eventType, opportunityId, JSON.stringify(detail));
 }
+
+function opportunitySnapshot(input: OpportunityInput & { currentSteps: string; systems: string[]; exceptions: string[];
+  recommendedTemplateId: string | null }, scores: ReturnType<typeof scoreOpportunity>, status: string) {
+  return { ...input, ...scores, status };
+}
+
+export class OpportunityRevisionConflict extends Error {}
 
 async function shortDigest(value: string) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));

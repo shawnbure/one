@@ -122,6 +122,10 @@ describe("control-plane security boundary", () => {
         method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
           "x-workrr-user": "operator@example.com" }, body: "{}"
       }),
+      new Request("http://localhost/api/opportunities/opp-1", {
+        method: "PUT", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ expectedRevision: 1 })
+      }),
       new Request("http://localhost/api/opportunities/opp-1/qualification", {
         method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
           "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ status: "qualified" })

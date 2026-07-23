@@ -379,6 +379,14 @@ export interface ProcessOpportunity {
   qualification_note: string | null;
   blueprint_id: string | null;
   blueprint_name: string | null;
+  revision: number;
+  created_at: string;
+}
+export interface OpportunityRevision {
+  revision: number;
+  snapshot_json: string;
+  change_reason: string | null;
+  changed_by: string;
   created_at: string;
 }
 export interface Member {
@@ -688,6 +696,12 @@ export const api = {
   createOpportunity: (body: Record<string, unknown>) =>
     request<{ data: { id: string; status: string; impactScore: number; feasibilityScore: number; priorityScore: number } }>(
       "/api/opportunities", { method: "POST", body: JSON.stringify(body) }),
+  updateOpportunity: (id: string, body: Record<string, unknown>) =>
+    request<{ data: { id: string; revision: number; status: string; impactScore: number;
+      feasibilityScore: number; priorityScore: number } }>(
+      `/api/opportunities/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  opportunityRevisions: (id: string) =>
+    request<{ data: OpportunityRevision[] }>(`/api/opportunities/${encodeURIComponent(id)}/revisions`),
   qualifyOpportunity: (id: string, status: "qualified" | "approved" | "declined", qualificationNote: string) =>
     request<{ data: { id: string; status: string; qualificationNote: string | null } }>(
       `/api/opportunities/${encodeURIComponent(id)}/qualification`,

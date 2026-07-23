@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createOpportunity, qualifyOpportunity, scoreOpportunity } from "../src/opportunities";
+import { createOpportunity, OpportunityRevisionConflict, qualifyOpportunity, scoreOpportunity,
+  updateOpportunity } from "../src/opportunities";
 
 type Write = { sql: string; bindings: unknown[] };
 
@@ -22,8 +23,9 @@ function environment(options?: { opportunity?: Record<string, unknown> | null; t
       return statement;
     },
     async batch(statements: Array<{ run(): Promise<unknown> }>) {
-      for (const statement of statements) await statement.run();
-      return [];
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
     }
   };
   return { env: { DB } as never, writes };
@@ -86,5 +88,23 @@ describe("process opportunity discovery", () => {
       status: "declined"
     })).rejects.toThrow("cannot be requalified");
     expect(converted.writes).toHaveLength(0);
+  });
+
+  it("creates a new immutable revision and resets prior qualification after evidence changes", async () => {
+    const revised = environment({ opportunity: { revision: 2, status: "qualified" } });
+    const result = await updateOpportunity(revised.env, "tenant-1", "operator-1", "opp-1", 2,
+      "Finance confirmed a higher monthly volume.", { ...candidate, volumePerMonth: 600 });
+    expect(result).toMatchObject({ revision: 3, status: "captured" });
+    expect(revised.writes.some(({ sql, bindings }) => sql.includes("status='captured'") &&
+      sql.includes("qualification_note=NULL") && bindings.includes(3))).toBe(true);
+    expect(revised.writes.some(({ sql, bindings }) => sql.includes("INSERT INTO opportunity_revisions") &&
+      bindings.includes("Finance confirmed a higher monthly volume."))).toBe(true);
+  });
+
+  it("rejects stale edits with an explicit revision conflict", async () => {
+    const stale = environment({ opportunity: { revision: 3, status: "captured" } });
+    await expect(updateOpportunity(stale.env, "tenant-1", "operator-1", "opp-1", 2,
+      "Stale correction", candidate)).rejects.toBeInstanceOf(OpportunityRevisionConflict);
+    expect(stale.writes).toHaveLength(0);
   });
 });

@@ -124,6 +124,8 @@ The opportunity backlog separates customer discovery from agent deployment. Oper
 
 Every opportunity also produces a printable, secret-free forward-deployed engineering brief. It carries the captured current state and assumptions, score method, minimum control posture, open discovery questions, implementation checklist, acceptance gates, and conversion lineage. The runtime recommendation explicitly distinguishes ephemeral instant Workers, thread-sticky Agents SDK Durable Object actors, and execution-sticky Cloudflare Workflows; it describes D1 as searchable control/evidence storage rather than repeated conversational memory or long-running compute. Both printable HTML and JSON responses are tenant-authorized, `no-store`, and exclude prompt content, credentials, provider tokens, and customer records.
 
+Captured opportunity evidence is revisioned instead of overwritten. Every correction requires a reason, writes a complete tenant-scoped immutable snapshot, increments an optimistic revision number, and resets the candidate to `captured` so an earlier qualification cannot authorize materially changed facts. Stale saves fail with a conflict and require a reload. Converted opportunity evidence remains immutable and retains its process lineage; authorized viewers can inspect the revision timeline without changing it.
+
 ## Database migration order
 
 Migrations are additive and ordered in `apps/platform-worker/migrations`:
@@ -167,6 +169,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 37. `0037_approval_collaboration.sql`: attributable review discussion, information-request state, escalation level, and activity evidence.
 38. `0038_connection_lifecycle.sql`: credential expiry, rotation ownership, last-success evidence, truthful health detail, and expiry notification policy.
 39. `0039_process_opportunities.sql`: pre-build manual-process intake, transparent prioritization evidence, qualification lifecycle, and conversion lineage.
+40. `0040_opportunity_revisions.sql`: immutable discovery snapshots, correction reasons, optimistic concurrency, and qualification-reset evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

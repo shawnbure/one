@@ -515,6 +515,41 @@ a:focus-visible {
   font-weight: 700;
   text-decoration: none;
 }
+.opportunity-evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.opportunity-evidence-actions button {
+  padding: 7px 10px;
+  border: 1px solid #d5dfda;
+  border-radius: 7px;
+  background: #fff;
+  color: #40564c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.opportunity-history {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #dfe7e3;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+.opportunity-history article {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 10px;
+  padding: 7px;
+  border-bottom: 1px solid #e3e9e6;
+  color: #405149;
+  font-size: 12px;
+}
+.opportunity-history article:last-child { border-bottom: 0; }
+.opportunity-history small { color: #6c7b74; }
 
 @media (max-width: 1200px) {
   .tool-layout { grid-template-columns: 1fr; }
