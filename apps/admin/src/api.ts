@@ -762,7 +762,8 @@ export interface AccessOperationsData {
   eligibleAdmins: Array<{ id: string; display_name: string; email: string }>;
 }
 export interface ValueData {
-  totals: { items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number };
+  totals: { items_processed: number; human_minutes_saved: number; estimated_value: number;
+    estimated_operating_cost: number; override_count: number; failure_count: number };
   byProcess: Array<{ blueprint_id: string; process_name: string; items_processed: number;
     human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number }>;
   discoveries: Array<Record<string, string | number>>;
@@ -772,6 +773,7 @@ export interface ValueData {
     baseline_volume: number; baseline_minutes: number; hourly_cost: number; opportunity_score: number;
     items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number;
     snapshot_failures: number; runs: number; completed_runs: number; adverse_runs: number;
+    estimated_operating_cost: number; netValue: number; valueCostRatio: number | null;
     avg_cycle_ms: number | null; open_incidents: number; failureRate: number; overrideRate: number;
     target_items: number | null; target_human_minutes_saved: number | null; target_value: number | null;
     maximum_override_percent: number | null; maximum_failure_percent: number | null;
@@ -792,7 +794,8 @@ export interface ValueData {
   }>;
   decisionPolicy: { evidenceWindowDays: number; minimumEvidenceItems: number;
     correctAtFailurePercent: number; correctAtOverridePercent: number;
-    expandAtMaximumFailurePercent: number; expandAtMaximumOverridePercent: number };
+    expandAtMaximumFailurePercent: number; expandAtMaximumOverridePercent: number;
+    expandRequiresPositiveNetValue: boolean };
 }
 export interface OnboardingData {
   settings: null | { organization_name: string; support_email: string; accent_color: string; default_model_profile: string; data_region: string; initialized_at: string | null };

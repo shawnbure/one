@@ -40,7 +40,9 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
   const canRecord = ["admin", "owner", "operator"].includes(session?.user.role ?? "");
   const canVoid = ["admin", "owner"].includes(session?.user.role ?? "");
   const canManageTarget = canVoid;
-  const totals = data.totals ?? { items_processed: 0, human_minutes_saved: 0, estimated_value: 0, override_count: 0, failure_count: 0 };
+  const totals = data.totals ?? { items_processed: 0, human_minutes_saved: 0, estimated_value: 0,
+    estimated_operating_cost: 0, override_count: 0, failure_count: 0 };
+  const netValue = Number(totals.estimated_value ?? 0) - Number(totals.estimated_operating_cost ?? 0);
   const actions = data.portfolio.reduce<Record<string, number>>((counts, item) => {
     counts[item.recommendation.action] = (counts[item.recommendation.action] ?? 0) + 1; return counts;
   }, {});
@@ -53,17 +55,18 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
     <div className="value-metrics">
       <Metric icon={<CircleDollarSign size={18}/>} label="VALUE · 30 DAYS" value={money(totals.estimated_value)}
         detail={`${number(totals.items_processed)} measured items`} tone="green"/>
+      <Metric icon={<BarChart3 size={18}/>} label="ESTIMATED AI COST" value={preciseMoney(totals.estimated_operating_cost)}
+        detail="Captured Workers AI execution cost" tone="amber"/>
+      <Metric icon={<TrendingUp size={18}/>} label="NET VALUE" value={money(netValue)}
+        detail="Measured value less estimated AI cost" tone={netValue >= 0 ? "green" : "red"}/>
       <Metric icon={<Clock3 size={18}/>} label="TIME RETURNED" value={`${number(totals.human_minutes_saved / 60, 1)}h`}
         detail="From customer-approved baselines" tone="blue"/>
-      <Metric icon={<Gauge size={18}/>} label="HUMAN OVERRIDES" value={number(totals.override_count)}
-        detail="Visible correction signal" tone="amber"/>
-      <Metric icon={<AlertTriangle size={18}/>} label="RECORDED FAILURES" value={number(totals.failure_count)}
-        detail="Value snapshot evidence" tone="red"/>
     </div>
     <div className="decision-policy panel"><ShieldCheck size={19}/><div><strong>Explainable decision policy</strong>
       <p>Recommendations use a {data.decisionPolicy.evidenceWindowDays}-day window. Correct wins when an incident or safety cap is open,
         adverse runs exceed {data.decisionPolicy.correctAtFailurePercent}%, or overrides exceed {data.decisionPolicy.correctAtOverridePercent}%.
-        Expand requires measured value and bounded exception rates. Workrr never increases autonomy automatically.</p></div></div>
+        Expand requires positive net value and bounded exception rates. Cost is the captured per-execution Workers AI estimate,
+        not a reconciled Cloudflare invoice. Workrr never increases autonomy automatically.</p></div></div>
     {captureOpen && <ValueCapture data={data} form={form} setForm={setForm} busy={busy} onSave={async () => {
       setBusy(true); try {
         const result = await api.recordValueMeasurement({
@@ -111,6 +114,11 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
             {item.recommendation.action}<small>{item.recommendation.confidence} confidence</small></span></header>
         <div className="portfolio-evidence">
           <Evidence label="Measured value" value={money(item.estimated_value)}/>
+          <Evidence label="Estimated AI cost" value={preciseMoney(item.estimated_operating_cost)}/>
+          <Evidence label="Net value" value={money(item.netValue)}/>
+          <Evidence label="Value / AI cost" value={item.valueCostRatio === null ? "No model cost" : `${number(item.valueCostRatio, 1)}×`}/>
+          <Evidence label="AI cost / item" value={item.items_processed > 0
+            ? preciseMoney(item.estimated_operating_cost / item.items_processed) : "No measured items"}/>
           <Evidence label="Items" value={number(item.items_processed)}/>
           <Evidence label="Time returned" value={`${number(item.human_minutes_saved / 60, 1)}h`}/>
           <Evidence label="Runs" value={number(item.runs)}/>
@@ -257,6 +265,7 @@ function decisionIcon(action: string) {
   return <BarChart3 size={15}/>;
 }
 function money(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number(value || 0)); }
+function preciseMoney(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(Number(value || 0)); }
 function number(value: number, digits = 0) { return new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(Number(value || 0)); }
 function duration(value: number | null) {
   if (value === null || !Number.isFinite(Number(value))) return "No evidence";

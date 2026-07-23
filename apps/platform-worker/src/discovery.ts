@@ -108,8 +108,10 @@ export async function getValueDashboard(env: Env, tenantId: string) {
       SELECT tenant_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
         FROM business_value_measurements WHERE status='active'
       ) SELECT SUM(items_processed) items_processed, SUM(human_minutes_saved) human_minutes_saved,
-      SUM(estimated_value) estimated_value, SUM(override_count) override_count, SUM(failure_count) failure_count
-      FROM evidence WHERE tenant_id = ? AND period_start >= date('now','-30 days')`).bind(tenantId).first(),
+      SUM(estimated_value) estimated_value, SUM(override_count) override_count, SUM(failure_count) failure_count,
+      (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM executions
+        WHERE tenant_id=? AND started_at >= datetime('now','-30 days')) estimated_operating_cost
+      FROM evidence WHERE tenant_id = ? AND period_start >= date('now','-30 days')`).bind(tenantId, tenantId).first(),
     env.DB.prepare(`WITH evidence AS (
       SELECT tenant_id, blueprint_id, period_start, items_processed, human_minutes_saved, estimated_value, override_count, failure_count
         FROM value_snapshots
@@ -141,6 +143,7 @@ export async function getValueDashboard(env: Env, tenantId: string) {
         SELECT blueprint_id, COUNT(*) runs,
           SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) completed_runs,
           SUM(CASE WHEN status IN ('failed','blocked','deferred') THEN 1 ELSE 0 END) adverse_runs,
+          SUM(estimated_cost_usd) estimated_operating_cost,
           AVG(CASE WHEN completed_at IS NOT NULL
             THEN MAX(0, (julianday(completed_at)-julianday(started_at))*86400000) END) avg_cycle_ms
         FROM executions WHERE tenant_id=? AND started_at >= datetime('now','-30 days')
@@ -157,6 +160,7 @@ export async function getValueDashboard(env: Env, tenantId: string) {
         COALESCE(v.estimated_value,0) estimated_value, COALESCE(v.override_count,0) override_count,
         COALESCE(v.snapshot_failures,0) snapshot_failures, COALESCE(r.runs,0) runs,
         COALESCE(r.completed_runs,0) completed_runs, COALESCE(r.adverse_runs,0) adverse_runs,
+        COALESCE(r.estimated_operating_cost,0) estimated_operating_cost,
         r.avg_cycle_ms, COALESCE(i.open_incidents,0) open_incidents,
         t.target_items, t.target_human_minutes_saved, t.target_value,
         t.maximum_override_percent, t.maximum_failure_percent, t.review_due_at target_review_due_at,
@@ -193,25 +197,31 @@ export async function getValueDashboard(env: Env, tenantId: string) {
       opportunityScore: Number(row.opportunity_score ?? 0),
       status: String(row.status ?? "draft"),
       operatingMode: String(row.operating_mode ?? "paused"),
-      targetConfigured: row.target_value !== null && row.target_value !== undefined
+      targetConfigured: row.target_value !== null && row.target_value !== undefined,
+      estimatedOperatingCost: Number(row.estimated_operating_cost ?? 0)
     };
     const rates = portfolioRates(metrics);
     const target = targetProgress(row, rates);
-    return { ...row, ...rates, target, recommendation: classifyPortfolioDecision(metrics) };
+    const netValue = metrics.estimatedValue - metrics.estimatedOperatingCost;
+    const valueCostRatio = metrics.estimatedOperatingCost > 0
+      ? metrics.estimatedValue / metrics.estimatedOperatingCost : null;
+    return { ...row, ...rates, netValue, valueCostRatio, target,
+      recommendation: classifyPortfolioDecision(metrics) };
   });
   return { totals, byProcess: byProcess.results, discoveries: discoveries.results, portfolio,
     measurements: measurements.results,
     decisionPolicy: {
       evidenceWindowDays: 30, minimumEvidenceItems: 10,
       correctAtFailurePercent: 10, correctAtOverridePercent: 15,
-      expandAtMaximumFailurePercent: 5, expandAtMaximumOverridePercent: 10
+      expandAtMaximumFailurePercent: 5, expandAtMaximumOverridePercent: 10,
+      expandRequiresPositiveNetValue: true
     } };
 }
 
 interface PortfolioMetrics {
   itemsProcessed: number; estimatedValue: number; overrideCount: number; adverseRuns: number; runs: number;
   openIncidents: number; safetyCap: string | null; opportunityScore: number; status: string; operatingMode: string;
-  targetConfigured: boolean;
+  targetConfigured: boolean; estimatedOperatingCost: number;
 }
 
 export function classifyPortfolioDecision(metrics: PortfolioMetrics) {
@@ -237,20 +247,32 @@ export function classifyPortfolioDecision(metrics: PortfolioMetrics) {
     return { action: "correct" as const, confidence: "high" as const, reason,
       nextStep: "Open Process Studio, review failure and human-feedback evidence, then publish a corrected evaluated release." };
   }
+  const netValue = metrics.estimatedValue - metrics.estimatedOperatingCost;
+  if (metrics.estimatedOperatingCost > 0 && netValue <= 0) {
+    return { action: "correct" as const, confidence: "medium" as const,
+      reason: `${formatMoney(metrics.estimatedOperatingCost)} estimated AI cost exceeds or equals measured value`,
+      nextStep: "Review model choice, prompt size, retries, and process scope before expanding; collect customer outcome evidence after the correction." };
+  }
   if ((metrics.status === "paused" || metrics.operatingMode === "paused") &&
       metrics.estimatedValue <= 0 && metrics.opportunityScore < 40) {
     return { action: "retire" as const, confidence: "medium" as const,
       reason: "Paused, no measured value, and a low discovery opportunity score",
       nextStep: "Confirm with the business owner, export required evidence, and start governed retirement in Process Studio." };
   }
-  if (metrics.estimatedValue > 0 && failureRate <= 5 && overrideRate <= 10) {
+  if (netValue > 0 && failureRate <= 5 && overrideRate <= 10) {
     return { action: "expand" as const, confidence: metrics.itemsProcessed >= 30 ? "high" as const : "medium" as const,
-      reason: `${metrics.itemsProcessed} items produced measured value with bounded exception rates`,
+      reason: `${metrics.itemsProcessed} items produced ${formatMoney(netValue)} net value with bounded exception rates`,
       nextStep: "Validate capacity and owner readiness, then expand volume or an adjacent use case without automatically raising autonomy." };
   }
   return { action: "hold" as const, confidence: "medium" as const,
     reason: "Evidence is usable but does not yet meet the expand, correct, or retire thresholds",
     nextStep: "Review the next 30-day evidence window before changing scope." };
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2
+  }).format(value);
 }
 
 function portfolioRates(metrics: Pick<PortfolioMetrics, "itemsProcessed" | "overrideCount" | "adverseRuns" | "runs">) {

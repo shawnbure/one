@@ -369,6 +369,8 @@ Every process can now pair its discovery baseline with an owner-approved 30-day 
 
 Process Studio now makes the baseline-and-target requirement an activation invariant instead of dashboard guidance. Release publication performs a same-tenant server check before running the release evaluation gate and requires both a discovery baseline and a current owner-approved value target. An expired target review blocks a new publication until the target is renewed. The Releases workspace presents these two checks in a readable launch-evidence panel and disables publication with the exact missing evidence, while the API remains authoritative if a client bypasses the interface. Governed rollback remains available because it restores a previously evaluated release during an incident rather than introducing a new deployment.
 
+The executive portfolio now joins the existing 30-day execution-cost ledger to business outcome evidence by tenant and process. It reports gross measured value, captured Workers AI cost, net value, value-to-cost efficiency, and per-item AI cost without adding reads to an agent turn or duplicating cost storage. Expansion requires positive net value in addition to the existing volume, target, incident, safety, failure, and override gates; a process whose estimated AI cost meets or exceeds measured value is directed to correct model choice, prompt size, retries, or scope. The UI explicitly labels this as the rate captured by Workrr rather than reconciled Cloudflare billing, preserving the separate invoice-reconciliation evidence boundary.
+
 ## Remaining aggressive-MVP work
 
 The foundation is usable, but these are the highest-value next slices:
