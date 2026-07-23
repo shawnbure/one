@@ -5,8 +5,11 @@ export async function getGovernance(env: Env, tenantId: string) {
   const deploymentVerificationPromise = getDeploymentVerification(env, tenantId);
   const [processes, connections, knowledge, evaluations, retention, members, audit, incidents, webhooks, credentials,
     tenantControl, dlpRules, dlpEvents, tools] = await Promise.all([
-    env.DB.prepare(`SELECT id, name, model_profile, prompt_release_id, active_release_id, autonomy, operating_mode,
-      risk_level, business_owner, department FROM agent_blueprints WHERE tenant_id = ? ORDER BY name`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT b.id, b.name, b.model_profile, b.prompt_release_id, b.active_release_id, b.autonomy,
+      b.operating_mode, b.risk_level, b.business_owner, b.department, r.model_id
+      FROM agent_blueprints b LEFT JOIN process_releases r
+        ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
+      WHERE b.tenant_id = ? ORDER BY b.name`).bind(tenantId).all(),
     env.DB.prepare(`SELECT c.*, o.account_email oauth_account_email, o.account_name oauth_account_name,
       o.scopes_json oauth_scopes_json, o.status oauth_status, o.last_error oauth_last_error,
       o.connected_at oauth_connected_at
@@ -52,12 +55,18 @@ export async function getGovernance(env: Env, tenantId: string) {
   const lifecycleConnectionRows = requiredConnectionRows.filter((row) => row.kind !== "model_provider");
   const lifecycleReadyRows = lifecycleConnectionRows.filter((row) =>
     Boolean(row.rotation_owner) && (row.kind === "oauth" || Boolean(row.credential_expires_at)));
-  const models = [...new Set(processRows.map((row) => String(row.model_profile)))].map((profile) => ({
-    profile,
+  const modelKeys = [...new Set(processRows.map((row) =>
+    `${String(row.model_profile)}\u0000${String(row.model_id ?? "")}`))];
+  const models = modelKeys.map((key) => {
+    const [profile, modelId] = key.split("\u0000");
+    return {
+    profile: profile!,
+    modelId: modelId || "Legacy profile mapping",
     provider: "Cloudflare Workers AI",
-    processes: processRows.filter((row) => row.model_profile === profile).length,
+    processes: processRows.filter((row) =>
+      String(row.model_profile) === profile && String(row.model_id ?? "") === modelId).length,
     boundary: "Cloudflare account"
-  }));
+  }; });
   return {
     processes: processRows,
     connections: connectionRows,

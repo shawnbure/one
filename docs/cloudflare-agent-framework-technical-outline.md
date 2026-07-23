@@ -281,7 +281,7 @@ Normal turns perform no external prompt-storage read.
 
 The publish transaction follows this sequence:
 
-1. Validate modules, tool references, policies, and token budget.
+1. Validate modules, tool references, policies, token budget, and the exact allowlisted Workers AI model selected from the authoring profile.
 2. Create a release row in D1 with status `publishing`.
 3. Build a canonical bundle and calculate its content hash.
 4. Insert the immutable bundle and manifest in D1.
@@ -291,6 +291,8 @@ The publish transaction follows this sequence:
 8. Existing sessions remain pinned unless an explicit or safety-forced migration supplies the new exact bundle to the Agent and records the transition.
 
 Requests are pinned to a release ID at run creation. They never depend on mutable prompt content.
+
+The release bundle also contains the exact Workers AI model ID. Profile names such as `fast`, `balanced`, and `reasoning` are authoring conveniences; changing their mapping affects only newly created drafts. Instant, Agent, Workflow, evaluation, export, and rollback paths use the model stored with the release, and reject model IDs outside the platform allowlist.
 
 If an Agent has not received the publication event, it may finish in-flight runs on the previous release. New run creation supplies the intended release ID. This gives deterministic behavior with a single authoritative prompt store.
 

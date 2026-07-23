@@ -1,4 +1,4 @@
-import { executionProfiles, type ToolPolicy } from "@workrr/contracts";
+import { executionProfiles, supportedWorkersAIModels, type ToolPolicy } from "@workrr/contracts";
 import { createDraftRelease } from "./studio";
 import type { Env } from "./types";
 import { ensurePortableTools, ensureTemplateTools } from "./tools";
@@ -9,7 +9,7 @@ export interface PortableProcessPackage {
   schemaVersion: 1;
   exportedAt?: string;
   process: {
-    name: string; description: string; executionProfile: string; modelProfile: string; autonomy: string;
+    name: string; description: string; executionProfile: string; modelProfile: string; modelId?: string; autonomy: string;
     tools: string[]; toolDefinitions?: PortableToolPolicy[]; businessOwner: string; department: string; riskLevel: string;
   };
   behavior: { systemPrompt: string; instructions: string[]; guardrails: string[]; releaseNotes?: string;
@@ -20,7 +20,7 @@ export interface PortableProcessPackage {
 
 export async function exportProcessPackage(env: Env, tenantId: string, blueprintId: string): Promise<PortableProcessPackage | null> {
   const row = await env.DB.prepare(`SELECT b.*, p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum,
-    r.id source_release_id, r.release_notes, r.input_schema_json, r.output_schema_json, r.tool_policy_json FROM agent_blueprints b
+    r.id source_release_id, r.model_id, r.release_notes, r.input_schema_json, r.output_schema_json, r.tool_policy_json FROM agent_blueprints b
     JOIN prompt_releases p ON p.id = b.prompt_release_id
     LEFT JOIN process_releases r ON r.id = b.active_release_id
     WHERE b.tenant_id = ? AND b.id = ?`).bind(tenantId, blueprintId).first<Record<string, string | null>>();
@@ -28,7 +28,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
   const toolDefinitions = parseToolPolicies(row.tool_policy_json);
   return {
     schemaVersion: 1, exportedAt: new Date().toISOString(),
-    process: { name: row.name!, description: row.description!, executionProfile: row.execution_profile!, modelProfile: row.model_profile!,
+    process: { name: row.name!, description: row.description!, executionProfile: row.execution_profile!,
+      modelProfile: row.model_profile!, modelId: row.model_id || undefined,
       autonomy: row.autonomy!, tools: toolDefinitions.length ? toolDefinitions.map((tool) => tool.name) : parseStringArray(row.tools_json),
       toolDefinitions, businessOwner: row.business_owner || "Operations",
       department: row.department || "Operations", riskLevel: row.risk_level || "medium" },
@@ -69,6 +70,7 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
             { type: "not_contains_any", value: ["I looked up", "I accessed your system"] }])).run();
     const release = await createDraftRelease(env, tenantId, id, actorId, { systemPrompt: pkg.behavior.systemPrompt,
       instructions: pkg.behavior.instructions, guardrails: pkg.behavior.guardrails, modelProfile: pkg.process.modelProfile,
+      modelId: pkg.process.modelId,
       autonomy: pkg.process.autonomy, inputSchema: pkg.behavior.inputSchema, outputSchema: pkg.behavior.outputSchema,
       releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
     return { id, status: "draft", release, source: pkg.provenance ?? null };
@@ -91,6 +93,8 @@ function validatePackage(value: unknown): PortableProcessPackage {
   if (!process.name?.trim() || !process.description?.trim() || !behavior.systemPrompt?.trim()) throw new Error("Package name, description, and system prompt are required");
   if (!executionProfiles.includes(process.executionProfile as (typeof executionProfiles)[number])) throw new Error("Package execution profile is invalid");
   if (!["fast", "balanced", "reasoning"].includes(process.modelProfile)) throw new Error("Package model profile is invalid");
+  if (process.modelId && !supportedWorkersAIModels.includes(
+    process.modelId as typeof supportedWorkersAIModels[number])) throw new Error("Package Workers AI model is unsupported");
   if (!["observe", "suggest", "approve", "guarded", "autonomous"].includes(process.autonomy)) throw new Error("Package autonomy is invalid");
   if (!["low", "medium", "high"].includes(process.riskLevel)) throw new Error("Package risk level is invalid");
   if (![process.tools, behavior.instructions, behavior.guardrails].every((list) => Array.isArray(list) && list.every((item) => typeof item === "string"))) throw new Error("Package lists must contain only strings");

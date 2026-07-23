@@ -1334,6 +1334,7 @@ function Governance({
                 <small>
                   {model.provider} · {model.boundary}
                 </small>
+                <small>{model.modelId}</small>
               </span>
               <em>{model.processes} processes</em>
             </div>

@@ -36,6 +36,7 @@ export interface AgentBlueprint {
   description: string;
   executionProfile: ExecutionProfile;
   modelProfile: string;
+  modelId?: string | null;
   promptReleaseId: string | null;
   autonomy: AutonomyLevel;
   status: ProcessStatus;
@@ -143,3 +144,9 @@ export const modelProfiles = {
   balanced: { label: "Balanced", model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", use: "General process work" },
   reasoning: { label: "Reasoning", model: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", use: "Complex analysis" }
 } as const;
+
+export const supportedWorkersAIModels = [
+  "@cf/meta/llama-3.1-8b-instruct-fp8",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
+] as const;

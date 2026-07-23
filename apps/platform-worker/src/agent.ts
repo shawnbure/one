@@ -88,7 +88,7 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     this.setState({ ...this.state, tenantId, blueprintId: bundle.blueprintId, releaseId: bundle.releaseId });
   }
 
-  async execute(input: string, safeInput: string, modelProfile: string, executionId: string,
+  async execute(input: string, safeInput: string, modelProfile: string, modelId: string | null, executionId: string,
     outputSchema: ProcessSchema | null = null, persistAssistant = true,
     autonomy: AutonomyLevel = "suggest", toolPolicies: ToolPolicy[] = []): Promise<{
     output: string; outputPreview: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number;
@@ -106,7 +106,8 @@ export class ProcessAgent extends Agent<Env, AgentState> {
       (id, role, content, source_execution_id, status, revision, created_at, updated_at)
       VALUES (${userTurnId}, 'user', ${safeInput}, ${executionId}, 'active', 1, ${now}, ${now})`;
     const result = await runModel(this.env, modelProfile, JSON.parse(row.bundle_json) as PromptBundle, input,
-      this.sessionAffinity, { tenantId: this.state.tenantId!, executionId, autonomy, policies: toolPolicies }, history);
+      this.sessionAffinity, { tenantId: this.state.tenantId!, executionId, autonomy, policies: toolPolicies },
+      history, modelId);
     if (!this.state.tenantId) throw new Error("Agent tenant identity is not installed");
     const outputDlp = await applyDlp(this.env, this.state.tenantId, result.output, {
       direction: "output", stage: "durable_agent", executionId, blueprintId: this.state.blueprintId ?? undefined

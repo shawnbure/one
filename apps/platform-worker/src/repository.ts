@@ -2,7 +2,7 @@ import type { AgentBlueprint, PromptBundle } from "@workrr/contracts";
 import type { BlueprintRow, Env, PromptRow } from "./types";
 
 export async function getBlueprint(env: Env, tenantId: string, id: string): Promise<AgentBlueprint | null> {
-  const row = await env.DB.prepare(`SELECT b.*, r.input_schema_json, r.output_schema_json,
+  const row = await env.DB.prepare(`SELECT b.*, r.model_id, r.input_schema_json, r.output_schema_json,
     COALESCE((SELECT json_group_array(json_set(policy.value, '$.connectionReady',
       CASE
         WHEN json_extract(policy.value, '$.adapterKind')='mock'
@@ -37,6 +37,7 @@ export async function getBlueprint(env: Env, tenantId: string, id: string): Prom
     description: row.description,
     executionProfile: row.execution_profile as AgentBlueprint["executionProfile"],
     modelProfile: row.model_profile,
+    modelId: row.model_id ?? null,
     promptReleaseId: row.prompt_release_id,
     autonomy: row.autonomy as AgentBlueprint["autonomy"],
     status: row.status as AgentBlueprint["status"],

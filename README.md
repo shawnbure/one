@@ -15,7 +15,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Cloudflare Agents SDK durable actors with local SQLite conversation history and immutable prompt-release bundles.
 - Bounded actor-local conversational context with operator inspection, correction, quarantine, restoration, and content deletion; governance actions are revision-checked, audited, and never copied into D1 or KV.
 - Explicit routing for `conversation`, `consumer`, `entity`, `shared_shard`, `temporary_durable`, `instant`, and `workflow` execution profiles.
-- Workers AI model profiles with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations.
+- Workers AI model profiles whose exact allowlisted model ID is snapshotted into every immutable process release, with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations.
 - D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
 - Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and bounded Cron dispatch for tenant-configured recurring processes.
 - Tenant-scoped Queue operations evidence with attempt counts, retry/dead-letter states, bounded retention, and audited safe replay from redacted execution input.
@@ -44,6 +44,8 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 D1 is the source of truth for published process and prompt releases. A durable Agent checks whether its configured release is already installed; D1 is read only when a new release must be copied into that actor's local SQLite database. Later turns use the local copy. The stable Agent identity is also passed to Workers AI as `sessionAffinity`, allowing Cloudflare's model infrastructure to improve prefix-cache locality without KV.
 
 Instant executions deliberately have no durable identity and load their release from D1. Workflow executions use Cloudflare Workflows for retryable, long-lived orchestration. Queues absorb independent bursts; they are not used as a substitute for ordered actor state.
+
+Friendly model profiles are authoring defaults, not mutable runtime aliases. Draft creation records the exact Workers AI model ID in the release; instant Workers, durable Agents, Workflows, evaluation runs, governance exports, privacy reports, and process packages all consume or expose that pinned value. Changing a profile mapping affects only later drafts, and an unknown model fails closed.
 
 Recurring processes are configured in Process Studio with hourly, daily, or weekly UTC schedules. Cron atomically claims at most 50 due occurrences and returns after handing them to Queue; it never performs AI inference inline. Queue routes each occurrence to the process's declared instant, sticky Agent, temporary actor, or Workflow profile. D1 retains schedule controls and dispatch evidence, while sticky state remains in the target Durable Agent.
 

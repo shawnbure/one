@@ -553,6 +553,7 @@ function Studio({
                   {release.model_profile} model · {release.autonomy} autonomy ·{" "}
                   {release.checksum.slice(0, 10)}
                 </small>
+                <small>{release.model_id ?? "Legacy profile mapping"} · release-pinned Workers AI model</small>
                 <small>
                   {release.input_schema_json ? "Input contract" : "Free-text input"} ·{" "}
                   {release.output_schema_json ? "Structured output" : "Text output"} ·{" "}

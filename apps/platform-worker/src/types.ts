@@ -34,6 +34,7 @@ export interface BlueprintRow {
   description: string;
   execution_profile: string;
   model_profile: string;
+  model_id?: string | null;
   prompt_release_id: string | null;
   autonomy: string;
   status: string;

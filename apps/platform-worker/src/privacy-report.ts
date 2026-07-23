@@ -12,7 +12,7 @@ export interface PrivacyArchitectureReport {
   processes: Row[];
   dataSources: { knowledge: Row[]; inboundWebhooks: Row[] };
   storageAndRetention: Array<{ store: string; content: string; retention: string; deletion: string }>;
-  models: Array<{ profile: string; provider: string; processes: number }>;
+  models: Array<{ profile: string; modelId: string; provider: string; processes: number }>;
   externalDestinations: Row[];
   credentials: Row[];
   tools: Row[];
@@ -29,9 +29,12 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
   const [tenant, processes, knowledge, webhooks, retention, connections, tools, notifications, approvals] =
     await Promise.all([
       env.DB.prepare("SELECT id, name FROM tenants WHERE id=?").bind(tenantId).first<Row>(),
-      env.DB.prepare(`SELECT id, name, department, business_owner, risk_level, status, execution_profile,
-        autonomy, operating_mode, model_profile, prompt_release_id, active_release_id
-        FROM agent_blueprints WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>(),
+      env.DB.prepare(`SELECT b.id, b.name, b.department, b.business_owner, b.risk_level, b.status,
+        b.execution_profile, b.autonomy, b.operating_mode, b.model_profile, b.prompt_release_id,
+        b.active_release_id, r.model_id
+        FROM agent_blueprints b LEFT JOIN process_releases r
+          ON r.id=b.active_release_id AND r.tenant_id=b.tenant_id
+        WHERE b.tenant_id=? ORDER BY b.name`).bind(tenantId).all<Row>(),
       env.DB.prepare(`SELECT name, source_type, owner, sensitivity, status, provenance,
         allowed_processes_json, reviewed_at, expires_at FROM knowledge_sources
         WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>(),
@@ -59,7 +62,8 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
   const processRows = processes.results;
   const connectionRows = connections.results;
   const notificationRows = notifications.results;
-  const modelProfiles = [...new Set(processRows.map((row) => String(row.model_profile)))];
+  const modelProfiles = [...new Set(processRows.map((row) =>
+    `${String(row.model_profile)}\u0000${String(row.model_id ?? "Legacy profile mapping")}`))];
   const pendingDecisions = Number(approvals.results.find((row) => row.status === "pending")?.count ?? 0);
   const consequentialActions = tools.results.filter((row) => row.access_mode === "write" && Number(row.enabled)).length;
   const externalDestinations = [
@@ -123,10 +127,12 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       { store: "R2 and Vectorize", content: "Governed knowledge objects, chunks, and embeddings",
         retention: "Source review and expiry policy", deletion: "Source removal deletes object, vectors, and metadata" }
     ],
-    models: modelProfiles.map((profile) => ({
-      profile, provider: "Cloudflare Workers AI",
-      processes: processRows.filter((row) => row.model_profile === profile).length
-    })),
+    models: modelProfiles.map((key) => {
+      const [profile, modelId] = key.split("\u0000");
+      return { profile: profile!, modelId: modelId!, provider: "Cloudflare Workers AI",
+        processes: processRows.filter((row) =>
+          String(row.model_profile) === profile && String(row.model_id ?? "Legacy profile mapping") === modelId).length };
+    }),
     externalDestinations,
     credentials: connectionRows.map((row) => ({
       system: row.name, owner: row.owner, access: row.access_mode, scopes: safeJson(row.scopes_json),

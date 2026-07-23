@@ -129,7 +129,7 @@ The Worker currently exposes these route groups:
 
 Role checks are attached at the route boundary and repository queries remain tenant-scoped.
 
-The customer-facing privacy and architecture report is a printable, self-contained HTML download with a machine-readable JSON option. It inventories configured processes and owners, Cloudflare services and storage, model profiles, knowledge and webhook inputs, retention/deletion rules, external destinations, connection scopes and credential readiness, typed tools, human oversight, release versions, logging/export behavior, subprocessors, readiness controls, and explicit limitations. The report selects no credential ciphertext or secret values, emits `no-store` and `nosniff`, uses a restrictive Content Security Policy, and HTML-escapes tenant-controlled content. The existing governance JSON remains available as lower-level evidence.
+The customer-facing privacy and architecture report is a printable, self-contained HTML download with a machine-readable JSON option. It inventories configured processes and owners, Cloudflare services and storage, model profiles and exact release-pinned Workers AI model IDs, knowledge and webhook inputs, retention/deletion rules, external destinations, connection scopes and credential readiness, typed tools, human oversight, release versions, logging/export behavior, subprocessors, readiness controls, and explicit limitations. The report selects no credential ciphertext or secret values, emits `no-store` and `nosniff`, uses a restrictive Content Security Policy, and HTML-escapes tenant-controlled content. The existing governance JSON remains available as lower-level evidence.
 
 Connection operations distinguish configuration from evidence: “credential configured” means secret metadata exists, “last health check” is the latest explicit or provider-backed check, and “last successful use” advances only after a real provider request succeeds. Operators can assign an eligible same-tenant rotation owner and record credential expiry/last rotation dates. The daily Cron emits an in-app warning for configured credentials within 30 days of expiry and marks expired connections for attention. Cloudflare Workers AI is shown as an account binding rather than a customer credential; Microsoft delegated OAuth is provider-rotated and can record an explicit organizational expiry when one applies. Generic connectors remain visibly metadata-only until a provider-specific live probe exists.
 
@@ -203,6 +203,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 56. `0056_approval_proposal_revisions.sql`: optimistic proposal correction revisions and attributable edit metadata.
 57. `0057_approval_delegations.sql`: time-bounded substitute approvers, optimistic delegation revisions, and visible assignment lineage.
 58. `0058_configuration_restores.sql`: checksummed configuration-restore lineage, section counts, source metadata, and attributable apply evidence.
+59. `0059_release_model_pinning.sql`: exact allowlisted Workers AI model identity on every immutable process release, including deterministic backfill for existing profiles.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

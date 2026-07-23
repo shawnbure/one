@@ -88,7 +88,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       const prompt = await requiredPrompt(env, promptReleaseId);
       const result = await runModel(env, blueprint.modelProfile, prompt, modelInput, undefined, {
         tenantId, executionId, autonomy: autonomy.effective, policies: blueprint.toolPolicies ?? []
-      });
+      }, [], blueprint.modelId);
       const outputDlp = await applyDlp(env, tenantId, result.output, {
         direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
       });
@@ -118,7 +118,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     }
     let result;
     try {
-      result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, executionId,
+      result = await agent.execute(modelInput, inputDlp.safeText, blueprint.modelProfile, blueprint.modelId ?? null, executionId,
         contracts.outputSchema, !autonomy.requiresApproval && !autonomy.shadowMode,
         autonomy.effective, blueprint.toolPolicies ?? []);
     } catch (error) {

@@ -279,6 +279,7 @@ export interface ProcessRelease {
   version: number;
   prompt_release_id: string;
   model_profile: string;
+  model_id: string | null;
   autonomy: string;
   status: "draft" | "published" | "retired";
   release_notes: string;
@@ -395,6 +396,7 @@ export interface GovernanceData {
   webhooks: WebhookEndpoint[];
   models: Array<{
     profile: string;
+    modelId: string;
     provider: string;
     processes: number;
     boundary: string;

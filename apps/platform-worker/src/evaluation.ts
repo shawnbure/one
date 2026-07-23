@@ -27,6 +27,7 @@ interface ReleaseRow {
   id: string;
   prompt_release_id: string;
   model_profile: string;
+  model_id: string | null;
   version: number;
   system_prompt: string;
   instructions_json: string;
@@ -41,6 +42,7 @@ export interface PreparedEvaluation {
   scenario: Record<string, string | number | null>;
   releaseId: string;
   modelProfile: string | undefined;
+  modelId: string | null;
   controls: Array<{ check: string; passed: boolean }>;
   prompt: PromptBundle | null;
   cases: EvaluationCase[];
@@ -89,7 +91,7 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first<Record<string, string | number | null>>();
   if (!scenario) throw new Error("Evaluation scenario not found");
   const releaseId = requestedReleaseId || String(scenario.active_release_id || "");
-  const release = releaseId ? await env.DB.prepare(`SELECT r.id, r.prompt_release_id, r.model_profile, p.version,
+  const release = releaseId ? await env.DB.prepare(`SELECT r.id, r.prompt_release_id, r.model_profile, r.model_id, p.version,
     p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum, p.published_at,
     r.input_schema_json, r.output_schema_json
     FROM process_releases r JOIN prompt_releases p ON p.id = r.prompt_release_id
@@ -105,6 +107,10 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     outputSchemaJson: parsedContracts.outputSchema ? JSON.stringify(parsedContracts.outputSchema) : null
   };
   const modelProfile = requestedModelProfile && requestedModelProfile in modelProfiles ? requestedModelProfile : release?.model_profile;
+  const modelId = requestedModelProfile && requestedModelProfile in modelProfiles
+    ? modelProfiles[requestedModelProfile as keyof typeof modelProfiles].model
+    : release?.model_id ?? (modelProfile && modelProfile in modelProfiles
+      ? modelProfiles[modelProfile as keyof typeof modelProfiles].model : null);
   const modelGradedCases = cases.results.filter((item) =>
     parseAssertions(item.assertions_json).some((assertion) => assertion.type === "model_rubric")).length;
   if (modelGradedCases > 25) throw new Error("Evaluation suites support model grading on at most 25 cases");
@@ -127,9 +133,7 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     publishedAt: release.published_at
   } : null;
   const dlpRules = await loadDlpRules(env, tenantId);
-  const catalogModel = modelProfile && modelProfile in modelProfiles
-    ? modelProfiles[modelProfile as keyof typeof modelProfiles].model
-    : null;
+  const catalogModel = modelId;
   const rate = catalogModel ? await env.DB.prepare(`SELECT input_usd_per_million, output_usd_per_million
     FROM model_catalog WHERE model_id = ?`).bind(catalogModel)
     .first<{ input_usd_per_million: number; output_usd_per_million: number }>() : null;
@@ -147,7 +151,7 @@ export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioI
     input: Number(judgeRateRow?.input_usd_per_million ?? 0),
     output: Number(judgeRateRow?.output_usd_per_million ?? 0)
   };
-  return { scenario, releaseId, modelProfile, controls, prompt, cases: cases.results, dlpRules, modelRate, judgeRate, contracts };
+  return { scenario, releaseId, modelProfile, modelId, controls, prompt, cases: cases.results, dlpRules, modelRate, judgeRate, contracts };
 }
 
 export async function evaluatePreparedCase(env: Env, tenantId: string, runId: string, prepared: PreparedEvaluation,
@@ -165,7 +169,7 @@ export async function evaluatePreparedCase(env: Env, tenantId: string, runId: st
     const contractedInput = validateContractInput(protectedInput.modelText, contracts.inputSchema);
     const modelInput = outputContractInstruction(contractedInput.value, contracts.outputSchema);
     const rawResult = await runModel(env, prepared.modelProfile, prepared.prompt, modelInput,
-      `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`);
+      `evaluation:${prepared.releaseId}:${prepared.modelProfile}:${item.id}`, undefined, [], prepared.modelId);
     const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
       direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`,
       blueprintId: String(prepared.scenario.blueprint_id)
