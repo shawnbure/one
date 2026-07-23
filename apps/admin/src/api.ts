@@ -440,6 +440,20 @@ export interface OnboardingData {
   bootstrap: null | { status: "started" | "completed" | "failed"; member_id: string | null; process_id: string | null;
     started_at: string; completed_at: string | null; last_error: string | null };
 }
+export interface ManagedLifecycleData {
+  settings: null | {
+    support_owner_id: string | null; recovery_owner_id: string | null; escalation_email: string;
+    maintenance_day_utc: number; maintenance_hour_utc: number; recovery_review_due_at: string | null;
+    last_recovery_review_at: string | null; support_notes: string | null; updated_at: string;
+    support_owner_name: string | null; recovery_owner_name: string | null;
+  };
+  members: Array<{ id: string; display_name: string; email: string; role: string }>;
+  preflight: { status: "ready" | "action_required"; ready: number; total: number;
+    checks: Array<{ id: string; label: string; ready: boolean; category: string; detail: string }> };
+  environment: { name: string; domain: string; accessTeamDomain: string };
+  counts: Record<string, number>;
+  operatingControl: null | { mode: string; reason: string | null; updated_at: string };
+}
 export interface NotificationData {
   policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string;
     updated_at: string; credential_name: string | null; credential_configured: number;
@@ -877,6 +891,11 @@ export const api = {
     request<{ data: { disconnected: boolean; connectionId?: string } }>(
       "/api/oauth/microsoft/disconnect", { method: "POST", body: "{}" }),
   onboarding: () => request<{ data: OnboardingData }>("/api/onboarding"),
+  lifecycle: () => request<{ data: ManagedLifecycleData }>("/api/lifecycle"),
+  updateLifecycle: (body: { supportOwnerId: string; recoveryOwnerId: string; escalationEmail: string;
+    maintenanceDayUtc: number; maintenanceHourUtc: number; recoveryReviewDueAt: string | null;
+    supportNotes: string }) =>
+    request<{ data: ManagedLifecycleData }>("/api/lifecycle", { method: "PUT", body: JSON.stringify(body) }),
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
   bootstrapCustomer: (body: {

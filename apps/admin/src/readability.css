@@ -746,3 +746,67 @@ a:focus-visible {
   .grid-main { grid-template-columns: 1fr; }
   .side-stack { grid-template-columns: 1fr; }
 }
+
+.lifecycle-center { margin-top: 16px; overflow: hidden; }
+.lifecycle-center .section-head h2 { display: flex; align-items: center; gap: 8px; }
+.lifecycle-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(340px, .9fr); }
+.lifecycle-form { display: grid; gap: 13px; padding: 20px; border-right: 1px solid #e1e7e3; }
+.lifecycle-form > label,
+.lifecycle-maintenance label { display: grid; gap: 5px; color: #405149; font-weight: 700; }
+.lifecycle-form input,
+.lifecycle-form select,
+.lifecycle-form textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #ccd8d2;
+  border-radius: 7px;
+  background: #fff;
+  color: #263930;
+}
+.lifecycle-form textarea { min-height: 88px; resize: vertical; }
+.lifecycle-maintenance {
+  display: grid;
+  grid-template-columns: auto 1fr 110px 1fr;
+  align-items: end;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 9px;
+  background: #f4f8f6;
+  color: #3d735d;
+}
+.lifecycle-maintenance > svg { align-self: center; }
+.lifecycle-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.bundle-boundary { padding: 9px 10px; border-radius: 7px; background: #f7f9f8; }
+.preflight-list { padding: 20px; }
+.preflight-list h3 { margin: 0 0 12px; font-size: 14px; }
+.preflight-list > div {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 9px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e7ece9;
+}
+.preflight-list > div:last-child { border-bottom: 0; }
+.preflight-list > div.ready > svg { color: #2f7a5c; }
+.preflight-list > div.pending > svg { color: #b07132; }
+.preflight-list strong,
+.preflight-list small { display: block; }
+.preflight-list small { margin-top: 2px; }
+.preflight-list em {
+  padding: 3px 6px;
+  border-radius: 9px;
+  background: #eef3f0;
+  color: #607169;
+  font-size: 10px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+@media (max-width: 1200px) {
+  .lifecycle-grid { grid-template-columns: 1fr; }
+  .lifecycle-form { border-right: 0; border-bottom: 1px solid #e1e7e3; }
+}
+@media (max-width: 760px) {
+  .lifecycle-maintenance { grid-template-columns: 1fr 1fr; }
+  .lifecycle-maintenance > svg { display: none; }
+}

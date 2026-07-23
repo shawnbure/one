@@ -35,6 +35,7 @@ import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpp
   OpportunityRevisionConflict, qualifyOpportunity, updateOpportunity, updateOpportunityReadiness } from "./opportunities";
 import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
 import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "./notification-response";
+import { exportSupportBundle, getManagedLifecycle, updateManagedLifecycle } from "./lifecycle";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -117,6 +118,25 @@ app.get("/api/onboarding/access-handoff", requireRoles("admin", "owner"), async 
   c.header("content-disposition", `attachment; filename="workrr-access-handoff-${c.env.ENVIRONMENT}.json"`);
   c.header("cache-control", "no-store");
   return c.json(await exportAccessHandoff(c.env, c.get("tenantId")));
+});
+
+app.get("/api/lifecycle", requireRoles("admin", "owner", "operator", "viewer"), async (c) =>
+  c.json({ data: await getManagedLifecycle(c.env, c.get("tenantId")) }));
+
+app.put("/api/lifecycle", requireRoles("admin", "owner"), async (c) => {
+  try {
+    return c.json({ data: await updateManagedLifecycle(
+      c.env, c.get("tenantId"), c.get("actorId"), await c.req.json()
+    ) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Lifecycle settings could not be saved" }, 400);
+  }
+});
+
+app.get("/api/lifecycle/support-bundle", requireRoles("admin", "owner", "operator"), async (c) => {
+  c.header("content-disposition", `attachment; filename="workrr-support-${c.env.ENVIRONMENT}-${c.get("tenantId")}.json"`);
+  c.header("cache-control", "no-store");
+  return c.json(await exportSupportBundle(c.env, c.get("tenantId")));
 });
 
 app.post("/api/oauth/microsoft/start", requireRoles("admin", "owner"), async (c) => {

@@ -138,7 +138,14 @@ export async function applyOnboarding(env: Env, tenantId: string, actorId: strin
       accent_color=excluded.accent_color, default_model_profile=excluded.default_model_profile, data_region=excluded.data_region,
       initialized_at=COALESCE(tenant_settings.initialized_at, excluded.initialized_at), initialized_by=COALESCE(tenant_settings.initialized_by, excluded.initialized_by), updated_at=excluded.updated_at`)
       .bind(tenantId, input.organizationName.trim(), input.supportEmail.trim().toLowerCase(), input.accentColor,
-        input.defaultModelProfile, input.dataRegion || "Cloudflare global network", now, actorId, now)
+        input.defaultModelProfile, input.dataRegion || "Cloudflare global network", now, actorId, now),
+    env.DB.prepare(`INSERT INTO tenant_lifecycle_settings
+      (tenant_id, support_owner_id, recovery_owner_id, escalation_email, recovery_review_due_at, updated_by, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id) DO UPDATE SET escalation_email=excluded.escalation_email,
+        updated_by=excluded.updated_by, updated_at=excluded.updated_at`)
+      .bind(tenantId, actorId, actorId, input.supportEmail.trim().toLowerCase(),
+        new Date(Date.now() + 90 * 24 * 60 * 60_000).toISOString(), actorId, now)
   ]);
   return getOnboarding(env, tenantId);
 }

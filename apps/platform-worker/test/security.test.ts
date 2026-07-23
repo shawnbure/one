@@ -92,6 +92,21 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("acknowledged_at"))).toBe(false);
   });
 
+  it("keeps lifecycle configuration and support exports within operating roles", async () => {
+    const viewer = environment("viewer");
+    const update = await app.fetch(new Request("http://localhost/api/lifecycle", {
+      method: "PUT", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: "{}"
+    }), viewer.env as never, executionCtx as never);
+    expect(update.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("tenant_lifecycle_settings") &&
+      sql.includes("INSERT"))).toBe(false);
+    const bundle = await app.fetch(new Request("http://localhost/api/lifecycle/support-bundle", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), viewer.env as never, executionCtx as never);
+    expect(bundle.status).toBe(403);
+  });
+
   it("keeps approval evidence out of consumer sessions and collaboration mutations away from viewers", async () => {
     const consumer = environment("consumer");
     const listResponse = await app.fetch(new Request("http://localhost/api/approvals", {
