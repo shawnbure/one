@@ -250,7 +250,18 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity, credential_ref_id)
       VALUES (?, ?, 'execution.failed', 'webhook', NULL, 0, 'critical', ?)`)
-      .bind(`notify-execution-webhook-${suffix}`, tenantId, credentialId)
+      .bind(`notify-execution-webhook-${suffix}`, tenantId, credentialId),
+    ...[
+      ["email", "Email addresses", "redact"],
+      ["phone", "Phone numbers", "redact"],
+      ["ssn", "US Social Security numbers", "block"],
+      ["payment_card", "Payment card numbers", "block"],
+      ["api_secret", "API keys and secrets", "block"],
+      ["ip_address", "IP addresses", "audit"]
+    ].map(([detector, label, action]) => env.DB.prepare(`INSERT OR IGNORE INTO dlp_rules
+      (id, tenant_id, detector, label, action, direction, enabled, updated_by)
+      VALUES (?, ?, ?, ?, ?, 'both', 1, ?)`)
+      .bind(`dlp-${detector}-${suffix}`, tenantId, detector, label, action, actorId))
   ]);
 }
 

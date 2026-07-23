@@ -121,6 +121,10 @@ export interface GovernanceData {
     opened_at: string; updated_at: string; resolved_at: string | null }>;
   tenantControl: { mode: "active" | "drain" | "emergency_stop"; incident_id: string | null; reason: string | null;
     updated_by: string; updated_at: string | null };
+  dlpRules: Array<{ detector: string; label: string; action: "audit" | "redact" | "block";
+    direction: "input" | "output" | "both"; enabled: number; updated_by: string; updated_at: string }>;
+  dlpEvents: Array<{ direction: string; stage: string; detector: string; action: string; match_count: number;
+    execution_id: string | null; blueprint_id: string | null; created_at: string }>;
   webhooks: WebhookEndpoint[];
   models: Array<{
     profile: string;
@@ -379,6 +383,10 @@ export const api = {
   setTenantMode: (body: { mode: "active" | "drain" | "emergency_stop"; reason: string; incidentId?: string }) =>
     request<{ data: { mode: string; incidentId: string | null } }>("/api/tenant/mode",
       { method: "PATCH", body: JSON.stringify(body) }),
+  updateDlpRule: (detector: string, body: { action: "audit" | "redact" | "block";
+    direction: "input" | "output" | "both"; enabled: boolean }) =>
+    request<{ data: { detector: string; action: string; direction: string; enabled: boolean } }>(
+      `/api/dlp/rules/${encodeURIComponent(detector)}`, { method: "PATCH", body: JSON.stringify(body) }),
   promoteEvaluationSample: (id: string, body: { executionId: string; name?: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number }) =>
     request<{ data: { id: string; assertionCount: number } }>(

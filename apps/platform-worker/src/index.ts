@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { executionProfiles, type ExecutionRequest, type QueueJob, type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
-import { assertAsyncExecutionAdmission, executeRequest } from "./execution";
+import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
 import { createDraftRelease, getStudio, publishRelease } from "./studio";
@@ -15,6 +15,7 @@ import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queu
 import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
+import { isDlpBlocked, updateDlpRule } from "./dlp";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -379,7 +380,7 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
   try {
     return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Execution failed" }, 400);
+    return c.json({ error: error instanceof Error ? error.message : "Execution failed" }, isDlpBlocked(error) ? 422 : 400);
   }
 });
 
@@ -393,7 +394,12 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
     return c.json({ error: error instanceof Error ? error.message : "Execution admission failed" }, 409);
   }
   const executionId = crypto.randomUUID();
-  const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: c.get("tenantId") };
+  let protectedRequest: ExecutionRequest;
+  try { protectedRequest = await sanitizeAsyncExecutionInput(c.env, c.get("tenantId"), request, executionId); }
+  catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "DLP admission failed" }, isDlpBlocked(error) ? 422 : 400);
+  }
+  const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
   await c.env.PROCESS_QUEUE.send(job, { contentType: "json" });
   return c.json({ executionId, status: "queued" }, 202);
 });
@@ -611,6 +617,17 @@ app.patch("/api/processes/:id/mode", requireRoles("admin", "owner"), async (c) =
 
 app.get("/api/incidents", requireRoles("admin", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getIncidentOperations(c.env, c.get("tenantId")) }));
+
+app.patch("/api/dlp/rules/:detector", requireRoles("admin", "owner"), async (c) => {
+  const detector = c.req.param("detector");
+  if (!detector) return c.json({ error: "DLP detector is required" }, 400);
+  try {
+    return c.json({ data: await updateDlpRule(c.env, c.get("tenantId"), c.get("actorId"),
+      detector, await c.req.json()) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "DLP rule update failed" }, 400);
+  }
+});
 
 app.get("/api/incidents/:id", requireRoles("admin", "owner", "operator", "reviewer", "viewer"), async (c) => {
   const incidentId = c.req.param("id");

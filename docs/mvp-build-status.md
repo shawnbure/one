@@ -154,7 +154,7 @@ Production inputs are never sampled automatically. An authorized user may explic
 The foundation is usable, but these are the highest-value next slices:
 
 1. Register and credential the first customer Microsoft Entra application. The provider-specific lifecycle is implemented with delegated PKCE authorization, capability-scoped consent, encrypted refresh-token persistence, rotation-aware health checks, and disconnect/reconnect controls.
-2. Add richer multi-dimension rubrics, customer-configurable DLP policies, and Workflow fan-out for large datasets. Automatic common-pattern masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
+2. Add richer multi-dimension rubrics and Workflow fan-out for large datasets. Customer-configurable DLP policy is implemented across execution, Queue, Workflow, Durable Agent, evaluation, and preview-storage boundaries. Automatic masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
 3. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
 4. Add authenticated email delivery using the Microsoft lifecycle; Queue-backed signed webhook delivery is implemented.
 5. Add a scripted, reviewable environment promotion command. Cloudflare Access member handoff is implemented as a secret-free, environment-bound export plus an explicit dry-run/apply FDE command.

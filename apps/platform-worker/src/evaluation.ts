@@ -2,6 +2,7 @@ import { modelProfiles, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { assertBudgetAvailable } from "./usage";
+import { applyDlp, DlpBlockedError, scanSensitiveText } from "./dlp";
 
 type Assertion =
   | { type: "contains_all" | "contains_any" | "not_contains_any"; value: string[] }
@@ -71,8 +72,17 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
     for (const item of cases.results) {
       const started = performance.now();
       try {
-        const result = await runModel(env, modelProfile!, prompt, item.input_text,
+        const protectedInput = await applyDlp(env, tenantId, item.input_text, {
+          direction: "input", stage: "evaluation", executionId: `${runId}:${item.id}`, blueprintId: String(scenario.blueprint_id)
+        });
+        if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
+        const rawResult = await runModel(env, modelProfile!, prompt, protectedInput.modelText,
           `evaluation:${release.id}:${modelProfile}:${item.id}`);
+        const protectedOutput = await applyDlp(env, tenantId, rawResult.output, {
+          direction: "output", stage: "evaluation", executionId: `${runId}:${item.id}`, blueprintId: String(scenario.blueprint_id)
+        });
+        if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
+        const result = { ...rawResult, output: protectedOutput.modelText };
         const assertions = parseAssertions(item.assertions_json);
         const evidence = assertions.map((assertion) => evaluateAssertion(result.output, assertion));
         const passed = evidence.filter((check) => check.passed).length;
@@ -206,7 +216,7 @@ export async function createEvaluationCase(env: Env, tenantId: string, scenarioI
     .bind(tenantId, scenarioId).first<{ count: number }>();
   if (Number(count?.count) >= 10) throw new Error("Evaluation scenarios support up to 10 synchronous curated cases");
   const id = crypto.randomUUID();
-  const redacted = redactSensitiveText(input.input.trim().slice(0, 20_000));
+  const redacted = scanSensitiveText(input.input.trim().slice(0, 20_000));
   await env.DB.prepare(`INSERT INTO evaluation_cases
     (id, tenant_id, scenario_id, name, input_text, assertions_json, source, redaction_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(id, tenantId, scenarioId, input.name.trim(), redacted.text, JSON.stringify(assertions), source,
@@ -389,22 +399,5 @@ function parseList(value: string): string[] {
 }
 
 export function redactSensitiveText(value: string) {
-  const found = new Set<string>();
-  let count = 0;
-  const patterns: Array<{ type: string; token: string; expression: RegExp }> = [
-    { type: "email", token: "[REDACTED_EMAIL]", expression: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi },
-    { type: "ssn", token: "[REDACTED_SSN]", expression: /\b\d{3}-\d{2}-\d{4}\b/g },
-    { type: "phone", token: "[REDACTED_PHONE]", expression: /(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\d)/g },
-    { type: "payment_card", token: "[REDACTED_PAYMENT_CARD]", expression: /\b(?:\d[ -]*?){13,19}\b/g },
-    { type: "secret", token: "[REDACTED_SECRET]", expression: /\b(?:sk|api|token|secret)[-_][A-Za-z0-9_-]{12,}\b/gi }
-  ];
-  let text = value;
-  for (const pattern of patterns) {
-    text = text.replace(pattern.expression, () => {
-      count += 1;
-      found.add(pattern.type);
-      return pattern.token;
-    });
-  }
-  return { text, count, types: [...found] };
+  return scanSensitiveText(value);
 }

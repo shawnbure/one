@@ -5,7 +5,7 @@ const secret = "test-webhook-secret";
 const endpoint = { id: "inbox-intake", tenant_id: "tenant-1", blueprint_id: "inbox-triage", secret_binding: "WEBHOOK_INBOX_SECRET",
   status: "active", accepted_events_json: '["request.created"]' };
 
-function webhookEnvironment() {
+function webhookEnvironment(rules: unknown[] = []) {
   let receipt: { execution_id: string } | null = null;
   const jobs: unknown[] = [];
   const DB = {
@@ -16,8 +16,15 @@ function webhookEnvironment() {
         async first() {
           if (sql.includes("FROM webhook_endpoints")) return endpoint;
           if (sql.includes("FROM webhook_receipts")) return receipt;
+          if (sql.includes("FROM agent_blueprints")) return {
+            id: "inbox-triage", tenant_id: "tenant-1", name: "Inbox Triage", description: "Triage",
+            execution_profile: "instant", model_profile: "fast", prompt_release_id: "prompt-1", autonomy: "suggest",
+            status: "active", tools_json: "[]", updated_at: "now", operating_mode: "active"
+          };
+          if (sql.includes("tenant_operating_controls")) return { mode: "active" };
           return null;
         },
+        async all() { return { results: rules }; },
         async run() {
           if (sql.includes("INSERT OR IGNORE INTO webhook_receipts")) {
             if (receipt) return { meta: { changes: 0 } };
@@ -27,7 +34,8 @@ function webhookEnvironment() {
         }
       };
       return statement;
-    }
+    },
+    async batch() { return []; }
   };
   return { env: { DB, WEBHOOK_INBOX_SECRET: secret, PROCESS_QUEUE: { async send(job: unknown) { jobs.push(job); } } }, jobs };
 }
@@ -74,6 +82,15 @@ describe("signed webhook intake", () => {
   it("rejects unapproved event types after signature verification", async () => {
     const { env, jobs } = webhookEnvironment();
     const response = await deliver(env, '{"event":"customer.deleted","input":"hello"}', "event-4");
+    expect(response.status).toBe(422);
+    expect(jobs).toHaveLength(0);
+  });
+
+  it("blocks sensitive webhook content before Queue persistence", async () => {
+    const { env, jobs } = webhookEnvironment([
+      { detector: "ssn", action: "block", direction: "both", enabled: 1 }
+    ]);
+    const response = await deliver(env, '{"event":"request.created","input":"SSN 123-45-6789"}', "event-5");
     expect(response.status).toBe(422);
     expect(jobs).toHaveLength(0);
   });

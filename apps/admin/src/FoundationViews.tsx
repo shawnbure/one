@@ -459,6 +459,7 @@ function Governance({
   const [incidentNote, setIncidentNote] = useState("");
   const [incidentForm, setIncidentForm] = useState({ title: "", severity: "medium", blueprintId: "", impact: "" });
   const [incidentBusy, setIncidentBusy] = useState(false);
+  const [dlpBusy, setDlpBusy] = useState<string | null>(null);
   async function mode(processId: string | undefined, nextMode: string) {
     if (!processId) return;
     try {
@@ -508,6 +509,16 @@ function Governance({
       onNotice(`Incident moved to ${status}.`);
     } catch (error) { onNotice(error instanceof Error ? error.message : "Incident transition failed"); }
     finally { setIncidentBusy(false); }
+  }
+  async function changeDlp(detector: string, action: "audit" | "redact" | "block",
+    direction: "input" | "output" | "both", enabled: boolean) {
+    setDlpBusy(detector);
+    try {
+      await api.updateDlpRule(detector, { action, direction, enabled });
+      await onReload();
+      onNotice(`${detector.replaceAll("_", " ")} DLP policy updated.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "DLP policy update failed"); }
+    finally { setDlpBusy(null); }
   }
   return (
     <section className="foundation-page">
@@ -587,6 +598,30 @@ function Governance({
           </div>
         </article>
       </div>
+      <article className="dlp-center panel">
+        <div className="section-head"><div><span className="eyebrow"><LockKeyhole size={14}/> DATA LOSS PREVENTION</span><h2>Model-boundary DLP</h2><p>Inspect content before Queue, Workflow, Agent, model, and persisted-preview boundaries.</p></div><span className="dlp-total">{data.dlpEvents.reduce((sum, event) => sum + Number(event.match_count), 0)} detections recorded</span></div>
+        <div className="dlp-layout">
+          <div className="dlp-rules">
+            {data.dlpRules.map((rule) => <div key={rule.detector}>
+              <label className="dlp-toggle"><input type="checkbox" checked={Boolean(rule.enabled)} disabled={dlpBusy === rule.detector}
+                onChange={(event) => void changeDlp(rule.detector, rule.action, rule.direction, event.target.checked)}/><span><strong>{rule.label}</strong><small>{rule.detector.replaceAll("_", " ")}</small></span></label>
+              <select value={rule.action} disabled={dlpBusy === rule.detector} onChange={(event) =>
+                void changeDlp(rule.detector, event.target.value as "audit" | "redact" | "block", rule.direction, Boolean(rule.enabled))}>
+                <option value="audit">Audit only</option><option value="redact">Redact</option><option value="block">Block</option>
+              </select>
+              <select value={rule.direction} disabled={dlpBusy === rule.detector} onChange={(event) =>
+                void changeDlp(rule.detector, rule.action, event.target.value as "input" | "output" | "both", Boolean(rule.enabled))}>
+                <option value="both">Input + output</option><option value="input">Input only</option><option value="output">Output only</option>
+              </select>
+            </div>)}
+          </div>
+          <div className="dlp-evidence"><div className="section-head"><div><h3>Recent evidence</h3><p>Counts and policy actions only—matched content is never logged.</p></div></div>
+            {data.dlpEvents.length ? data.dlpEvents.slice(0, 8).map((event, index) => <article key={`${event.created_at}-${event.detector}-${index}`}>
+              <span className={`dlp-action ${event.action}`}>{event.action}</span><span><strong>{event.detector.replaceAll("_", " ")}</strong><small>{event.stage} · {event.direction} · {event.created_at}</small></span><em>{event.match_count}</em>
+            </article>) : <p className="empty-copy">No sensitive-pattern detections recorded.</p>}
+          </div>
+        </div>
+      </article>
       <div className="governance-section panel">
         <div className="section-head">
           <div>

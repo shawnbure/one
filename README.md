@@ -21,6 +21,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Tenant-wide and per-process incident containment with drain/emergency-stop admission gates, deferred paused work, evidence timelines, guarded recovery, and critical notifications.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
 - Microsoft 365 delegated OAuth with PKCE, one-time state, selectable least-privilege Graph scopes, AES-256-GCM refresh-token storage, rotation-aware health checks, and disconnect evidence.
+- Tenant-configurable DLP detectors with audit, redact, and block actions enforced before Queue, Workflow, Durable Agent, model, evaluation, and persisted-preview boundaries.
 - Shared typed contracts and tests for sticky identity routing.
 
 ## Architecture boundary
@@ -28,6 +29,8 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 D1 is the source of truth for published process and prompt releases. A durable Agent checks whether its configured release is already installed; D1 is read only when a new release must be copied into that actor's local SQLite database. Later turns use the local copy. The stable Agent identity is also passed to Workers AI as `sessionAffinity`, allowing Cloudflare's model infrastructure to improve prefix-cache locality without KV.
 
 Instant executions deliberately have no durable identity and load their release from D1. Workflow executions use Cloudflare Workflows for retryable, long-lived orchestration. Queues absorb independent bursts; they are not used as a substitute for ordered actor state.
+
+DLP rules are tenant-scoped in D1 and loaded at each execution boundary so policy changes affect already-queued Workflow work. Email and phone values redact by default; SSNs, valid payment-card numbers, and API-secret patterns block; IP addresses default to evidence-only inspection. Audit-only content may reach the selected private model, but Workrr still masks it in D1 previews and Durable Object conversation history. DLP evidence stores detector, action, stage, direction, and count—never the matched value.
 
 ## Local development
 

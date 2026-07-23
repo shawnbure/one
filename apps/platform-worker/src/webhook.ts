@@ -1,6 +1,8 @@
 import type { ExecutionRequest, QueueJob } from "@workrr/contracts";
 import type { Context } from "hono";
 import type { Env } from "./types";
+import { assertAsyncExecutionAdmission, sanitizeAsyncExecutionInput } from "./execution";
+import { isDlpBlocked } from "./dlp";
 
 interface EndpointRow { id: string; tenant_id: string; blueprint_id: string; secret_binding: string; status: string; accepted_events_json: string; }
 
@@ -27,7 +29,18 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   if (accepted.length && (!payload.event || !accepted.includes(payload.event))) return c.json({ error: "Event type is not accepted" }, 422);
   const executionId = crypto.randomUUID();
   const request: ExecutionRequest = { blueprintId: endpoint.blueprint_id, input: payload.input ?? JSON.stringify(payload.data ?? payload), idempotencyKey };
-  const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: endpoint.tenant_id };
+  try { await assertAsyncExecutionAdmission(c.env, endpoint.tenant_id, endpoint.blueprint_id); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : "Execution admission failed" }, 409); }
+  let protectedRequest: ExecutionRequest;
+  try { protectedRequest = await sanitizeAsyncExecutionInput(c.env, endpoint.tenant_id, request, executionId); }
+  catch (error) {
+    if (!isDlpBlocked(error)) return c.json({ error: "DLP inspection failed" }, 400);
+    await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
+      (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id) VALUES (?, ?, ?, ?, ?, NULL)`)
+      .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null).run();
+    return c.json({ error: error instanceof Error ? error.message : "DLP policy blocked webhook content" }, 422);
+  }
+  const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: endpoint.tenant_id };
   const receipt = await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
     (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null, executionId).run();

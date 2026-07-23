@@ -5,6 +5,7 @@ import { runModel } from "./model";
 import type { Env } from "./types";
 import { emitNotification } from "./notifications";
 import { pricedCompletionSql } from "./usage";
+import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 
 interface ProcessWorkflowParams { tenantId: string; request: ExecutionRequest }
 
@@ -20,19 +21,34 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       if (!prompt) throw new Error("Prompt release not found");
       return { blueprint, prompt };
     });
-    const result = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
-      runModel(this.env, context.blueprint.modelProfile, context.prompt, request.input));
+    const protectedInput = await step.do("recheck input DLP policy", async () => {
+      const result = await applyDlp(this.env, tenantId, request.input, {
+        direction: "input", stage: "workflow", executionId: event.instanceId, blueprintId: request.blueprintId
+      });
+      if (result.blocked) throw new DlpBlockedError(result.blockedDetectors);
+      return result.modelText;
+    });
+    const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
+      runModel(this.env, context.blueprint.modelProfile, context.prompt, protectedInput));
+    const result = await step.do("enforce output DLP policy", async () => {
+      const protectedOutput = await applyDlp(this.env, tenantId, rawResult.output, {
+        direction: "output", stage: "workflow", executionId: event.instanceId, blueprintId: request.blueprintId
+      });
+      if (protectedOutput.blocked) throw new DlpBlockedError(protectedOutput.blockedDetectors);
+      return { ...rawResult, output: protectedOutput.modelText, outputPreview: protectedOutput.safeText };
+    });
     await step.do("record durable result", async () => {
       await this.env.DB.prepare(`${pricedCompletionSql()} AND tenant_id = ?`)
-        .bind(result.output.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
+        .bind(result.outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
           result.inputTokens, result.model, result.outputTokens, result.model, new Date().toISOString(), event.instanceId, tenantId).run();
     });
     return { output: result.output };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await step.do("record terminal failure", async () => {
-        await this.env.DB.prepare("UPDATE executions SET status = 'failed', error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
-          .bind(message.slice(0, 1000), new Date().toISOString(), event.instanceId, tenantId).run();
+        await this.env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
+          .bind(isDlpBlocked(error) ? "blocked" : "failed", message.slice(0, 1000),
+            new Date().toISOString(), event.instanceId, tenantId).run();
       });
       await step.do("notify terminal failure", async () => {
         await emitNotification(this.env, tenantId, { eventType: "execution.failed", title: "Workflow execution failed",

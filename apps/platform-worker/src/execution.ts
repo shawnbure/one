@@ -5,6 +5,7 @@ import { getBlueprint, getPromptBundle } from "./repository";
 import type { ProcessAgent } from "./agent";
 import type { Env } from "./types";
 import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
+import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
@@ -18,13 +19,17 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   const promptReleaseId = blueprint.promptReleaseId;
   if (!promptReleaseId) throw new Error("Process has no published release");
 
+  const inputDlp = await applyDlp(env, tenantId, request.input, {
+    direction: "input", stage: "execution", executionId, blueprintId: blueprint.id
+  });
+  if (inputDlp.blocked) throw new DlpBlockedError(inputDlp.blockedDetectors);
   const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
   const startedAt = new Date().toISOString();
   await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key, started_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
-      admission.deferred ? "deferred" : "running", request.input.slice(0, 500), request.idempotencyKey ?? null, startedAt).run();
+      admission.deferred ? "deferred" : "running", inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null, startedAt).run();
 
   if (admission.deferred) {
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "deferred", startedAt };
@@ -32,25 +37,50 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   await assertBudgetAvailable(env, tenantId);
 
   if (blueprint.executionProfile === "workflow") {
-    await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`, params: { tenantId, request } });
+    await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`,
+      params: { tenantId, request: { ...request, input: inputDlp.modelText } } });
     await markStatus(env, executionId, "queued");
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "queued", startedAt };
   }
 
   if (blueprint.executionProfile === "instant") {
     const prompt = await requiredPrompt(env, promptReleaseId);
-    const result = await runModel(env, blueprint.modelProfile, prompt, request.input);
-    await complete(env, executionId, result);
-    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", ...result, startedAt };
+    const result = await runModel(env, blueprint.modelProfile, prompt, inputDlp.modelText);
+    const outputDlp = await applyDlp(env, tenantId, result.output, {
+      direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
+    });
+    if (outputDlp.blocked) {
+      await failBlockedOutput(env, executionId, outputDlp.blockedDetectors);
+      throw new DlpBlockedError(outputDlp.blockedDetectors);
+    }
+    const safeResult = { ...result, output: outputDlp.modelText };
+    await complete(env, executionId, safeResult, outputDlp.safeText);
+    return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", ...safeResult, startedAt };
   }
 
   const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey!);
+  await agent.bindTenant(tenantId, blueprint.id);
   if (!await agent.hasPromptRelease(promptReleaseId)) {
-    agent.installPromptBundle(await requiredPrompt(env, promptReleaseId));
+    agent.installPromptBundle(await requiredPrompt(env, promptReleaseId), tenantId);
   }
-  const result = await agent.execute(request.input, blueprint.modelProfile);
-  await complete(env, executionId, result);
+  let result;
+  try {
+    result = await agent.execute(inputDlp.modelText, inputDlp.safeText, blueprint.modelProfile, executionId);
+  } catch (error) {
+    if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
+      error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);
+    throw error;
+  }
+  await complete(env, executionId, result, result.outputPreview);
   return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output: result.output, model: result.model, startedAt };
+}
+
+export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, request: ExecutionRequest, executionId: string) {
+  const result = await applyDlp(env, tenantId, request.input, {
+    direction: "input", stage: "queue_admission", executionId, blueprintId: request.blueprintId
+  });
+  if (result.blocked) throw new DlpBlockedError(result.blockedDetectors);
+  return { ...request, input: result.modelText };
 }
 
 export async function assertAsyncExecutionAdmission(env: Env, tenantId: string, blueprintId: string) {
@@ -82,8 +112,14 @@ async function markStatus(env: Env, id: string, status: string): Promise<void> {
   await env.DB.prepare("UPDATE executions SET status = ? WHERE id = ?").bind(status, id).run();
 }
 
-async function complete(env: Env, id: string, result: { output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number }): Promise<void> {
+async function complete(env: Env, id: string, result: { output: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number },
+  outputPreview = result.output): Promise<void> {
   await env.DB.prepare(pricedCompletionSql())
-    .bind(result.output.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
+    .bind(outputPreview.slice(0, 1000), result.model, result.inputTokens, result.outputTokens, result.totalTokens,
       result.inputTokens, result.model, result.outputTokens, result.model, new Date().toISOString(), id).run();
+}
+
+async function failBlockedOutput(env: Env, id: string, detectors: string[]) {
+  await env.DB.prepare("UPDATE executions SET status='blocked', output_preview=NULL, error=?, completed_at=? WHERE id=?")
+    .bind(`DLP blocked model output containing: ${detectors.join(", ")}`, new Date().toISOString(), id).run();
 }

@@ -120,4 +120,15 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_operating_controls"))).toBe(false);
   });
+
+  it("prevents viewers from weakening DLP policy", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/dlp/rules/ssn", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ action: "audit", direction: "both", enabled: false })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("UPDATE dlp_rules"))).toBe(false);
+  });
 });

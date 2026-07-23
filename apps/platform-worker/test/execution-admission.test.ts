@@ -18,6 +18,7 @@ function executionEnvironment(tenantMode: string, processMode: string, processSt
           if (sql.includes("tenant_budgets")) return null;
           return null;
         },
+        async all() { return { results: [] }; },
         async run() { writes.push({ sql, values }); return { meta: { changes: 1 } }; }
       };
       return statement;
