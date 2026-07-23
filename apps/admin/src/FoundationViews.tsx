@@ -232,11 +232,15 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
               const connectionReady = tool.adapter_kind === "mock" ||
                 (Boolean(tool.connection_id) && tool.connection_status === "healthy" && Number(tool.connection_secret_configured) === 1);
               const implementationReady = Boolean(tool.handler_key && Number(tool.handler_ready));
+              const simulationReady = tool.adapter_kind === "mock" && tool.access_mode === "read" && tool.risk_level === "low";
+              const implementationLabel = tool.handler_key
+                ? `Bound implementation · ${tool.handler_key}`
+                : simulationReady ? "Simulation implementation" : "Proposal-only implementation";
               return <article key={tool.id} className={!Number(tool.enabled) ? "disabled" : ""}>
                 <span className={`tool-access ${tool.access_mode}`}>{tool.access_mode}</span>
                 <span><strong>{tool.name.replaceAll("_", " ")}</strong><small>{tool.description}</small>
                   <em>{tool.adapter_kind.replaceAll("_", " ")} · {tool.risk_level} risk · {tool.data_classification} · {tool.rate_limit_per_minute}/min</em>
-                  <small>{tool.handler_key ? `Bound implementation · ${tool.handler_key}` : "Proposal-only implementation"}</small>
+                  <small>{implementationLabel}</small>
                   <small>{tool.process_names || "Not bound to a process"} · Owner {tool.owner}</small>
                   <span className="tool-process-bindings">{data.processes.map((process) => {
                     const bound = (tool.process_ids || "").split(",").includes(String(process.id));
@@ -246,7 +250,7 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
                   })}</span></span>
                 <span className={`connection-state ${implementationReady || (tool.adapter_kind === "mock" && connectionReady) ? "healthy" : "attention"}`}><i/>
                   {implementationReady ? "bound adapter ready" : tool.handler_key ? "scope or connection required" :
-                    tool.adapter_kind === "mock" ? "simulation ready" : "proposal only"}</span>
+                    simulationReady ? "simulation ready" : "proposal only"}</span>
                 <button disabled={toolBusy} onClick={() => void toggleTool(tool)}>{Number(tool.enabled) ? "Disable" : "Enable"}</button>
               </article>;
             }) : <p className="empty-copy">No typed tools are registered yet.</p>}
