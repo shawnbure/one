@@ -550,6 +550,74 @@ a:focus-visible {
 }
 .opportunity-history article:last-child { border-bottom: 0; }
 .opportunity-history small { color: #6c7b74; }
+.score-breakdown .readiness-ready { background: #e1f3e9; color: #276b4f; }
+.opportunity-readiness {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+.opportunity-readiness > section {
+  overflow: hidden;
+  border: 1px solid #dce5e0;
+  border-radius: 9px;
+  background: #fbfcfb;
+}
+.opportunity-readiness > section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: #edf4f0;
+}
+.opportunity-readiness header strong,
+.opportunity-readiness header small { display: block; }
+.opportunity-readiness header small { margin-top: 3px; color: #64736c; font-size: 11px; }
+.opportunity-readiness header > span {
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: #fff;
+  color: #3f6555;
+  font-size: 12px;
+  font-weight: 800;
+}
+.opportunity-readiness section > article {
+  padding: 12px;
+  border-top: 1px solid #e1e8e4;
+}
+.opportunity-readiness article > div:first-child strong,
+.opportunity-readiness article > div:first-child small { display: block; }
+.opportunity-readiness article > div:first-child small { margin-top: 3px; color: #6c7a73; }
+.readiness-editor {
+  display: grid;
+  grid-template-columns: 120px 1fr 130px auto;
+  gap: 7px;
+  margin-top: 9px;
+}
+.readiness-editor input,
+.readiness-editor select {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #ccd8d2;
+  border-radius: 6px;
+  background: #fff;
+  color: #2d4037;
+  font-size: 12px;
+}
+.readiness-editor .readiness-evidence { grid-column: 1 / -1; }
+.readiness-editor button {
+  grid-column: 4;
+  padding: 7px 11px;
+  border: 1px solid #b9cec3;
+  border-radius: 6px;
+  background: #fff;
+  color: #315e4a;
+  font-size: 12px;
+  font-weight: 800;
+}
+@media (max-width: 1050px) {
+  .opportunity-readiness { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 1200px) {
   .tool-layout { grid-template-columns: 1fr; }

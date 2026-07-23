@@ -20,12 +20,28 @@ export interface OpportunityInput {
   recommendedTemplateId?: string | null;
 }
 
+export const opportunityReadinessDefinitions = [
+  { key: "owner_confirmed", label: "Business owner confirmed", stage: "conversion" },
+  { key: "current_state_validated", label: "Current process and baseline validated", stage: "conversion" },
+  { key: "data_classification_confirmed", label: "Data classification confirmed", stage: "conversion" },
+  { key: "target_outcome_approved", label: "Target outcome approved", stage: "conversion" },
+  { key: "systems_owner_identified", label: "Authoritative systems and owners identified", stage: "release" },
+  { key: "exceptions_defined", label: "Exceptions and stop conditions defined", stage: "release" },
+  { key: "acceptance_examples_available", label: "Acceptance examples and prohibited outcomes available", stage: "release" },
+  { key: "support_owner_assigned", label: "Operational support owner and escalation path assigned", stage: "release" }
+] as const;
+
 export async function listOpportunities(env: Env, tenantId: string) {
-  const { results } = await env.DB.prepare(`SELECT o.*, t.name recommended_template_name, b.name blueprint_name
+  const { results } = await env.DB.prepare(`SELECT o.*, t.name recommended_template_name, b.name blueprint_name,
+    COUNT(CASE WHEN r.stage='conversion' THEN 1 END) conversion_check_total,
+    COUNT(CASE WHEN r.stage='conversion' AND r.status IN ('confirmed','not_applicable') THEN 1 END) conversion_check_complete,
+    COUNT(CASE WHEN r.stage='release' THEN 1 END) release_check_total,
+    COUNT(CASE WHEN r.stage='release' AND r.status IN ('confirmed','not_applicable') THEN 1 END) release_check_complete
     FROM process_opportunities o
     LEFT JOIN process_templates t ON t.id=o.recommended_template_id
     LEFT JOIN agent_blueprints b ON b.id=o.blueprint_id AND b.tenant_id=o.tenant_id
-    WHERE o.tenant_id=? ORDER BY
+    LEFT JOIN opportunity_readiness_checks r ON r.opportunity_id=o.id AND r.tenant_id=o.tenant_id
+    WHERE o.tenant_id=? GROUP BY o.id ORDER BY
       CASE o.status WHEN 'approved' THEN 0 WHEN 'qualified' THEN 1 WHEN 'captured' THEN 2
         WHEN 'converted' THEN 3 ELSE 4 END,
       o.priority_score DESC, o.created_at DESC`).bind(tenantId).all();
@@ -54,6 +70,10 @@ export async function createOpportunity(env: Env, tenantId: string, actorId: str
       (id, tenant_id, opportunity_id, revision, snapshot_json, change_reason, changed_by)
       VALUES (?, ?, ?, 1, ?, 'Initial captured evidence', ?)`)
       .bind(crypto.randomUUID(), tenantId, id, JSON.stringify(snapshot), actorId),
+    ...opportunityReadinessDefinitions.map((definition) => env.DB.prepare(`INSERT INTO opportunity_readiness_checks
+      (id, tenant_id, opportunity_id, check_key, label, stage, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'open')`)
+      .bind(crypto.randomUUID(), tenantId, id, definition.key, definition.label, definition.stage)),
     audit(env, tenantId, actorId, "opportunity.captured", id, scores)
   ]);
   return { id, status: "captured", ...scores };
@@ -92,6 +112,9 @@ export async function updateOpportunity(env: Env, tenantId: string, actorId: str
       (id, tenant_id, opportunity_id, revision, snapshot_json, change_reason, changed_by)
       VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), tenantId, opportunityId, nextRevision, JSON.stringify(snapshot), reason, actorId),
+    env.DB.prepare(`UPDATE opportunity_readiness_checks SET status='open', evidence=NULL,
+      updated_by=?, updated_at=CURRENT_TIMESTAMP, confirmed_at=NULL
+      WHERE opportunity_id=? AND tenant_id=?`).bind(actorId, opportunityId, tenantId),
     audit(env, tenantId, actorId, "opportunity.evidence_revised", opportunityId,
       { fromRevision: expectedRevision, toRevision: nextRevision, changeReason: reason, qualificationReset: true })
   ]);
@@ -109,6 +132,63 @@ export async function listOpportunityRevisions(env: Env, tenantId: string, oppor
     FROM opportunity_revisions WHERE opportunity_id=? AND tenant_id=? ORDER BY revision DESC`)
     .bind(opportunityId, tenantId).all();
   return results;
+}
+
+export async function getOpportunityReadiness(env: Env, tenantId: string, opportunityId: string) {
+  const exists = await env.DB.prepare("SELECT id FROM process_opportunities WHERE id=? AND tenant_id=?")
+    .bind(opportunityId, tenantId).first();
+  if (!exists) throw new Error("Opportunity was not found");
+  const { results } = await env.DB.prepare(`SELECT r.*, m.email owner_email, m.display_name owner_name
+    FROM opportunity_readiness_checks r
+    LEFT JOIN tenant_members m ON m.id=r.owner_id AND m.tenant_id=r.tenant_id
+    WHERE r.opportunity_id=? AND r.tenant_id=?
+    ORDER BY CASE r.stage WHEN 'conversion' THEN 0 ELSE 1 END, r.label`)
+    .bind(opportunityId, tenantId).all<Record<string, unknown>>();
+  const conversion = results.filter((row) => row.stage === "conversion");
+  const release = results.filter((row) => row.stage === "release");
+  return {
+    checks: results,
+    conversion: readinessSummary(conversion),
+    release: readinessSummary(release)
+  };
+}
+
+export async function updateOpportunityReadiness(env: Env, tenantId: string, actorId: string,
+  opportunityId: string, checkKey: string, input: {
+    status?: "open" | "confirmed" | "not_applicable"; evidence?: string; ownerId?: string; dueAt?: string | null;
+  }) {
+  const check = await env.DB.prepare(`SELECT r.id, r.label, r.stage, o.status opportunity_status
+    FROM opportunity_readiness_checks r JOIN process_opportunities o
+      ON o.id=r.opportunity_id AND o.tenant_id=r.tenant_id
+    WHERE r.opportunity_id=? AND r.tenant_id=? AND r.check_key=?`)
+    .bind(opportunityId, tenantId, checkKey).first<{ id: string; label: string; stage: string; opportunity_status: string }>();
+  if (!check) throw new Error("Readiness check was not found");
+  if (check.opportunity_status === "converted") throw new Error("Converted opportunity readiness is immutable");
+  const status = input.status;
+  if (!status || !["open", "confirmed", "not_applicable"].includes(status)) throw new Error("A valid readiness status is required");
+  const evidence = String(input.evidence ?? "").trim();
+  if (evidence.length > 1500) throw new Error("Readiness evidence must be 1,500 characters or fewer");
+  if (status !== "open" && evidence.length < 10) throw new Error("Confirmed or not-applicable checks require specific evidence");
+  let ownerId: string | null = null;
+  if (input.ownerId) {
+    const member = await env.DB.prepare(`SELECT id FROM tenant_members
+      WHERE id=? AND tenant_id=? AND status='active' AND role!='consumer'`)
+      .bind(input.ownerId, tenantId).first<{ id: string }>();
+    if (!member) throw new Error("Readiness owner must be an active member of this organization");
+    ownerId = member.id;
+  }
+  if (status !== "open" && !ownerId) throw new Error("Confirmed or not-applicable checks require an owner");
+  const dueAt = optionalFutureDate(input.dueAt);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE opportunity_readiness_checks SET status=?, evidence=?, owner_id=?, due_at=?,
+      updated_by=?, updated_at=CURRENT_TIMESTAMP,
+      confirmed_at=CASE WHEN ?='open' THEN NULL ELSE CURRENT_TIMESTAMP END
+      WHERE id=? AND tenant_id=?`)
+      .bind(status, evidence || null, ownerId, dueAt, actorId, status, check.id, tenantId),
+    audit(env, tenantId, actorId, "opportunity.readiness_updated", opportunityId,
+      { checkKey, label: check.label, stage: check.stage, status, ownerId, dueAt })
+  ]);
+  return { opportunityId, checkKey, status, ownerId, dueAt };
 }
 
 export async function qualifyOpportunity(env: Env, tenantId: string, actorId: string, opportunityId: string,
@@ -138,6 +218,13 @@ export async function convertOpportunity(env: Env, tenantId: string, actorId: st
     throw new Error("Qualify the opportunity before creating a process");
   }
   if (row.blueprint_id) return { id: String(row.blueprint_id), status: "draft", reused: true };
+  const readiness = await env.DB.prepare(`SELECT COUNT(*) total,
+    SUM(CASE WHEN status IN ('confirmed','not_applicable') THEN 1 ELSE 0 END) complete
+    FROM opportunity_readiness_checks WHERE opportunity_id=? AND tenant_id=? AND stage='conversion'`)
+    .bind(opportunityId, tenantId).first<{ total: number; complete: number }>();
+  if (Number(readiness?.total) !== 4 || Number(readiness?.complete) !== 4) {
+    throw new Error("Complete all conversion-readiness checks before creating a process");
+  }
   const selectedTemplate = templateId || String(row.recommended_template_id ?? "");
   if (!selectedTemplate) throw new Error("Select a starting template");
   const processId = `opportunity-${await shortDigest(opportunityId)}`;
@@ -234,4 +321,19 @@ export class OpportunityRevisionConflict extends Error {}
 async function shortDigest(value: string) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
   return [...digest.slice(0, 8)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function readinessSummary(rows: Array<Record<string, unknown>>) {
+  const complete = rows.filter((row) => ["confirmed", "not_applicable"].includes(String(row.status))).length;
+  return { complete, total: rows.length, ready: rows.length > 0 && complete === rows.length };
+}
+
+function optionalFutureDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) throw new Error("Due date must be valid");
+  if (date < new Date(Date.now() - 86_400_000) || date > new Date(Date.now() + 3 * 365 * 86_400_000)) {
+    throw new Error("Due date is outside the supported range");
+  }
+  return date.toISOString();
 }

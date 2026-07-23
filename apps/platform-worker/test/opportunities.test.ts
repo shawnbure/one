@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createOpportunity, OpportunityRevisionConflict, qualifyOpportunity, scoreOpportunity,
-  updateOpportunity } from "../src/opportunities";
+  updateOpportunity, updateOpportunityReadiness, convertOpportunity } from "../src/opportunities";
 
 type Write = { sql: string; bindings: unknown[] };
 
-function environment(options?: { opportunity?: Record<string, unknown> | null; template?: boolean }) {
+function environment(options?: { opportunity?: Record<string, unknown> | null; template?: boolean;
+  readinessCheck?: Record<string, unknown> | null; member?: Record<string, unknown> | null;
+  readinessSummary?: Record<string, unknown> | null }) {
   const writes: Write[] = [];
   const DB = {
     prepare(sql: string) {
@@ -13,6 +15,9 @@ function environment(options?: { opportunity?: Record<string, unknown> | null; t
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
           if (sql.includes("FROM process_templates")) return options?.template === false ? null : { id: "template-document-intake" };
+          if (sql.includes("FROM opportunity_readiness_checks r JOIN")) return options?.readinessCheck ?? null;
+          if (sql.includes("FROM tenant_members")) return options?.member === undefined ? { id: "member-1" } : options.member;
+          if (sql.includes("SUM(CASE WHEN status")) return options?.readinessSummary ?? { total: 0, complete: 0 };
           if (sql.includes("FROM process_opportunities")) return options?.opportunity === undefined
             ? { status: "captured" } : options.opportunity;
           return null;
@@ -106,5 +111,35 @@ describe("process opportunity discovery", () => {
     await expect(updateOpportunity(stale.env, "tenant-1", "operator-1", "opp-1", 2,
       "Stale correction", candidate)).rejects.toBeInstanceOf(OpportunityRevisionConflict);
     expect(stale.writes).toHaveLength(0);
+  });
+
+  it("requires attributable evidence and a same-tenant owner to complete readiness", async () => {
+    const ready = environment({ readinessCheck: {
+      id: "check-1", label: "Business owner confirmed", stage: "conversion", opportunity_status: "qualified"
+    } });
+    const result = await updateOpportunityReadiness(ready.env, "tenant-1", "builder-1", "opp-1",
+      "owner_confirmed", {
+        status: "confirmed", evidence: "Finance owner approved the baseline in the discovery review.",
+        ownerId: "member-1", dueAt: null
+      });
+    expect(result).toMatchObject({ status: "confirmed", ownerId: "member-1" });
+    expect(JSON.stringify(ready.writes)).toContain("opportunity.readiness_updated");
+
+    const outside = environment({ readinessCheck: {
+      id: "check-1", label: "Business owner confirmed", stage: "conversion", opportunity_status: "qualified"
+    }, member: null });
+    await expect(updateOpportunityReadiness(outside.env, "tenant-1", "builder-1", "opp-1",
+      "owner_confirmed", { status: "confirmed", evidence: "Confirmed outside the tenant.",
+        ownerId: "outside-member", dueAt: null })).rejects.toThrow("active member");
+    expect(outside.writes).toHaveLength(0);
+  });
+
+  it("blocks conversion until every conversion-stage check is complete", async () => {
+    const incomplete = environment({ opportunity: {
+      id: "opp-1", status: "qualified", blueprint_id: null, recommended_template_id: "template-document-intake"
+    }, readinessSummary: { total: 4, complete: 3 } });
+    await expect(convertOpportunity(incomplete.env, "tenant-1", "builder-1", "opp-1"))
+      .rejects.toThrow("conversion-readiness");
+    expect(incomplete.writes).toHaveLength(0);
   });
 });

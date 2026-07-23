@@ -380,6 +380,10 @@ export interface ProcessOpportunity {
   blueprint_id: string | null;
   blueprint_name: string | null;
   revision: number;
+  conversion_check_total: number;
+  conversion_check_complete: number;
+  release_check_total: number;
+  release_check_complete: number;
   created_at: string;
 }
 export interface OpportunityRevision {
@@ -388,6 +392,24 @@ export interface OpportunityRevision {
   change_reason: string | null;
   changed_by: string;
   created_at: string;
+}
+export interface OpportunityReadinessCheck {
+  id: string;
+  check_key: string;
+  label: string;
+  stage: "conversion" | "release";
+  status: "open" | "confirmed" | "not_applicable";
+  evidence: string | null;
+  owner_id: string | null;
+  owner_email: string | null;
+  owner_name: string | null;
+  due_at: string | null;
+  updated_at: string | null;
+}
+export interface OpportunityReadinessData {
+  checks: OpportunityReadinessCheck[];
+  conversion: { complete: number; total: number; ready: boolean };
+  release: { complete: number; total: number; ready: boolean };
 }
 export interface Member {
   id: string;
@@ -702,6 +724,14 @@ export const api = {
       `/api/opportunities/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
   opportunityRevisions: (id: string) =>
     request<{ data: OpportunityRevision[] }>(`/api/opportunities/${encodeURIComponent(id)}/revisions`),
+  opportunityReadiness: (id: string) =>
+    request<{ data: OpportunityReadinessData }>(`/api/opportunities/${encodeURIComponent(id)}/readiness`),
+  updateOpportunityReadiness: (id: string, checkKey: string, body: {
+    status: "open" | "confirmed" | "not_applicable"; evidence: string; ownerId: string; dueAt: string | null;
+  }) => request<{ data: { opportunityId: string; checkKey: string; status: string; ownerId: string | null;
+    dueAt: string | null } }>(
+    `/api/opportunities/${encodeURIComponent(id)}/readiness/${encodeURIComponent(checkKey)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   qualifyOpportunity: (id: string, status: "qualified" | "approved" | "declined", qualificationNote: string) =>
     request<{ data: { id: string; status: string; qualificationNote: string | null } }>(
       `/api/opportunities/${encodeURIComponent(id)}/qualification`,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, BriefcaseBusiness, CheckCircle2, Download, Gauge, Plus, RefreshCw, Sparkles } from "lucide-react";
-import { api, type OpportunityRevision, type ProcessOpportunity, type ProcessTemplate, type SessionData } from "./api";
+import { api, type Member, type OpportunityReadinessData, type OpportunityRevision, type ProcessOpportunity,
+  type ProcessTemplate, type SessionData } from "./api";
 import "./opportunities.css";
 
 export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
@@ -10,10 +11,15 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
 }) {
   const [items, setItems] = useState<ProcessOpportunity[]>([]);
   const [templates, setTemplates] = useState<ProcessTemplate[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [showCapture, setShowCapture] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [changeReason, setChangeReason] = useState("");
   const [history, setHistory] = useState<Record<string, OpportunityRevision[]>>({});
+  const [readiness, setReadiness] = useState<Record<string, OpportunityReadinessData>>({});
+  const [readinessDrafts, setReadinessDrafts] = useState<Record<string, {
+    status: "open" | "confirmed" | "not_applicable"; evidence: string; ownerId: string; dueAt: string;
+  }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string>>({});
@@ -25,9 +31,11 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
   });
   async function load() {
     try {
-      const [opportunities, processTemplates] = await Promise.all([api.opportunities(), api.processTemplates()]);
+      const [opportunities, processTemplates, organizationMembers] =
+        await Promise.all([api.opportunities(), api.processTemplates(), api.members()]);
       setItems(opportunities.data);
       setTemplates(processTemplates.data);
+      setMembers(organizationMembers.data.filter((member) => member.status === "active" && member.role !== "consumer"));
       setSelectedTemplates(Object.fromEntries(opportunities.data.map((item) =>
         [item.id, item.recommended_template_id ?? processTemplates.data[0]?.id ?? ""])));
     } catch (error) { onNotice(error instanceof Error ? error.message : "Opportunity backlog could not load"); }
@@ -88,6 +96,33 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
     try {
       setHistory({ ...history, [item.id]: (await api.opportunityRevisions(item.id)).data });
     } catch (error) { onNotice(error instanceof Error ? error.message : "Opportunity history could not load"); }
+  }
+  async function toggleReadiness(item: ProcessOpportunity) {
+    if (readiness[item.id]) {
+      setReadiness((current) => { const next = { ...current }; delete next[item.id]; return next; });
+      return;
+    }
+    try {
+      const data = (await api.opportunityReadiness(item.id)).data;
+      setReadiness({ ...readiness, [item.id]: data });
+      setReadinessDrafts((current) => ({ ...current, ...Object.fromEntries(data.checks.map((check) => [check.id, {
+        status: check.status, evidence: check.evidence ?? "", ownerId: check.owner_id ?? "",
+        dueAt: check.due_at ? check.due_at.slice(0, 10) : ""
+      }])) }));
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Opportunity readiness could not load"); }
+  }
+  async function saveReadiness(item: ProcessOpportunity, checkId: string, checkKey: string) {
+    const draft = readinessDrafts[checkId];
+    if (!draft) return;
+    setBusy(checkId);
+    try {
+      await api.updateOpportunityReadiness(item.id, checkKey, { ...draft, dueAt: draft.dueAt || null });
+      const data = (await api.opportunityReadiness(item.id)).data;
+      setReadiness({ ...readiness, [item.id]: data });
+      await load();
+      onNotice("Delivery-readiness evidence saved and audited.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Readiness evidence could not be saved"); }
+    finally { setBusy(null); }
   }
   async function qualify(item: ProcessOpportunity, status: "qualified" | "approved" | "declined") {
     setBusy(item.id);
@@ -152,7 +187,11 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
       <header><div><span className={`opportunity-status ${item.status}`}>{item.status}</span><h2>{item.name}</h2><p>{item.purpose}</p></div>
         <div className="priority-score"><strong>{item.priority_score}</strong><small>PRIORITY</small></div></header>
       <div className="score-breakdown"><span><strong>{item.impact_score}</strong> Impact</span><span><strong>{item.feasibility_score}</strong> Feasibility</span>
-        <span>{item.department}</span><span>{item.risk_level} risk</span><span>{item.data_classification} data</span></div>
+        <span>{item.department}</span><span>{item.risk_level} risk</span><span>{item.data_classification} data</span>
+        <span className={item.conversion_check_complete === item.conversion_check_total ? "readiness-ready" : ""}>
+          Conversion {item.conversion_check_complete}/{item.conversion_check_total}</span>
+        <span className={item.release_check_complete === item.release_check_total ? "readiness-ready" : ""}>
+          Release planning {item.release_check_complete}/{item.release_check_total}</span></div>
       <dl><div><dt>Owner</dt><dd>{item.business_owner}</dd></div><div><dt>Manual baseline</dt><dd>{item.volume_per_month}/month · {item.minutes_per_item} min/item</dd></div>
         <div><dt>Estimated effort</dt><dd>{Math.round(item.volume_per_month * item.minutes_per_item / 60)} hours/month</dd></div>
         <div><dt>External action</dt><dd>{item.external_action ? "Yes · govern the write" : "No"}</dd></div>
@@ -161,10 +200,35 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
       <div className="opportunity-evidence-actions">
         {canCapture && item.status !== "converted" && <button onClick={() => edit(item)}>Revise evidence</button>}
         <button onClick={() => void toggleHistory(item)}>{history[item.id] ? "Hide" : "View"} revision history · v{item.revision}</button>
+        <button onClick={() => void toggleReadiness(item)}>{readiness[item.id] ? "Hide" : "Open"} delivery readiness</button>
       </div>
       {history[item.id] && <div className="opportunity-history">{(history[item.id] ?? []).map((revision) =>
         <article key={revision.revision}><strong>Version {revision.revision}</strong><span>{revision.change_reason || "No reason recorded"}</span>
           <small>{revision.changed_by} · {new Date(`${revision.created_at.replace(" ", "T")}Z`).toLocaleString()}</small></article>)}</div>}
+      {readiness[item.id] && <div className="opportunity-readiness">
+        {(["conversion", "release"] as const).map((stage) => <section key={stage}><header><div><strong>{stage === "conversion" ? "Required before process creation" : "Required before release planning completes"}</strong>
+          <small>{stage === "conversion" ? "Customer decisions that block conversion." : "Implementation evidence carried into Process Studio."}</small></div>
+          <span>{readiness[item.id]![stage].complete}/{readiness[item.id]![stage].total}</span></header>
+          {readiness[item.id]!.checks.filter((check) => check.stage === stage).map((check) => {
+            const draft = readinessDrafts[check.id] ?? { status: check.status, evidence: check.evidence ?? "",
+              ownerId: check.owner_id ?? "", dueAt: check.due_at?.slice(0, 10) ?? "" };
+            return <article key={check.id}><div><strong>{check.label}</strong><small>{check.owner_name || "Unassigned"}{check.due_at ? ` · due ${new Date(check.due_at).toLocaleDateString()}` : ""}</small></div>
+              {canCapture && item.status !== "converted" ? <div className="readiness-editor">
+                <select value={draft.status} onChange={(e) => setReadinessDrafts({ ...readinessDrafts,
+                  [check.id]: { ...draft, status: e.target.value as typeof draft.status } })}>
+                  <option value="open">Open</option><option value="confirmed">Confirmed</option><option value="not_applicable">Not applicable</option></select>
+                <select value={draft.ownerId} onChange={(e) => setReadinessDrafts({ ...readinessDrafts,
+                  [check.id]: { ...draft, ownerId: e.target.value } })}><option value="">Select owner</option>
+                  {members.map((member) => <option key={member.id} value={member.id}>{member.display_name} · {member.role}</option>)}</select>
+                <input type="date" value={draft.dueAt} onChange={(e) => setReadinessDrafts({ ...readinessDrafts,
+                  [check.id]: { ...draft, dueAt: e.target.value } })}/>
+                <input className="readiness-evidence" maxLength={1500} placeholder="Specific evidence or reason…" value={draft.evidence}
+                  onChange={(e) => setReadinessDrafts({ ...readinessDrafts, [check.id]: { ...draft, evidence: e.target.value } })}/>
+                <button disabled={busy === check.id} onClick={() => void saveReadiness(item, check.id, check.check_key)}>Save</button>
+              </div> : <p>{check.evidence || "No evidence recorded."}</p>}
+            </article>;
+          })}</section>)}
+      </div>}
       {canQualify && !["converted", "declined"].includes(item.status) && <div className="qualification-controls">
         <textarea maxLength={1500} placeholder="Qualification evidence, constraints, and next step…" value={notes[item.id] ?? item.qualification_note ?? ""}
           onChange={(e) => setNotes({ ...notes, [item.id]: e.target.value })}/>
@@ -175,7 +239,9 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
       {canQualify && ["qualified", "approved"].includes(item.status) && <div className="conversion-controls">
         <select value={selectedTemplates[item.id] ?? ""} onChange={(e) => setSelectedTemplates({ ...selectedTemplates, [item.id]: e.target.value })}>
           <option value="">Select starting pattern</option>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</select>
-        <button className="primary" disabled={busy === item.id} onClick={() => void convert(item)}>Create paused draft process<ArrowRight size={14}/></button>
+        <button className="primary" disabled={busy === item.id || item.conversion_check_total !== 4 ||
+          item.conversion_check_complete !== item.conversion_check_total} onClick={() => void convert(item)}>
+          {item.conversion_check_complete === item.conversion_check_total ? "Create paused draft process" : "Complete conversion readiness"}<ArrowRight size={14}/></button>
       </div>}
       {item.status === "converted" && <button className="converted-link" onClick={() => item.blueprint_id && void onProcessCreated(item.blueprint_id)}>Open {item.blueprint_name || "draft process"}<ArrowRight size={14}/></button>}
       <a className="opportunity-brief-link" href={`/api/opportunities/${encodeURIComponent(item.id)}/brief`}

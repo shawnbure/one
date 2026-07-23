@@ -30,8 +30,8 @@ import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./p
 import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
   updateConnectionLifecycle } from "./connection-operations";
-import { convertOpportunity, createOpportunity, listOpportunities, listOpportunityRevisions,
-  OpportunityRevisionConflict, qualifyOpportunity, updateOpportunity } from "./opportunities";
+import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpportunities, listOpportunityRevisions,
+  OpportunityRevisionConflict, qualifyOpportunity, updateOpportunity, updateOpportunityReadiness } from "./opportunities";
 import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
 
 export { ProcessAgent } from "./agent";
@@ -245,7 +245,7 @@ app.post("/api/notifications/policies/:id/test", requireRoles("admin", "owner"),
   return c.json({ eventId, status: "pending" }, 202);
 });
 
-app.get("/api/members", requireRoles("admin", "owner", "viewer"), async (c) => {
+app.get("/api/members", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role, status, created_at, last_seen_at
     FROM tenant_members WHERE tenant_id = ? ORDER BY display_name`).bind(c.get("tenantId")).all();
   return c.json({ data: results });
@@ -454,6 +454,30 @@ app.get("/api/opportunities/:id/revisions", requireRoles("admin", "builder", "ow
     return c.json({ data: await listOpportunityRevisions(c.env, c.get("tenantId"), opportunityId) });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Opportunity history could not load" }, 404);
+  }
+});
+
+app.get("/api/opportunities/:id/readiness", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+  try {
+    const opportunityId = c.req.param("id");
+    if (!opportunityId) return c.json({ error: "Opportunity id is required" }, 400);
+    return c.json({ data: await getOpportunityReadiness(c.env, c.get("tenantId"), opportunityId) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Opportunity readiness could not load" }, 404);
+  }
+});
+
+app.patch("/api/opportunities/:id/readiness/:checkKey", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  try {
+    const opportunityId = c.req.param("id");
+    const checkKey = c.req.param("checkKey");
+    if (!opportunityId || !checkKey) return c.json({ error: "Opportunity and check are required" }, 400);
+    return c.json({ data: await updateOpportunityReadiness(
+      c.env, c.get("tenantId"), c.get("actorId"), opportunityId, checkKey, await c.req.json()
+    ) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Opportunity readiness could not be updated";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 400);
   }
 });
 

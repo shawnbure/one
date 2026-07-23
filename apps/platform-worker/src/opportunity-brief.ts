@@ -28,6 +28,8 @@ export interface OpportunityImplementationBrief {
     orchestration: string; state: string; inference: string; asynchronousWork: string;
   };
   delivery: {
+    readiness: Array<{ stage: string; check: string; status: string; owner: string | null;
+      dueAt: string | null; evidence: string | null }>;
     discoveryQuestions: string[]; implementationChecklist: string[]; acceptanceGates: string[];
     nextDecision: string;
   };
@@ -37,14 +39,20 @@ export interface OpportunityImplementationBrief {
 
 export async function getOpportunityImplementationBrief(env: Env, tenantId: string, opportunityId: string,
   generatedBy: string): Promise<OpportunityImplementationBrief | null> {
-  const [tenant, row] = await Promise.all([
+  const [tenant, row, readiness] = await Promise.all([
     env.DB.prepare("SELECT name FROM tenants WHERE id=?").bind(tenantId).first<{ name: string }>(),
     env.DB.prepare(`SELECT o.*, t.name template_name, t.execution_profile, t.model_profile, t.autonomy,
       b.name blueprint_name
       FROM process_opportunities o
       LEFT JOIN process_templates t ON t.id=o.recommended_template_id
       LEFT JOIN agent_blueprints b ON b.id=o.blueprint_id AND b.tenant_id=o.tenant_id
-      WHERE o.id=? AND o.tenant_id=?`).bind(opportunityId, tenantId).first<Row>()
+      WHERE o.id=? AND o.tenant_id=?`).bind(opportunityId, tenantId).first<Row>(),
+    env.DB.prepare(`SELECT r.stage, r.label, r.status, r.evidence, r.due_at, m.display_name owner_name
+      FROM opportunity_readiness_checks r
+      LEFT JOIN tenant_members m ON m.id=r.owner_id AND m.tenant_id=r.tenant_id
+      WHERE r.opportunity_id=? AND r.tenant_id=?
+      ORDER BY CASE r.stage WHEN 'conversion' THEN 0 ELSE 1 END, r.label`)
+      .bind(opportunityId, tenantId).all<Row>()
   ]);
   if (!row) return null;
   const systems = safeList(row.systems_json);
@@ -106,6 +114,12 @@ export async function getOpportunityImplementationBrief(env: Env, tenantId: stri
       asynchronousWork: "Cloudflare Queues for buffered jobs, Workflows for recoverable multi-step execution, and Cron only for scheduled dispatch/recovery."
     },
     delivery: {
+      readiness: readiness.results.map((check) => ({
+        stage: String(check.stage), check: String(check.label), status: String(check.status),
+        owner: check.owner_name ? String(check.owner_name) : null,
+        dueAt: check.due_at ? String(check.due_at) : null,
+        evidence: check.evidence ? String(check.evidence) : null
+      })),
       discoveryQuestions: [
         ...(!systems.length ? ["Which systems contain the authoritative input and destination records?"] : []),
         ...(!exceptions.length ? ["Which exceptions require a person, alternate path, or stop condition?"] : []),
@@ -186,6 +200,9 @@ ul{padding-left:20px}.callout{padding:12px;border-left:3px solid #77a78f;backgro
     ["Inference", brief.cloudflarePattern.inference], ["Async and scheduled work", brief.cloudflarePattern.asynchronousWork]
   ])}</section>
 <section><h2>Open discovery questions</h2>${list(brief.delivery.discoveryQuestions)}</section>
+<section><h2>Delivery readiness</h2>${brief.delivery.readiness.length ? facts(brief.delivery.readiness.map((check) => [
+    `${check.stage} · ${check.check}`, `${check.status} · ${check.owner ?? "unassigned"}${check.evidence ? ` · ${check.evidence}` : ""}`
+  ])) : "<p>No readiness evidence recorded.</p>"}</section>
 <section><h2>Implementation checklist</h2>${list(brief.delivery.implementationChecklist)}</section>
 <section><h2>Acceptance gates</h2>${list(brief.delivery.acceptanceGates)}<p class="callout"><strong>Next decision:</strong> ${escapeHtml(brief.delivery.nextDecision)}</p></section>
 <section><h2>Lineage and limitations</h2>${facts([["Opportunity ID", brief.opportunity.id], ["Process", brief.lineage.blueprintName],

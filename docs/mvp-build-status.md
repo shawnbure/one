@@ -126,6 +126,8 @@ Every opportunity also produces a printable, secret-free forward-deployed engine
 
 Captured opportunity evidence is revisioned instead of overwritten. Every correction requires a reason, writes a complete tenant-scoped immutable snapshot, increments an optimistic revision number, and resets the candidate to `captured` so an earlier qualification cannot authorize materially changed facts. Stale saves fail with a conflict and require a reload. Converted opportunity evidence remains immutable and retains its process lineage; authorized viewers can inspect the revision timeline without changing it.
 
+Delivery readiness is explicit and attributable. Business-owner confirmation, current-state/baseline validation, data-classification confirmation, and target-outcome approval must each have a same-tenant owner plus specific evidence before conversion can create a process. Systems ownership, exception/stop conditions, acceptance examples, and the operational support path are tracked separately as release-planning evidence: they do not prevent safe paused-draft creation, but remain visible in the FDE brief and process handoff. Material opportunity revisions reopen every check while preserving assigned owners and due dates. The server rechecks the four conversion gates; disabling a browser button is not the authorization control.
+
 ## Database migration order
 
 Migrations are additive and ordered in `apps/platform-worker/migrations`:
@@ -170,6 +172,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 38. `0038_connection_lifecycle.sql`: credential expiry, rotation ownership, last-success evidence, truthful health detail, and expiry notification policy.
 39. `0039_process_opportunities.sql`: pre-build manual-process intake, transparent prioritization evidence, qualification lifecycle, and conversion lineage.
 40. `0040_opportunity_revisions.sql`: immutable discovery snapshots, correction reasons, optimistic concurrency, and qualification-reset evidence.
+41. `0041_opportunity_readiness.sql`: owned conversion gates, release-planning evidence, due dates, and auditable readiness decisions.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 

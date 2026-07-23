@@ -130,6 +130,10 @@ describe("control-plane security boundary", () => {
         method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
           "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ status: "qualified" })
       }),
+      new Request("http://localhost/api/opportunities/opp-1/readiness/owner_confirmed", {
+        method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ status: "confirmed" })
+      }),
       new Request("http://localhost/api/opportunities/opp-1/convert", {
         method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
           "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ templateId: "template-document-intake" })

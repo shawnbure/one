@@ -29,6 +29,8 @@ const brief: OpportunityImplementationBrief = {
     inference: "Workers AI", asynchronousWork: "Queues and Workflows"
   },
   delivery: {
+    readiness: [{ stage: "conversion", check: "Business owner confirmed", status: "confirmed",
+      owner: "Finance", dueAt: null, evidence: "Owner approved the baseline." }],
     discoveryQuestions: ["Which system is authoritative?"], implementationChecklist: ["Define contracts."],
     acceptanceGates: ["Evaluation gate passes."], nextDecision: "Convert to a paused draft."
   },
@@ -42,7 +44,7 @@ describe("opportunity implementation brief", () => {
     for (const heading of [
       "Business opportunity", "Manual baseline", "Prioritization", "Control posture",
       "Cloudflare execution pattern", "Open discovery questions", "Implementation checklist",
-      "Acceptance gates", "Lineage and limitations"
+      "Delivery readiness", "Acceptance gates", "Lineage and limitations"
     ]) expect(html).toContain(heading);
     expect(html).toContain("Execution-sticky");
     expect(html).toContain("Evaluation gate passes.");
