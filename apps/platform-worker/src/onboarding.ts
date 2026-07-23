@@ -334,6 +334,17 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
     env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
       (id, tenant_id, event_type, channel, destination, enabled, severity, owner_id,
        acknowledgement_required, escalation_minutes)
+      VALUES (?, ?, 'usage.budget_threshold', 'in_app', NULL, 1, 'warning',
+        COALESCE(
+          (SELECT support_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?),
+          (SELECT id FROM tenant_members WHERE tenant_id = ? AND status = 'active'
+           AND role IN ('owner', 'admin', 'operator')
+           ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, created_at LIMIT 1)
+        ), 1, 1440)`)
+      .bind(`notify-budget-threshold-${suffix}`, tenantId, tenantId, tenantId),
+    env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity, owner_id,
+       acknowledgement_required, escalation_minutes)
       VALUES (?, ?, 'platform.maintenance_degraded', 'in_app', NULL, 1, 'critical',
         COALESCE(
           (SELECT recovery_owner_id FROM tenant_lifecycle_settings WHERE tenant_id = ?),

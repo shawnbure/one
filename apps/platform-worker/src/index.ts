@@ -75,6 +75,7 @@ import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
   setLaunchpadThreadArchived } from "./launchpad";
 import { emitMaintenanceDegradedAlerts, runScheduledMaintenance } from "./maintenance";
+import { emitBudgetThresholdAlerts } from "./budget-alerts";
 import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
 
 export { ProcessAgent } from "./agent";
@@ -2396,6 +2397,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
             new Date(now.getTime() - 90 * 24 * 60 * 60_000).toISOString()),
         env.DB.prepare(`DELETE FROM platform_maintenance_runs
           WHERE started_at < ?`).bind(new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString()),
+        env.DB.prepare(`DELETE FROM budget_threshold_alert_receipts
+          WHERE created_at < ?`).bind(new Date(now.getTime() - 460 * 24 * 60 * 60_000).toISOString()),
         env.DB.prepare(`INSERT INTO audit_events
           (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
           VALUES (?, 'demo', 'system', 'maintenance.tick', 'platform', 'workrr', ?)`)
@@ -2413,7 +2416,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       { name: "rubric_key_expiry", run: () => expireRubricPublisherKeys(env, now) },
       { name: "autonomy_safety", run: () => evaluateAllAutonomySafety(env, now) },
       { name: "access_session_expiry", run: () => expireAccessSessions(env, now) },
-      { name: "value_target_reviews", run: () => emitValueTargetReviewAlerts(env, now) }
+      { name: "value_target_reviews", run: () => emitValueTargetReviewAlerts(env, now) },
+      { name: "budget_threshold_alerts", run: () => emitBudgetThresholdAlerts(env, now) }
     ], now).then(async (result) => {
       await emitMaintenanceDegradedAlerts(env, result);
       return result;

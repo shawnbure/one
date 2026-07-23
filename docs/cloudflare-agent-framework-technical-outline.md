@@ -998,6 +998,8 @@ Deliverables:
 
 Cost governance has two nested monthly boundaries. A tenant budget always applies, and an owner may optionally allocate a lower budget to one process. Both use captured Workers AI cost evidence from operations and evaluation cases. Hard limits are checked at synchronous admission and again inside delayed Workflow/evaluation steps immediately before model use; warning-only policies remain visible without blocking. The boundary is intentionally a settled-evidence guardrail rather than a distributed prepaid reservation system, so bounded parallel calls may settle just beyond it.
 
+Hourly Cron evaluates budget thresholds through one bounded aggregate query and creates owned notification tasks without inference. A receipt keyed by tenant, scope, calendar month, and warning/hard-limit stage provides race-safe deduplication. Claims are released when no enabled routing policy creates an event, preserving recoverability after customer configuration changes. Notification evidence carries allocation metadata only and routes the operator back to Usage.
+
 Exit criteria: multiple tenants can operate with measurable isolation, reliability, and cost controls.
 
 ### Phase 4 — AI Gateway handoff

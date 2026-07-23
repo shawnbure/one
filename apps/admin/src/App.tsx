@@ -578,7 +578,8 @@ export function App() {
           ) : active === "Notifications" ? (
             <NotificationsView session={session} onNotice={setNotice}
               onOpenValue={() => setActive("Value & decisions")}
-              onOpenSetup={() => setActive("Customer setup")} />
+              onOpenSetup={() => setActive("Customer setup")}
+              onOpenUsage={() => setActive("Usage & budgets")} />
           ) : active === "Customer setup" ? (
             <CustomerSetupView session={session} onNotice={setNotice} />
           ) : active === "Team & roles" ? (

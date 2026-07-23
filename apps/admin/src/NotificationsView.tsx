@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Bell, CheckCircle2, KeyRound, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { api, type Member, type NotificationData, type SessionData } from "./api";
 
-export function NotificationsView({ session, onNotice, onOpenValue, onOpenSetup }: {
+export function NotificationsView({ session, onNotice, onOpenValue, onOpenSetup, onOpenUsage }: {
   session: SessionData | null;
   onNotice: (message: string) => void;
   onOpenValue: () => void;
   onOpenSetup: () => void;
+  onOpenUsage: () => void;
 }) {
   const [data, setData] = useState<NotificationData | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -142,6 +143,8 @@ export function NotificationsView({ session, onNotice, onOpenValue, onOpenSetup 
           <button className="notification-action" onClick={onOpenValue}>Review target in Value &amp; decisions</button>}
         {event.event_type === "platform.maintenance_degraded" &&
           <button className="notification-action" onClick={onOpenSetup}>Review maintenance in Customer Setup</button>}
+        {event.event_type === "usage.budget_threshold" &&
+          <button className="notification-action" onClick={onOpenUsage}>Review allocation in Usage &amp; budgets</button>}
         {event.channel === "in_app" && Boolean(event.acknowledgement_required) && !event.acknowledged_at && canAcknowledge && <span className="acknowledgement-editor">
           <input maxLength={1000} placeholder="Optional response note…" value={acknowledgementNotes[event.id] ?? ""} onChange={(input) =>
             setAcknowledgementNotes({ ...acknowledgementNotes, [event.id]: input.target.value })}/>
