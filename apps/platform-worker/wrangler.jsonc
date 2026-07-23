@@ -69,7 +69,7 @@
       "triggers": { "crons": ["0 * * * *"] },
       "vars": {
         "ENVIRONMENT": "development",
-        "ACCESS_TEAM_DOMAIN": "https://beyondorbit.cloudflareaccess.com",
+        "ACCESS_TEAM_DOMAIN": "https://workrr-one.cloudflareaccess.com",
         "ACCESS_AUD": "27ae84d632232f993e89fb6d9b0489ed6683758137d99fabee869f4a3840656b"
       }
     }

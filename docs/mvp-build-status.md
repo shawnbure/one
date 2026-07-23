@@ -57,6 +57,7 @@ Do not add KV for prompts unless measurement proves a distinct global distributi
 - Webhook secrets are Wrangler secrets. They are never stored in Git or returned by an API.
 - Governance exports are redacted evidence, not a raw secret/configuration dump.
 - Production must have its own Access application and audience; never reuse development's audience.
+- The account Zero Trust organization is `Workrr One` at `workrr-one.cloudflareaccess.com`; legacy organization names must not appear in customer authentication.
 
 ## Control-plane API map
 
