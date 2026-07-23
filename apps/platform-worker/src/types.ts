@@ -4,6 +4,8 @@ import type { ProcessAgent } from "./agent";
 export interface Env {
   DB: D1Database;
   AI: Ai;
+  KNOWLEDGE_BUCKET: R2Bucket;
+  KNOWLEDGE_INDEX: VectorizeIndex;
   PROCESS_AGENT: DurableObjectNamespace<ProcessAgent>;
   PROCESS_QUEUE: Queue<WorkrrQueueJob>;
   PROCESS_WORKFLOW: Workflow;

@@ -21,7 +21,8 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, and JSON evidence export |
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
-| Foundations | Connections, knowledge, evaluations, and model profile starting points |
+| Knowledge Center | Governed text/file intake, pre-storage DLP, R2 source/chunk storage, queued Workers AI embedding, tenant-filtered Vectorize retrieval, process bindings, citations, diagnostics, test query, reindex, and removal |
+| Foundations | Connections, evaluations, and model profile starting points |
 | Customer setup | Idempotent launch manifest for profile, membership, paused first process, baseline, evaluation gate, draft release, readiness, and secret-free export |
 | Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook and delegated Microsoft 365 email delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
@@ -81,6 +82,7 @@ The Worker currently exposes these route groups:
 - Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`
 - Integration intake: `/webhooks/:endpointId`, `/api/webhooks`
 - Operational delivery: `/api/notifications`, policy configuration, and signed delivery tests
+- Knowledge: `/api/knowledge-sources`, reindex/removal, and `/api/knowledge/query`
 - Incident operations: `/api/incidents`, lifecycle transitions, `/api/tenant/mode`, and process containment/recovery
 - Quality controls: `/api/evaluations/:id`, curated cases, exact-release runs, and publish gates
 - Operations: `/health`, `/api/overview`, `/api/system/capabilities`
@@ -119,6 +121,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 26. `0026_process_schedules.sql`: tenant recurring-process controls and per-occurrence dispatch evidence.
 27. `0027_queue_operations.sql`: application-level Queue lifecycle, retry/dead-letter evidence, and replay lineage.
 28. `0028_microsoft_email_notifications.sql`: disabled-by-default operational email routes for Microsoft Graph delivery.
+29. `0029_knowledge_center.sql`: R2/Vectorize source lifecycle, chunk provenance, retrieval diagnostics, and index evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -163,6 +166,8 @@ Evaluation scenarios export as a versioned `workrr-evaluation/v1` JSON package c
 Model grading is optional and additive to deterministic assertions. A case may define up to three short rubric criteria and uses one secondary `fast` Cloudflare Workers AI call to score all of them. Candidate output is treated as untrusted data; the judge is instructed to return compact JSON scores and brief evidence without hidden reasoning. Judge input and output cross the tenant DLP boundary, judge tokens and estimated cost are added to the case ledger, a score of at least 0.8 passes a criterion, and no suite may contain more than 25 model-graded cases.
 
 Microsoft email notification policies are disabled by default. An owner must connect a delegated operating account with the explicit `Mail.Send` capability, configure exactly one validated recipient per policy, and then enable or test the route. Queue workers obtain short-lived access tokens from the encrypted rotating refresh token and call Microsoft Graph `/me/sendMail`; refresh tokens and access tokens are never returned to the browser, logged, or stored as notification evidence. Graph HTTP 202 is recorded as provider acceptance, not proof of final mailbox delivery.
+
+Knowledge source bytes never use D1 as a content cache. Workrr applies the tenant input-DLP policy before storing the approved representation in R2, records only lifecycle/provenance metadata in D1, and hands embedding work to Queue. Vectorize stores embeddings in a tenant namespace and requires both tenant metadata filtering and a tenant-scoped D1 chunk join before an R2 chunk is returned. Process bindings are enforced during retrieval. Durable actors, instant execution, and Workflows all call the same bounded retrieval path; retrieved text is delimited as untrusted reference material and does not become conversation memory. Removing a source deletes its D1 catalog, R2 original/chunks, and Vectorize records.
 
 Organizations may maintain up to 20 tenant-scoped rubric templates, each containing one to three weighted quality criteria. New tenants receive actionable operations, safe communication, and structured handoff templates. Builders can create, archive, and restore templates in the Evaluation Lab; viewers can inspect them. Applying a template copies its criteria into the golden case rather than retaining a live reference. That preserves historical evidence, prevents later template edits from silently changing an existing release gate, and avoids a template lookup on every evaluation case execution. Case creation uses one consolidated scenario/count query, an additional D1 read only when a template is selected, and a batched case/scenario write.
 

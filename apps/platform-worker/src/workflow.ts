@@ -6,6 +6,7 @@ import type { Env } from "./types";
 import { emitNotification } from "./notifications";
 import { pricedCompletionSql } from "./usage";
 import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
+import { augmentWithKnowledge } from "./knowledge";
 
 interface ProcessWorkflowParams { tenantId: string; request: ExecutionRequest }
 
@@ -28,8 +29,10 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       if (result.blocked) throw new DlpBlockedError(result.blockedDetectors);
       return result.modelText;
     });
+    const groundedInput = await step.do("retrieve approved knowledge", async () =>
+      (await augmentWithKnowledge(this.env, tenantId, request.blueprintId, protectedInput)).input);
     const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
-      runModel(this.env, context.blueprint.modelProfile, context.prompt, protectedInput));
+      runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput));
     const result = await step.do("enforce output DLP policy", async () => {
       const protectedOutput = await applyDlp(this.env, tenantId, rawResult.output, {
         direction: "output", stage: "workflow", executionId: event.instanceId, blueprintId: request.blueprintId

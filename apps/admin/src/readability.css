@@ -7,6 +7,17 @@
   --muted: #56645e;
 }
 
+/* Comfortable default for customer-facing administration; dense labels remain at 12–13px below. */
+body { font-size: 15px; }
+.hero p,
+.panel-head p,
+.page-title p,
+.foundation-card > p { font-size: 14px !important; line-height: 1.55; }
+nav button,
+.aside-bottom > button { font-size: 14px !important; }
+.page-title h1,
+.hero h1 { line-height: 1.2; }
+
 body,
 button,
 input,

@@ -194,6 +194,14 @@ export interface GovernanceData {
   }>;
   dataFlow: string[];
 }
+export interface KnowledgeCitation {
+  sourceId: string;
+  sourceName: string;
+  chunkId: string;
+  score: number;
+  excerpt: string;
+  provenance: string;
+}
 
 export interface ApiLog {
   id: string;
@@ -475,6 +483,22 @@ export const api = {
       { method: "POST" },
     ),
   governance: () => request<{ data: GovernanceData }>("/api/governance"),
+  createKnowledgeSource: async (form: FormData) => {
+    const response = await fetch("/api/knowledge-sources", { method: "POST", body: form });
+    const payload = await response.json().catch(() => ({})) as { data?: { id: string; status: string }; error?: string };
+    if (!response.ok) throw new ApiError(payload.error ?? `Request failed (${response.status})`, response.status);
+    return payload as { data: { id: string; status: string } };
+  },
+  queryKnowledge: (query: string, blueprintId?: string) =>
+    request<{ data: KnowledgeCitation[] }>("/api/knowledge/query", {
+      method: "POST", body: JSON.stringify({ query, blueprintId }),
+    }),
+  reindexKnowledgeSource: (id: string) =>
+    request<{ data: { id: string; status: string } }>(
+      `/api/knowledge-sources/${encodeURIComponent(id)}/reindex`, { method: "POST", body: "{}" }),
+  deleteKnowledgeSource: (id: string) =>
+    request<{ data: { id: string; deleted: boolean } }>(
+      `/api/knowledge-sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
   setProcessMode: (processId: string, mode: string, reason: string) =>
     request<{ updated: boolean; mode: string }>(
       `/api/processes/${encodeURIComponent(processId)}/mode`,

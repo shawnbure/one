@@ -22,7 +22,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { api, type EvaluationDetail, type GovernanceData } from "./api";
+import { api, type EvaluationDetail, type GovernanceData, type KnowledgeCitation } from "./api";
 import "./governed-standards.css";
 
 interface Props {
@@ -49,7 +49,7 @@ export function FoundationView({ section, onNotice }: Props) {
   if (!data)
     return <div className="loading-card">Loading {section.toLowerCase()}…</div>;
   if (section === "Connections") return <Connections data={data} onReload={load} onNotice={onNotice} />;
-  if (section === "Knowledge") return <Knowledge data={data} />;
+  if (section === "Knowledge") return <Knowledge data={data} onReload={load} onNotice={onNotice} />;
   if (section === "Evaluations") return <Evaluations data={data} onReload={load} onNotice={onNotice} />;
   return <Governance data={data} onReload={load} onNotice={onNotice} />;
 }
@@ -208,7 +208,56 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
     </section>
   );
 }
-function Knowledge({ data }: { data: GovernanceData }) {
+function Knowledge({ data, onReload, onNotice }: {
+  data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void;
+}) {
+  const [form, setForm] = useState({ name: "", owner: "", provenance: "", sensitivity: "internal", text: "" });
+  const [file, setFile] = useState<File | null>(null);
+  const [processes, setProcesses] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [queryProcess, setQueryProcess] = useState("");
+  const [citations, setCitations] = useState<KnowledgeCitation[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  async function upload(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy("upload");
+    try {
+      const body = new FormData();
+      Object.entries(form).forEach(([key, value]) => body.set(key, value));
+      body.set("allowedProcesses", JSON.stringify(processes));
+      if (file) body.set("file", file);
+      await api.createKnowledgeSource(body);
+      setForm({ name: "", owner: "", provenance: "", sensitivity: "internal", text: "" });
+      setFile(null);
+      setProcesses([]);
+      onNotice("Source accepted. Cloudflare Queue is indexing it now.");
+      await onReload();
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Source upload failed"); }
+    finally { setBusy(null); }
+  }
+  async function testQuery(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy("query");
+    try {
+      const result = await api.queryKnowledge(query, queryProcess || undefined);
+      setCitations(result.data);
+      if (!result.data.length) onNotice("No approved source matched this query.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Knowledge query failed"); }
+    finally { setBusy(null); }
+  }
+  async function reindex(id: string) {
+    setBusy(id);
+    try { await api.reindexKnowledgeSource(id); onNotice("Reindex queued."); await onReload(); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Reindex failed"); }
+    finally { setBusy(null); }
+  }
+  async function remove(id: string, name: string) {
+    if (!window.confirm(`Remove ${name} and its indexed chunks?`)) return;
+    setBusy(id);
+    try { await api.deleteKnowledgeSource(id); onNotice("Source and indexed chunks removed."); await onReload(); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Removal failed"); }
+    finally { setBusy(null); }
+  }
   return (
     <section className="foundation-page">
       <Title
@@ -217,6 +266,56 @@ function Knowledge({ data }: { data: GovernanceData }) {
         title="Knowledge"
         text="Approved sources remain attributable, sensitivity-labelled, and explicitly bound to processes."
       />
+      <div className="knowledge-workspace">
+        <form className="panel knowledge-ingest" onSubmit={upload}>
+          <div className="panel-head"><div><h2>Add an approved source</h2><p>Text, Markdown, CSV, or JSON · 2 MB maximum · DLP checked before storage</p></div></div>
+          <div className="knowledge-form-grid">
+            <label>Name<input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+            <label>Business owner<input required maxLength={120} value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} /></label>
+            <label>Provenance<input required maxLength={300} placeholder="Approved handbook v4" value={form.provenance}
+              onChange={(e) => setForm({ ...form, provenance: e.target.value })} /></label>
+            <label>Sensitivity<select value={form.sensitivity} onChange={(e) => setForm({ ...form, sensitivity: e.target.value })}>
+              <option value="public">Public</option><option value="internal">Internal</option>
+              <option value="confidential">Confidential</option><option value="restricted">Restricted</option>
+            </select></label>
+          </div>
+          <label>Approved processes <small>Leave empty to make this source available to all processes.</small></label>
+          <div className="knowledge-processes">
+            {data.processes.map((process) => {
+              const processId = String(process.id);
+              return <label key={processId}><input type="checkbox" checked={processes.includes(processId)}
+                onChange={(event) => setProcesses(event.target.checked ? [...processes, processId] : processes.filter((id) => id !== processId))} />
+                {process.name}</label>;
+            })}
+          </div>
+          <label>Paste source text<textarea rows={7} value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })}
+            placeholder="Paste a policy, playbook, procedure, or approved reference…" /></label>
+          <div className="knowledge-upload-row">
+            <label className="file-picker"><Upload size={16} /> Choose file<input type="file" accept=".txt,.md,.markdown,.csv,.json,text/*,application/json"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
+            <span>{file?.name ?? "No file selected"}</span>
+            <button className="primary" disabled={busy === "upload"}>{busy === "upload" ? "Uploading…" : "Add and index"}</button>
+          </div>
+        </form>
+        <form className="panel knowledge-test" onSubmit={testQuery}>
+          <div className="panel-head"><div><h2>Retrieval test</h2><p>See exactly what a process can retrieve, with source evidence.</p></div></div>
+          <label>Process scope<select value={queryProcess} onChange={(event) => setQueryProcess(event.target.value)}>
+            <option value="">All approved sources</option>
+            {data.processes.map((process) => <option key={process.id} value={process.id}>{process.name}</option>)}
+          </select></label>
+          <label>Question<textarea required rows={4} value={query} onChange={(event) => setQuery(event.target.value)}
+            placeholder="What does our policy say about…?" /></label>
+          <button className="primary" disabled={busy === "query"}>{busy === "query" ? "Searching…" : "Test retrieval"}</button>
+          <div className="citation-list">
+            {citations.map((citation, index) => <article key={citation.chunkId}>
+              <strong>[K{index + 1}] {citation.sourceName}</strong>
+              <small>{Math.round(citation.score * 100)}% match · {citation.provenance}</small>
+              <p>{citation.excerpt}</p>
+            </article>)}
+          </div>
+        </form>
+      </div>
+      <div className="knowledge-section-head"><div><h2>Source catalog</h2><p>{data.knowledge.length} governed sources</p></div></div>
       <div className="knowledge-list panel">
         {data.knowledge.map((item) => (
           <article key={String(item.id)}>
@@ -227,7 +326,7 @@ function Knowledge({ data }: { data: GovernanceData }) {
               <strong>{item.name}</strong>
               <small>{item.provenance}</small>
               <em>
-                {parseArray(item.allowed_processes_json ?? "[]").join(" · ")}
+                {parseArray(item.allowed_processes_json ?? "[]").join(" · ") || "All processes"}
               </em>
             </span>
             <span>
@@ -241,6 +340,10 @@ function Knowledge({ data }: { data: GovernanceData }) {
             <span className={`connection-state ${item.status}`}>
               <i />
               {item.status}
+            </span>
+            <span className="knowledge-actions">
+              <button type="button" disabled={busy === item.id} onClick={() => void reindex(String(item.id))}><RefreshCw size={14} /> Reindex</button>
+              <button type="button" disabled={busy === item.id} onClick={() => void remove(String(item.id), String(item.name))}><XCircle size={14} /> Remove</button>
             </span>
           </article>
         ))}

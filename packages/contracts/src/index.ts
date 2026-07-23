@@ -72,7 +72,13 @@ export interface NotificationDeliveryJob {
   channel?: "webhook" | "email";
 }
 
-export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob;
+export interface KnowledgeIndexJob {
+  kind: "knowledge_index";
+  tenantId: string;
+  sourceId: string;
+}
+
+export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob | KnowledgeIndexJob;
 
 export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequest): string | null {
   const base = request.blueprintId;

@@ -6,6 +6,7 @@ import type { ProcessAgent } from "./agent";
 import type { Env } from "./types";
 import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
 import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
+import { augmentWithKnowledge } from "./knowledge";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   const blueprint = await getBlueprint(env, tenantId, request.blueprintId);
@@ -43,9 +44,10 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     return { executionId, instanceKey, profile: blueprint.executionProfile, status: "queued", startedAt };
   }
 
+  const grounded = await augmentWithKnowledge(env, tenantId, blueprint.id, inputDlp.modelText);
   if (blueprint.executionProfile === "instant") {
     const prompt = await requiredPrompt(env, promptReleaseId);
-    const result = await runModel(env, blueprint.modelProfile, prompt, inputDlp.modelText);
+    const result = await runModel(env, blueprint.modelProfile, prompt, grounded.input);
     const outputDlp = await applyDlp(env, tenantId, result.output, {
       direction: "output", stage: "execution", executionId, blueprintId: blueprint.id
     });
@@ -65,7 +67,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
   }
   let result;
   try {
-    result = await agent.execute(inputDlp.modelText, inputDlp.safeText, blueprint.modelProfile, executionId);
+    result = await agent.execute(grounded.input, inputDlp.safeText, blueprint.modelProfile, executionId);
   } catch (error) {
     if (isDlpBlocked(error)) await failBlockedOutput(env, executionId,
       error instanceof DlpBlockedError ? error.detectors : ["sensitive content"]);

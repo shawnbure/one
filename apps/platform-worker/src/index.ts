@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { executionProfiles, type ExecutionRequest, type QueueJob, type WorkrrQueueJob } from "@workrr/contracts";
+import { executionProfiles, type ExecutionRequest, type KnowledgeIndexJob, type QueueJob, type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
 import { listBlueprints } from "./repository";
@@ -18,6 +18,8 @@ import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, 
 import { isDlpBlocked, updateDlpRule } from "./dlp";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
+import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
+  queryKnowledge, queueKnowledgeReindex } from "./knowledge";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -630,6 +632,45 @@ app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "rev
 app.get("/api/governance", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getGovernance(c.env, c.get("tenantId")) }));
 
+app.post("/api/knowledge-sources", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    return c.json({ data: await createKnowledgeSource(c.env, c.get("tenantId"), c.get("actorId"),
+      await c.req.formData()) }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Knowledge source could not be created" },
+      isDlpBlocked(error) ? 422 : 400);
+  }
+});
+
+app.post("/api/knowledge-sources/:id/reindex", requireRoles("admin", "builder", "owner"), async (c) => {
+  const sourceId = c.req.param("id");
+  if (!sourceId) return c.json({ error: "Knowledge source ID is required" }, 400);
+  try {
+    return c.json({ data: await queueKnowledgeReindex(c.env, c.get("tenantId"), c.get("actorId"), sourceId) }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Knowledge source could not be reindexed" }, 404);
+  }
+});
+
+app.delete("/api/knowledge-sources/:id", requireRoles("admin", "builder", "owner"), async (c) => {
+  const sourceId = c.req.param("id");
+  if (!sourceId) return c.json({ error: "Knowledge source ID is required" }, 400);
+  try {
+    return c.json({ data: await deleteKnowledgeSource(c.env, c.get("tenantId"), c.get("actorId"), sourceId) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Knowledge source could not be removed" }, 404);
+  }
+});
+
+app.post("/api/knowledge/query", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  try {
+    const body = await c.req.json<{ query?: string; blueprintId?: string }>();
+    return c.json({ data: await queryKnowledge(c.env, c.get("tenantId"), body.query ?? "", body.blueprintId) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Knowledge query failed" }, 400);
+  }
+});
+
 app.get("/api/governance/export", requireRoles("admin", "owner", "viewer"), async (c) => {
   const governance = await getGovernance(c.env, c.get("tenantId"));
   c.header("content-disposition", `attachment; filename="workrr-deployment-readiness-${new Date().toISOString().slice(0, 10)}.json"`);
@@ -1008,6 +1049,18 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
         } catch (error) {
           console.error(JSON.stringify({ event: "notification_delivery_failed", eventId: message.body.eventId, error: String(error) }));
           if (message.attempts >= 5) await failNotificationDelivery(env, message.body.tenantId, message.body.eventId, error);
+          message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
+        }
+        continue;
+      }
+      if (message.body.kind === "knowledge_index") {
+        const job: KnowledgeIndexJob = message.body;
+        try {
+          await indexKnowledgeSource(env, job);
+          message.ack();
+        } catch (error) {
+          console.error(JSON.stringify({ event: "knowledge_index_failed", sourceId: job.sourceId, error: String(error) }));
+          if (message.attempts >= 5) await markKnowledgeIndexFailure(env, job, error);
           message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
         }
         continue;
