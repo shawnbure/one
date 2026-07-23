@@ -15,6 +15,9 @@ function environment(role = "admin") {
         async first<T extends Row>() {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
+          if (sql.includes("SELECT p.channel, p.destination")) return {
+            channel: "webhook", destination: "https://customer.example/events", secret_binding: "NOTIFICATION_WEBHOOK_SECRET"
+          } as T;
           return null;
         },
         async run() { return { meta: { changes: 1 } }; },
@@ -65,5 +68,15 @@ describe("control-plane security boundary", () => {
     }), env as never, executionCtx as never);
     expect(response.status).toBe(400);
     expect(queries.some((sql) => sql.includes("INSERT INTO agent_blueprints"))).toBe(false);
+  });
+
+  it("does not enable external delivery when its Cloudflare credential is absent", async () => {
+    const { env, queries } = environment("admin");
+    const response = await app.fetch(new Request("http://localhost/api/notifications/policies/notify-webhook", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({ enabled: true })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(409);
+    expect(queries.some((sql) => sql.includes("UPDATE notification_policies SET"))).toBe(false);
   });
 });

@@ -184,8 +184,12 @@ export interface OnboardingData {
   checklist: Array<{ id: string; label: string; ready: boolean }>;
 }
 export interface NotificationData {
-  policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string; updated_at: string }>;
-  events: Array<{ id: string; event_type: string; severity: string; title: string; detail: string; delivery_status: string; created_at: string }>;
+  policies: Array<{ id: string; event_type: string; channel: string; destination: string | null; enabled: number; severity: string;
+    updated_at: string; credential_name: string | null; credential_configured: number }>;
+  events: Array<{ id: string; event_type: string; severity: string; title: string; detail: string; delivery_status: string;
+    attempt_count: number; last_error: string | null; response_status: number | null; created_at: string }>;
+  credentials: Array<{ id: string; name: string; provider: string; secret_binding: string; purpose: string; status: string;
+    last_validated_at: string | null; configured: number }>;
 }
 export interface UsageData {
   summary: { executions: number; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number };
@@ -335,7 +339,10 @@ export const api = {
   updateOnboarding: (body: { organizationName: string; supportEmail: string; accentColor: string; defaultModelProfile: string; dataRegion: string }) =>
     request<{ data: OnboardingData }>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
   notifications: () => request<{ data: NotificationData }>("/api/notifications"),
-  updateNotificationPolicy: (id: string, body: { enabled: boolean }) => request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  updateNotificationPolicy: (id: string, body: { enabled?: boolean; destination?: string | null }) =>
+    request<{ updated: boolean }>(`/api/notifications/policies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  testNotificationPolicy: (id: string) =>
+    request<{ eventId: string; status: string }>(`/api/notifications/policies/${id}/test`, { method: "POST", body: "{}" }),
   importProcessPackage: (body: unknown) => request<{ data: { id: string; status: string } }>("/api/process-packages/import", { method: "POST", body: JSON.stringify(body) }),
   usage: () => request<{ data: UsageData }>("/api/usage"),
   updateBudget: (body: { monthlyLimitUsd: number; warningPercent: number; hardLimit: boolean }) =>

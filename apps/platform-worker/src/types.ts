@@ -1,16 +1,17 @@
-import type { QueueJob } from "@workrr/contracts";
+import type { WorkrrQueueJob } from "@workrr/contracts";
 import type { ProcessAgent } from "./agent";
 
 export interface Env {
   DB: D1Database;
   AI: Ai;
   PROCESS_AGENT: DurableObjectNamespace<ProcessAgent>;
-  PROCESS_QUEUE: Queue<QueueJob>;
+  PROCESS_QUEUE: Queue<WorkrrQueueJob>;
   PROCESS_WORKFLOW: Workflow;
   ENVIRONMENT: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
   WEBHOOK_INBOX_SECRET?: string;
+  NOTIFICATION_WEBHOOK_SECRET?: string;
   LOCAL_DEV?: string;
 }
 

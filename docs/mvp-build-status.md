@@ -22,7 +22,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | API Logs | Correlated request history and webhook visibility |
 | Foundations | Connections, knowledge, evaluations, and model profile starting points |
 | Customer setup | Organization profile, readiness checklist, and secret-free portable deployment manifest |
-| Notifications | Tenant-scoped routing policies and persisted delivery evidence for operational events |
+| Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 | Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, and optional hard limit |
 
@@ -59,6 +59,8 @@ Do not add KV for prompts unless measurement proves a distinct global distributi
 - Mutating browser requests require same-origin context.
 - Webhooks require HMAC SHA-256 signatures, enforce a 1 MB body maximum, deduplicate deliveries, and hand accepted work to a Queue.
 - Webhook secrets are Wrangler secrets. They are never stored in Git or returned by an API.
+- Outbound connector credentials remain Cloudflare secrets. D1 stores only tenant-scoped binding references, readiness metadata, and redacted delivery evidence.
+- Outbound webhook delivery accepts only public HTTPS destinations on port 443 without query credentials, refuses redirects, signs `timestamp.body` with HMAC-SHA256, and uses the notification event ID as its idempotency key.
 - Governance exports are redacted evidence, not a raw secret/configuration dump.
 - Production must have its own Access application and audience; never reuse development's audience.
 - The account Zero Trust organization is `Workrr One` at `workrr-one.cloudflareaccess.com`; legacy organization names must not appear in customer authentication.
@@ -75,6 +77,7 @@ The Worker currently exposes these route groups:
 - Human review: `/api/approvals`, assignment, approve/decline
 - Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`
 - Integration intake: `/webhooks/:endpointId`, `/api/webhooks`
+- Operational delivery: `/api/notifications`, policy configuration, and signed delivery tests
 - Operations: `/health`, `/api/overview`, `/api/system/capabilities`
 
 Role checks are attached at the route boundary and repository queries remain tenant-scoped.
@@ -95,6 +98,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 10. `0010_notification_policies.sql`: alert routing policies and delivery evidence.
 11. `0011_release_evaluation_gate.sql`: release-specific evaluation status and scenario backfill.
 12. `0012_usage_budgets.sql`: captured model rates, execution cost estimates, and tenant budget policy.
+13. `0013_connector_delivery.sql`: secret references, signed webhook policy, and delivery attempt evidence.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -112,7 +116,7 @@ Before each production promotion:
 1. Verify the production Access application and explicit customer allow policy.
 2. Verify the production `ACCESS_TEAM_DOMAIN` and production-specific `ACCESS_AUD`; never reuse dev's audience.
 3. Validate tenant memberships and least-privilege roles.
-4. Configure integration secrets with `wrangler secret put` when a real sender exists.
+4. Configure `WEBHOOK_INBOX_SECRET` and `NOTIFICATION_WEBHOOK_SECRET` with `wrangler secret put`; never place values in D1 or Git.
 5. Review and apply pending D1 migrations to the production database.
 6. Run typecheck, tests, build, and a dry-run deploy.
 7. Merge the reviewed `dev` commit into `main`, then verify health, Access redirect, login, one read, and one controlled mutation.
@@ -129,17 +133,17 @@ npm run build
 
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
-The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewer memberships cannot change administrative policies, signed webhooks reject invalid/unapproved input and deduplicate delivery, Workflows persist token usage and terminal failures, and durable identity keys remain sticky only within the intended scope. These tests run locally with no Workers AI calls.
+The runtime suite proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, viewer memberships cannot change administrative policies, inbound webhooks reject invalid/unapproved input and deduplicate delivery, outbound webhooks restrict destinations, sign envelopes, avoid duplicate delivery, and require configured credentials, Workflows persist token usage and terminal failures, and durable identity keys remain sticky only within the intended scope. These tests run locally with no Workers AI calls or external deliveries.
 
 ## Remaining aggressive-MVP work
 
 The foundation is usable, but these are the highest-value next slices:
 
 1. Customer onboarding wizard that provisions membership, branding, default controls, and a first process from a single manifest.
-2. Connector credential vault and OAuth lifecycle, beginning with one real customer system rather than a broad empty catalog.
+2. Add the first provider-specific OAuth lifecycle on top of the implemented Cloudflare secret-reference and generic signed-webhook connector foundation.
 3. Rich evaluation datasets, expected-output assertions, and release-to-release comparison. Deterministic release-specific publish gates are implemented.
 4. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
-5. Add authenticated delivery workers for email/webhook notification channels; in-app policy routing is implemented.
+5. Add authenticated email delivery; Queue-backed signed webhook delivery is implemented.
 6. Production Access bootstrap and a scripted, reviewable environment promotion command.
 7. Expand the current identity, tenant, role, package, durable-stickiness, Workflow accounting, and webhook-deduplication tests into live-environment smoke tests with disposable customer fixtures.
 

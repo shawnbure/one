@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { executionProfiles, type ExecutionRequest, type QueueJob } from "@workrr/contracts";
+import { executionProfiles, type ExecutionRequest, type QueueJob, type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { executeRequest } from "./execution";
 import { listBlueprints } from "./repository";
@@ -9,7 +9,7 @@ import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, exportCustomerManifest, getOnboarding } from "./onboarding";
-import { emitNotification } from "./notifications";
+import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { runEvaluation } from "./evaluation";
 import { getUsageLedger } from "./usage";
@@ -62,22 +62,77 @@ app.get("/api/onboarding/export", requireRoles("admin", "owner"), async (c) => {
 });
 
 app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {
-  const [policies, events] = await Promise.all([
-    c.env.DB.prepare("SELECT * FROM notification_policies WHERE tenant_id = ? ORDER BY event_type, channel").bind(c.get("tenantId")).all(),
-    c.env.DB.prepare("SELECT * FROM notification_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 100").bind(c.get("tenantId")).all()
+  const [policies, events, credentials] = await Promise.all([
+    c.env.DB.prepare(`SELECT p.*, r.name credential_name, r.secret_binding,
+      CASE WHEN r.secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END credential_configured
+      FROM notification_policies p LEFT JOIN integration_credential_refs r
+      ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
+      WHERE p.tenant_id = ? ORDER BY p.event_type, p.channel`)
+      .bind(c.env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, c.get("tenantId")).all(),
+    c.env.DB.prepare("SELECT * FROM notification_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 100").bind(c.get("tenantId")).all(),
+    c.env.DB.prepare(`SELECT id, name, provider, secret_binding, purpose, status, last_validated_at,
+      CASE WHEN secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END configured
+      FROM integration_credential_refs WHERE tenant_id = ? ORDER BY name`)
+      .bind(c.env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, c.get("tenantId")).all()
   ]);
-  return c.json({ data: { policies: policies.results, events: events.results } });
+  return c.json({ data: { policies: policies.results, events: events.results, credentials: credentials.results } });
 });
 
 app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), async (c) => {
   const policyId = c.req.param("id");
   if (!policyId) return c.json({ error: "Notification policy ID is required" }, 400);
   const body = await c.req.json<{ enabled?: boolean; destination?: string | null }>();
-  const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled), destination = COALESCE(?, destination),
+  const policy = await c.env.DB.prepare(`SELECT p.channel, p.destination, r.secret_binding
+    FROM notification_policies p LEFT JOIN integration_credential_refs r ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
+    WHERE p.id = ? AND p.tenant_id = ?`).bind(policyId, c.get("tenantId"))
+    .first<{ channel: string; destination: string | null; secret_binding: string | null }>();
+  if (!policy) return c.json({ error: "Notification policy not found" }, 404);
+  const destination = body.destination === undefined ? policy.destination : body.destination?.trim() || null;
+  if (policy.channel === "webhook" && destination) {
+    try { safeWebhookDestination(destination); } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Invalid webhook destination" }, 400);
+    }
+  }
+  if (policy.channel === "webhook" && body.enabled === true &&
+      (!destination || policy.secret_binding !== "NOTIFICATION_WEBHOOK_SECRET" || !c.env.NOTIFICATION_WEBHOOK_SECRET)) {
+    return c.json({ error: "Configure a public HTTPS destination and the outbound signing credential before enabling delivery" }, 409);
+  }
+  const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled),
+    destination = CASE WHEN ? = 1 THEN ? ELSE destination END,
     updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
-    .bind(typeof body.enabled === "boolean" ? Number(body.enabled) : null, body.destination ?? null, policyId, c.get("tenantId")).run();
-  if (result.meta.changes) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "notification_policy.updated", "notification_policy", policyId, body);
+    .bind(typeof body.enabled === "boolean" ? Number(body.enabled) : null, Number(body.destination !== undefined),
+      destination, policyId, c.get("tenantId")).run();
+  if (result.meta.changes) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "notification_policy.updated",
+    "notification_policy", policyId, { enabled: body.enabled, destinationConfigured: Boolean(destination) });
   return c.json({ updated: result.meta.changes === 1 });
+});
+
+app.post("/api/notifications/policies/:id/test", requireRoles("admin", "owner"), async (c) => {
+  const policyId = c.req.param("id");
+  const tenantId = c.get("tenantId");
+  if (!policyId) return c.json({ error: "Notification policy ID is required" }, 400);
+  const policy = await c.env.DB.prepare(`SELECT p.event_type, p.channel, p.destination, p.enabled, r.secret_binding
+    FROM notification_policies p LEFT JOIN integration_credential_refs r ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
+    WHERE p.id = ? AND p.tenant_id = ?`).bind(policyId, tenantId)
+    .first<{ event_type: string; channel: string; destination: string | null; enabled: number; secret_binding: string | null }>();
+  if (!policy) return c.json({ error: "Notification policy not found" }, 404);
+  if (policy.channel !== "webhook") return c.json({ error: "Only webhook policies require an external delivery test" }, 409);
+  try { safeWebhookDestination(policy.destination); } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Invalid webhook destination" }, 409);
+  }
+  if (policy.secret_binding !== "NOTIFICATION_WEBHOOK_SECRET" || !c.env.NOTIFICATION_WEBHOOK_SECRET) {
+    return c.json({ error: "Outbound webhook signing credential is not configured" }, 409);
+  }
+  const eventId = crypto.randomUUID();
+  await c.env.DB.prepare(`INSERT INTO notification_events
+    (id, tenant_id, policy_id, event_type, severity, title, detail, target_type, target_id, delivery_status)
+    SELECT ?, tenant_id, id, event_type, severity, 'Workrr delivery test',
+      'This signed test verifies the configured notification destination.', 'notification_policy', id, 'pending'
+    FROM notification_policies WHERE id = ? AND tenant_id = ?`)
+    .bind(eventId, policyId, tenantId).run();
+  await c.env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId }, { contentType: "json" });
+  await writeAudit(c.env, tenantId, c.get("actorId"), "notification_policy.test_queued", "notification_policy", policyId, { eventId });
+  return c.json({ eventId, status: "pending" }, 202);
 });
 
 app.get("/api/members", requireRoles("admin", "owner", "viewer"), async (c) => {
@@ -415,22 +470,34 @@ app.get("/api/system/capabilities", (c) => c.json({
   gateway: "planned"
 }));
 
-const handler: ExportedHandler<Env, QueueJob> = {
+const handler: ExportedHandler<Env, WorkrrQueueJob> = {
   fetch: app.fetch,
   async queue(batch, env) {
     for (const message of batch.messages) {
+      if (message.body.kind === "notification_delivery") {
+        try {
+          await deliverNotificationWebhook(env, message.body.tenantId, message.body.eventId);
+          message.ack();
+        } catch (error) {
+          console.error(JSON.stringify({ event: "notification_delivery_failed", eventId: message.body.eventId, error: String(error) }));
+          if (message.attempts >= 5) await failNotificationDelivery(env, message.body.tenantId, message.body.eventId, error);
+          message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
+        }
+        continue;
+      }
+      const job: QueueJob = message.body;
       try {
-        await executeRequest(env, message.body.tenantId ?? "demo", message.body, message.body.executionId);
+        await executeRequest(env, job.tenantId ?? "demo", job, job.executionId);
         message.ack();
       } catch (error) {
-        console.error(JSON.stringify({ event: "queue_job_failed", executionId: message.body.executionId, error: String(error) }));
+        console.error(JSON.stringify({ event: "queue_job_failed", executionId: job.executionId, error: String(error) }));
         const terminal = message.attempts >= 5;
         await env.DB.prepare("UPDATE executions SET status = ?, error = ?, completed_at = ? WHERE id = ? AND tenant_id = ?")
           .bind(terminal ? "failed" : "queued", error instanceof Error ? error.message : String(error), terminal ? new Date().toISOString() : null,
-            message.body.executionId, message.body.tenantId ?? "demo").run();
-        if (terminal) await emitNotification(env, message.body.tenantId ?? "demo", {
+            job.executionId, job.tenantId ?? "demo").run();
+        if (terminal) await emitNotification(env, job.tenantId ?? "demo", {
           eventType: "queue.retry_exhausted", title: "Process job exhausted retries",
-          detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: message.body.executionId
+          detail: error instanceof Error ? error.message : String(error), targetType: "execution", targetId: job.executionId
         });
         message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
       }

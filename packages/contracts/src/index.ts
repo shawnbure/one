@@ -59,10 +59,19 @@ export interface ExecutionResult {
 }
 
 export interface QueueJob extends ExecutionRequest {
+  kind?: "execution";
   executionId: string;
   attempt: number;
   tenantId?: string;
 }
+
+export interface NotificationDeliveryJob {
+  kind: "notification_delivery";
+  tenantId: string;
+  eventId: string;
+}
+
+export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob;
 
 export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequest): string | null {
   const base = request.blueprintId;

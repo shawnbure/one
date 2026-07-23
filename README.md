@@ -12,6 +12,8 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
 - Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and Cron maintenance wiring.
 - Signed, idempotent webhook ingestion with a bounded request body and queue handoff.
+- HMAC-signed outbound webhook notifications with public-destination validation, Queue retries, delivery testing, and persisted attempt evidence.
+- Tenant-scoped credential references whose values remain in Cloudflare secrets rather than D1, exports, logs, or browser bundles.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
 - Shared typed contracts and tests for sticky identity routing.
 
