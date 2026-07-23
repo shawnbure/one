@@ -124,8 +124,9 @@ export async function enqueueDueProcessDisposals(env: Env, now = new Date()) {
       .bind(jobId, now.toISOString(), item.id, item.tenant_id).run();
     if (claim.meta.changes !== 1) continue;
     try {
-      await env.PROCESS_QUEUE.send({ kind: "process_disposal", tenantId: item.tenant_id,
-        retirementId: item.id }, { contentType: "json" });
+      await env.PROCESS_DISPOSAL_WORKFLOW.create({
+        id: jobId, params: { tenantId: item.tenant_id, retirementId: item.id }
+      });
       queued += 1;
     } catch (error) {
       await env.DB.prepare(`UPDATE process_retirements SET status='approved', disposal_job_id=NULL,
@@ -205,6 +206,106 @@ export async function disposeProcess(env: Env, tenantId: string, retirementId: s
         new Date().toISOString(), retirementId, tenantId).run();
     throw error;
   }
+}
+
+export async function loadDisposalBatch(env: Env, tenantId: string, retirementId: string,
+  cursor: string, limit = 100) {
+  const retirement = await env.DB.prepare(`SELECT blueprint_id FROM process_retirements
+    WHERE id=? AND tenant_id=? AND status='disposing' AND legal_hold=0`)
+    .bind(retirementId, tenantId).first<{ blueprint_id: string }>();
+  if (!retirement) throw new Error("Disposal Workflow is not active or is protected by legal hold");
+  const result = await env.DB.prepare(`SELECT DISTINCT instance_key FROM executions
+    WHERE tenant_id=? AND blueprint_id=? AND instance_key IS NOT NULL AND instance_key>?
+    ORDER BY instance_key LIMIT ?`).bind(tenantId, retirement.blueprint_id, cursor, limit)
+    .all<{ instance_key: string }>();
+  return result.results.map((item) => item.instance_key);
+}
+
+export async function eraseDisposalBatch(env: Env, tenantId: string, retirementId: string,
+  instanceKeys: string[]) {
+  const retirement = await env.DB.prepare(`SELECT blueprint_id FROM process_retirements
+    WHERE id=? AND tenant_id=? AND status='disposing' AND legal_hold=0`)
+    .bind(retirementId, tenantId).first<{ blueprint_id: string }>();
+  if (!retirement) throw new Error("Disposal Workflow is not active or is protected by legal hold");
+  let conversationTurns = 0;
+  let agentPromptBundles = 0;
+  for (let offset = 0; offset < instanceKeys.length; offset += 20) {
+    const results = await Promise.all(instanceKeys.slice(offset, offset + 20).map(async (instanceKey) => {
+      const agent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey);
+      return agent.eraseData(tenantId, retirement.blueprint_id);
+    }));
+    for (const result of results) {
+      conversationTurns += result.turns;
+      agentPromptBundles += result.promptBundles;
+    }
+  }
+  return { durableActors: instanceKeys.length, conversationTurns, agentPromptBundles };
+}
+
+export async function recordDisposalProgress(env: Env, tenantId: string, retirementId: string,
+  cursor: string, counts: { durableActors: number; conversationTurns: number; agentPromptBundles: number }) {
+  await env.DB.prepare(`UPDATE process_retirements SET disposal_cursor=?, processed_actors=?,
+    disposed_turns=?, disposed_prompt_bundles=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id=? AND tenant_id=? AND status='disposing'`)
+    .bind(cursor, counts.durableActors, counts.conversationTurns, counts.agentPromptBundles,
+      retirementId, tenantId).run();
+  return counts;
+}
+
+export async function finalizeProcessDisposal(env: Env, tenantId: string, retirementId: string,
+  counts: { durableActors: number; conversationTurns: number; agentPromptBundles: number }) {
+  const retirement = await env.DB.prepare(`SELECT * FROM process_retirements
+    WHERE id=? AND tenant_id=? AND status='disposing' AND legal_hold=0`)
+    .bind(retirementId, tenantId).first<Record<string, unknown>>();
+  if (!retirement) throw new Error("Disposal Workflow is not active or is protected by legal hold");
+  const blueprintId = String(retirement.blueprint_id);
+  const now = new Date().toISOString();
+  const statements = [
+    env.DB.prepare(`UPDATE process_schedules SET status='paused', input_text='[disposed]', updated_at=?
+      WHERE tenant_id=? AND blueprint_id=?`).bind(now, tenantId, blueprintId),
+    env.DB.prepare(`UPDATE webhook_endpoints SET status='disabled' WHERE tenant_id=? AND blueprint_id=?`)
+      .bind(tenantId, blueprintId),
+    env.DB.prepare(`UPDATE agent_blueprints SET status='paused', operating_mode='paused',
+      description='Retired process — operational configuration retained for audit.', updated_at=?
+      WHERE tenant_id=? AND id=?`).bind(now, tenantId, blueprintId)
+  ];
+  if (Number(retirement.delete_execution_payloads)) statements.push(
+    env.DB.prepare(`UPDATE executions SET input_preview='[disposed]', output_preview=NULL, error=NULL
+      WHERE tenant_id=? AND blueprint_id=?`).bind(tenantId, blueprintId)
+  );
+  if (Number(retirement.delete_approval_content)) statements.push(
+    env.DB.prepare(`UPDATE approvals SET action_input_json='{"disposed":true}'
+      WHERE tenant_id=? AND execution_id IN (SELECT id FROM executions WHERE tenant_id=? AND blueprint_id=?)`)
+      .bind(tenantId, tenantId, blueprintId),
+    env.DB.prepare(`UPDATE approval_messages SET body='[disposed]'
+      WHERE tenant_id=? AND approval_id IN (SELECT a.id FROM approvals a JOIN executions e
+        ON e.id=a.execution_id AND e.tenant_id=a.tenant_id WHERE a.tenant_id=? AND e.blueprint_id=?)`)
+      .bind(tenantId, tenantId, blueprintId)
+  );
+  if (Number(retirement.delete_prompt_content)) statements.push(
+    env.DB.prepare(`UPDATE prompt_releases SET system_prompt='[disposed]', instructions_json='[]',
+      guardrails_json='[]' WHERE blueprint_id=?`).bind(blueprintId)
+  );
+  const evidence = { ...counts, executionPayloads: Boolean(retirement.delete_execution_payloads),
+    approvalContent: Boolean(retirement.delete_approval_content),
+    promptContent: Boolean(retirement.delete_prompt_content), auditRetained: true, disposedAt: now };
+  statements.push(
+    env.DB.prepare(`UPDATE process_retirements SET status='disposed', disposed_at=?, disposed_by='system',
+      evidence_json=?, processed_actors=?, disposed_turns=?, disposed_prompt_bundles=?,
+      disposal_cursor=NULL, last_error=NULL, updated_at=? WHERE id=? AND tenant_id=?`)
+      .bind(now, JSON.stringify(evidence), counts.durableActors, counts.conversationTurns,
+        counts.agentPromptBundles, now, retirementId, tenantId),
+    audit(env, tenantId, "system", "process.disposed", blueprintId, { retirementId, ...evidence })
+  );
+  await env.DB.batch(statements);
+  return evidence;
+}
+
+export async function failProcessDisposal(env: Env, tenantId: string, retirementId: string, error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+  await env.DB.prepare(`UPDATE process_retirements SET status='failed', last_error=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id=? AND tenant_id=? AND status='disposing'`).bind(message, retirementId, tenantId).run();
+  return { status: "failed", error: message };
 }
 
 function audit(env: Env, tenantId: string, actorId: string, eventType: string, blueprintId: string, detail: unknown) {

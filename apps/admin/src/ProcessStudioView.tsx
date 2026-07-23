@@ -809,6 +809,9 @@ function RetirementStudio({ processId, data, session, busy, setBusy, onReload, o
       {open && <div className="retirement-active"><dl><div><dt>Requested by</dt><dd>{open.requested_by_name ?? open.requested_by}</dd></div>
         <div><dt>Status</dt><dd>{open.status}</dd></div><div><dt>Legal hold</dt><dd>{open.legal_hold ? "Applied" : "None"}</dd></div>
         <div><dt>Scheduled</dt><dd>{open.scheduled_for ? formatStudioDate(open.scheduled_for) : "Not approved"}</dd></div></dl>
+        {open.status === "disposing" && <div className="retirement-progress"><Workflow size={16}/>
+          <span><strong>{open.processed_actors} durable actors cleared</strong>
+            <small>{open.disposed_turns} conversation turns · {open.disposed_prompt_bundles} actor prompt bundles</small></span></div>}
         <p>{open.reason}</p>{open.last_error && <div className="retirement-error">{open.last_error}</div>}
         {open.evidence_json && <pre>{JSON.stringify(JSON.parse(open.evidence_json), null, 2)}</pre>}
         {canGovern && !["disposing","disposed"].includes(open.status) && <div className="retirement-governance">
@@ -828,7 +831,7 @@ function RetirementStudio({ processId, data, session, busy, setBusy, onReload, o
         </div>}</div>}
     </article>
     <aside className="retirement-evidence panel"><h2>Preserved evidence</h2><ul><li>Retirement request and rationale</li><li>Legal-hold history</li>
-      <li>Independent approval identity</li><li>Scheduled disposal and Queue job</li><li>Counts of cleared durable actors and payloads</li>
+      <li>Independent approval identity</li><li>Scheduled, resumable Cloudflare Workflow</li><li>Counts of cleared durable actors and payloads</li>
       <li>Immutable audit metadata</li></ul><p>Knowledge sources are not deleted because they may be shared. Process access is removed by pausing the process and its ingestion paths.</p>
       {data.retirements.filter((item) => !open || item.id !== open.id).map((item) => <div className="retirement-history" key={item.id}>
         <strong>{item.status}</strong><small>{formatStudioDate(item.requested_at)} · {item.requested_by_name ?? item.requested_by}</small></div>)}</aside>

@@ -38,7 +38,8 @@
   "workflows": [
     { "name": "workrr-process-workflow", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" },
     { "name": "workrr-evaluation-workflow", "binding": "EVALUATION_WORKFLOW", "class_name": "EvaluationWorkflow" },
-    { "name": "workrr-actor-release-rollout", "binding": "ACTOR_RELEASE_ROLLOUT", "class_name": "ActorReleaseRolloutWorkflow" }
+    { "name": "workrr-actor-release-rollout", "binding": "ACTOR_RELEASE_ROLLOUT", "class_name": "ActorReleaseRolloutWorkflow" },
+    { "name": "workrr-process-disposal", "binding": "PROCESS_DISPOSAL_WORKFLOW", "class_name": "ProcessDisposalWorkflow" }
   ],
   "triggers": { "crons": ["0 * * * *"] },
   "vars": {
@@ -82,7 +83,8 @@
       "workflows": [
         { "name": "workrr-process-workflow-dev", "binding": "PROCESS_WORKFLOW", "class_name": "ProcessWorkflow" },
         { "name": "workrr-evaluation-workflow-dev", "binding": "EVALUATION_WORKFLOW", "class_name": "EvaluationWorkflow" },
-        { "name": "workrr-actor-release-rollout-dev", "binding": "ACTOR_RELEASE_ROLLOUT", "class_name": "ActorReleaseRolloutWorkflow" }
+        { "name": "workrr-actor-release-rollout-dev", "binding": "ACTOR_RELEASE_ROLLOUT", "class_name": "ActorReleaseRolloutWorkflow" },
+        { "name": "workrr-process-disposal-dev", "binding": "PROCESS_DISPOSAL_WORKFLOW", "class_name": "ProcessDisposalWorkflow" }
       ],
       "triggers": { "crons": ["0 * * * *"] },
       "vars": {

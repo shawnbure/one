@@ -951,6 +951,20 @@ a:focus-visible {
 .retirement-active dd { margin: 0; }
 .retirement-active dd { margin-top: 3px; font-weight: 700; text-transform: capitalize; }
 .retirement-active pre { overflow: auto; padding: 12px; border-radius: 8px; background: #13201c; color: #dcebe4; font-size: 12px; }
+.retirement-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #cfe0d7;
+  border-radius: 9px;
+  background: #f3f8f5;
+  color: #347258;
+}
+.retirement-progress strong,
+.retirement-progress small { display: block; }
+.retirement-progress strong { font-size: 13px; }
+.retirement-progress small { margin-top: 3px; color: #64756d; font-size: 12px; }
 .retirement-error { padding: 9px; border-radius: 7px; background: #fff0ec; color: #904936; }
 .retirement-governance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .retirement-governance section { display: grid; align-content: start; gap: 9px; padding: 12px; border: 1px solid #dfe6e2; border-radius: 9px; }

@@ -376,6 +376,9 @@ export interface ProcessRetirement {
   disposed_at: string | null;
   evidence_json: string | null;
   last_error: string | null;
+  processed_actors: number;
+  disposed_turns: number;
+  disposed_prompt_bundles: number;
 }
 export interface ProcessRetirementData {
   process: { id: string; name: string; status: string; operating_mode: string };

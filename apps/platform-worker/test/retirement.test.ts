@@ -8,6 +8,7 @@ function environment(options?: { retirement?: Record<string, unknown>; due?: Arr
   instances?: Array<{ instance_key: string }> }) {
   const writes: Write[] = [];
   const jobs: unknown[] = [];
+  const workflows: unknown[] = [];
   const DB = {
     prepare(sql: string) {
       let bindings: unknown[] = [];
@@ -40,7 +41,11 @@ function environment(options?: { retirement?: Record<string, unknown>; due?: Arr
       return Promise.all(statements.map((statement) => statement.run()));
     }
   };
-  return { env: { DB, PROCESS_QUEUE: { async send(job: unknown) { jobs.push(job); } } } as never, writes, jobs };
+  return { env: {
+    DB,
+    PROCESS_QUEUE: { async send(job: unknown) { jobs.push(job); } },
+    PROCESS_DISPOSAL_WORKFLOW: { async create(input: unknown) { workflows.push(input); } }
+  } as never, writes, jobs, workflows };
 }
 
 describe("governed process retirement", () => {
@@ -91,8 +96,10 @@ describe("governed process retirement", () => {
   it("claims due disposals once and retains metadata while redacting selected content", async () => {
     const queued = environment({ due: [{ id: "retirement-1", tenant_id: "tenant-1" }] });
     await expect(enqueueDueProcessDisposals(queued.env, new Date())).resolves.toEqual({ queued: 1 });
-    expect(queued.jobs).toEqual([{ kind: "process_disposal", tenantId: "tenant-1",
-      retirementId: "retirement-1" }]);
+    expect(queued.jobs).toEqual([]);
+    expect(queued.workflows).toEqual([expect.objectContaining({
+      params: { tenantId: "tenant-1", retirementId: "retirement-1" }
+    })]);
 
     const disposal = environment();
     await expect(disposeProcess(disposal.env, "tenant-1", "retirement-1"))

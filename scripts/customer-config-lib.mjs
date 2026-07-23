@@ -44,7 +44,8 @@ export function generateCustomerWrangler(input) {
     workflows: [
       { name: `${base}-process-workflow${suffix}`, binding: "PROCESS_WORKFLOW", class_name: "ProcessWorkflow" },
       { name: `${base}-evaluation-workflow${suffix}`, binding: "EVALUATION_WORKFLOW", class_name: "EvaluationWorkflow" },
-      { name: `${base}-actor-release-rollout${suffix}`, binding: "ACTOR_RELEASE_ROLLOUT", class_name: "ActorReleaseRolloutWorkflow" }
+      { name: `${base}-actor-release-rollout${suffix}`, binding: "ACTOR_RELEASE_ROLLOUT", class_name: "ActorReleaseRolloutWorkflow" },
+      { name: `${base}-process-disposal${suffix}`, binding: "PROCESS_DISPOSAL_WORKFLOW", class_name: "ProcessDisposalWorkflow" }
     ],
     triggers: { crons: ["0 * * * *"] },
     vars: { ENVIRONMENT: label, APP_DOMAIN: domain, ACCESS_TEAM_DOMAIN: value.accessTeamDomain,
