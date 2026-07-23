@@ -368,6 +368,7 @@ export function App() {
             <ProcessStudioView
               processId={studioProcessId}
               processes={processes}
+              session={session}
               onSelect={setStudioProcessId}
               onNotice={setNotice}
               onCreate={() => setCreatingProcess(true)}

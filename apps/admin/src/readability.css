@@ -124,7 +124,8 @@ aside {
 .release-safety,
 .model-rates,
 .event-list,
-.setup-checklist {
+.setup-checklist,
+.retirement-evidence {
   position: static;
   inset: auto;
   width: auto;
@@ -809,4 +810,89 @@ a:focus-visible {
 @media (max-width: 760px) {
   .lifecycle-maintenance { grid-template-columns: 1fr 1fr; }
   .lifecycle-maintenance > svg { display: none; }
+}
+
+.retirement-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 16px; }
+.retirement-control,
+.retirement-evidence { overflow: hidden; }
+.retirement-control .section-head h2 { display: flex; align-items: center; gap: 8px; }
+.retirement-status {
+  padding: 5px 9px;
+  border-radius: 12px;
+  background: #eef3f0;
+  color: #50645a;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.retirement-status.requested,
+.retirement-status.approved,
+.retirement-status.failed { background: #fff0dc; color: #8a5b25; }
+.retirement-status.disposing { background: #e9eff8; color: #45678f; }
+.retirement-status.disposed { background: #f0e8e5; color: #7e4a3d; }
+.retirement-request,
+.retirement-active { display: grid; gap: 14px; padding: 20px; }
+.retirement-request > label,
+.retirement-governance label { display: grid; gap: 5px; color: #405149; font-weight: 700; }
+.retirement-request textarea,
+.retirement-request input,
+.retirement-governance input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #ccd8d2;
+  border-radius: 7px;
+  background: #fff;
+  color: #263930;
+}
+.retirement-request textarea { min-height: 100px; resize: vertical; }
+.retirement-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #edcfc5;
+  border-radius: 9px;
+  background: #fff7f4;
+  color: #8c4938;
+}
+.retirement-warning strong,
+.retirement-warning small { display: block; }
+.retirement-scope { display: grid; gap: 8px; padding: 12px; border-radius: 9px; background: #f6f8f7; }
+.retirement-scope label,
+.retirement-scope span { display: flex; align-items: center; gap: 8px; color: #45584f; }
+.danger-action {
+  justify-self: start;
+  padding: 9px 12px;
+  border: 1px solid #b85e49;
+  border-radius: 7px;
+  background: #a94f3b;
+  color: #fff;
+  font-weight: 800;
+}
+.danger-action:disabled { opacity: .45; }
+.retirement-active dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; }
+.retirement-active dl div { padding: 10px; border-radius: 8px; background: #f6f8f7; }
+.retirement-active dt,
+.retirement-active dd { margin: 0; }
+.retirement-active dd { margin-top: 3px; font-weight: 700; text-transform: capitalize; }
+.retirement-active pre { overflow: auto; padding: 12px; border-radius: 8px; background: #13201c; color: #dcebe4; font-size: 12px; }
+.retirement-error { padding: 9px; border-radius: 7px; background: #fff0ec; color: #904936; }
+.retirement-governance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.retirement-governance section { display: grid; align-content: start; gap: 9px; padding: 12px; border: 1px solid #dfe6e2; border-radius: 9px; }
+.retirement-governance h3 { display: flex; align-items: center; gap: 6px; margin: 0; }
+.retirement-governance p { margin: 0; }
+.retirement-governance button { justify-self: start; padding: 8px 10px; }
+.retirement-evidence { padding: 20px; }
+.retirement-evidence h2 { margin-top: 0; }
+.retirement-evidence li,
+.retirement-evidence p { color: #56675f; line-height: 1.55; }
+.retirement-history { padding: 9px 0; border-top: 1px solid #e3e9e6; }
+.retirement-history strong,
+.retirement-history small { display: block; text-transform: capitalize; }
+@media (max-width: 1200px) {
+  .retirement-layout { grid-template-columns: 1fr; }
+  .retirement-governance { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .retirement-active dl { grid-template-columns: 1fr 1fr; }
 }

@@ -107,6 +107,22 @@ describe("control-plane security boundary", () => {
     expect(bundle.status).toBe(403);
   });
 
+  it("separates retirement requests from irreversible disposal approval", async () => {
+    const viewer = environment("viewer");
+    const request = await app.fetch(new Request("http://localhost/api/processes/process-1/retirement", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: "{}"
+    }), viewer.env as never, executionCtx as never);
+    expect(request.status).toBe(403);
+    const builder = environment("builder");
+    const approval = await app.fetch(new Request("http://localhost/api/processes/process-1/retirement/retirement-1", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ action: "approve" })
+    }), builder.env as never, executionCtx as never);
+    expect(approval.status).toBe(403);
+    expect([...viewer.queries, ...builder.queries].some((sql) => sql.includes("UPDATE process_retirements"))).toBe(false);
+  });
+
   it("keeps approval evidence out of consumer sessions and collaboration mutations away from viewers", async () => {
     const consumer = environment("consumer");
     const listResponse = await app.fetch(new Request("http://localhost/api/approvals", {

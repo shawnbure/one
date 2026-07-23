@@ -107,7 +107,13 @@ export interface ToolActionJob {
   dispatchId: string;
 }
 
-export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob | KnowledgeIndexJob | ToolActionJob;
+export interface ProcessDisposalJob {
+  kind: "process_disposal";
+  tenantId: string;
+  retirementId: string;
+}
+
+export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob | KnowledgeIndexJob | ToolActionJob | ProcessDisposalJob;
 
 export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequest): string | null {
   const base = request.blueprintId;

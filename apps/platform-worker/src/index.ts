@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { executionProfiles, type ExecutionRequest, type KnowledgeIndexJob, type QueueJob, type ToolActionJob,
+import { executionProfiles, type ExecutionRequest, type KnowledgeIndexJob, type ProcessDisposalJob, type QueueJob, type ToolActionJob,
   type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
@@ -36,6 +36,8 @@ import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpp
 import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
 import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "./notification-response";
 import { exportSupportBundle, getManagedLifecycle, updateManagedLifecycle } from "./lifecycle";
+import { disposeProcess, enqueueDueProcessDisposals, getProcessRetirement, requestProcessRetirement,
+  transitionProcessRetirement } from "./retirement";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -138,6 +140,42 @@ app.get("/api/lifecycle/support-bundle", requireRoles("admin", "owner", "operato
   c.header("cache-control", "no-store");
   return c.json(await exportSupportBundle(c.env, c.get("tenantId")));
 });
+
+app.get("/api/processes/:id/retirement",
+  requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    try {
+      return c.json({ data: await getProcessRetirement(c.env, c.get("tenantId"), processId) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Retirement evidence could not be loaded" }, 404);
+    }
+  });
+
+app.post("/api/processes/:id/retirement", requireRoles("admin", "builder", "owner"), async (c) => {
+  const processId = c.req.param("id");
+  if (!processId) return c.json({ error: "Process ID is required" }, 400);
+  try {
+    return c.json({ data: await requestProcessRetirement(
+      c.env, c.get("tenantId"), c.get("actorId"), processId, await c.req.json()
+    ) }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Retirement could not be requested" }, 400);
+  }
+});
+
+app.patch("/api/processes/:id/retirement/:retirementId",
+  requireRoles("admin", "owner"), async (c) => {
+    const retirementId = c.req.param("retirementId");
+    if (!retirementId) return c.json({ error: "Retirement ID is required" }, 400);
+    try {
+      return c.json({ data: await transitionProcessRetirement(
+        c.env, c.get("tenantId"), c.get("actorId"), retirementId, await c.req.json()
+      ) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Retirement could not be updated" }, 400);
+    }
+  });
 
 app.post("/api/oauth/microsoft/start", requireRoles("admin", "owner"), async (c) => {
   try {
@@ -1496,6 +1534,18 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
         }
         continue;
       }
+      if (message.body.kind === "process_disposal") {
+        const job: ProcessDisposalJob = message.body;
+        try {
+          await disposeProcess(env, job.tenantId, job.retirementId);
+          message.ack();
+        } catch (error) {
+          console.error(JSON.stringify({ event: "process_disposal_failed", retirementId: job.retirementId,
+            error: String(error) }));
+          message.ack();
+        }
+        continue;
+      }
       if (message.body.kind === "tool_action") {
         const job: ToolActionJob = message.body;
         try {
@@ -1565,7 +1615,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       expireKnowledgeSources(env, now),
       emitConnectionExpiryAlerts(env, now),
       escalateUnacknowledgedNotifications(env, now),
-      enqueueDueNotificationDeliveries(env, now)
+      enqueueDueNotificationDeliveries(env, now),
+      enqueueDueProcessDisposals(env, now)
     ]));
   }
 };

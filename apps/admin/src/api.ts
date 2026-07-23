@@ -187,6 +187,29 @@ export interface StudioData {
     edges: Array<{ from: string; to: string }>;
   };
 }
+export interface ProcessRetirement {
+  id: string;
+  status: "requested" | "approved" | "disposing" | "disposed" | "cancelled" | "failed";
+  reason: string;
+  requested_by: string;
+  requested_by_name: string | null;
+  requested_at: string;
+  legal_hold: number;
+  legal_hold_reason: string | null;
+  delete_execution_payloads: number;
+  delete_approval_content: number;
+  delete_prompt_content: number;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  scheduled_for: string | null;
+  disposed_at: string | null;
+  evidence_json: string | null;
+  last_error: string | null;
+}
+export interface ProcessRetirementData {
+  process: { id: string; name: string; status: string; operating_mode: string };
+  retirements: ProcessRetirement[];
+}
 export interface ProcessSchedule {
   id: string;
   blueprint_id: string;
@@ -661,6 +684,18 @@ export const api = {
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
     ),
+  processRetirement: (id: string) =>
+    request<{ data: ProcessRetirementData }>(`/api/processes/${encodeURIComponent(id)}/retirement`),
+  requestProcessRetirement: (id: string, body: { reason: string; confirmName: string;
+    deleteExecutionPayloads: boolean; deleteApprovalContent: boolean; deletePromptContent: boolean }) =>
+    request<{ data: { id: string; status: string; processPaused: boolean } }>(
+      `/api/processes/${encodeURIComponent(id)}/retirement`, { method: "POST", body: JSON.stringify(body) }),
+  transitionProcessRetirement: (processId: string, retirementId: string, body: {
+    action: "approve" | "hold" | "cancel"; scheduledFor?: string; legalHold?: boolean;
+    legalHoldReason?: string; confirmation?: string;
+  }) => request<{ data: { id: string; status: string; legalHold?: boolean; scheduledFor?: string } }>(
+    `/api/processes/${encodeURIComponent(processId)}/retirement/${encodeURIComponent(retirementId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   schedules: (processId?: string) =>
     request<{ data: ScheduleData }>(
       `/api/process-schedules${processId ? `?process=${encodeURIComponent(processId)}` : ""}`,

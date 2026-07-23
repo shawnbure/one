@@ -82,4 +82,16 @@ export class ProcessAgent extends Agent<Env, AgentState> {
   getConversation(limit = 30): Array<{ role: string; content: string; created_at: string }> {
     return this.sql<{ role: string; content: string; created_at: string }>`SELECT role, content, created_at FROM conversation_turn ORDER BY created_at DESC LIMIT ${Math.min(limit, 100)}`.reverse();
   }
+
+  eraseData(tenantId: string, blueprintId: string): { turns: number; promptBundles: number } {
+    if (this.state.tenantId !== tenantId || this.state.blueprintId !== blueprintId) {
+      throw new Error("Agent retirement identity mismatch");
+    }
+    const turns = this.sql<{ count: number }>`SELECT COUNT(*) count FROM conversation_turn`[0]?.count ?? 0;
+    const promptBundles = this.sql<{ count: number }>`SELECT COUNT(*) count FROM prompt_bundle`[0]?.count ?? 0;
+    this.sql`DELETE FROM conversation_turn`;
+    this.sql`DELETE FROM prompt_bundle`;
+    this.setState(this.initialState);
+    return { turns, promptBundles };
+  }
 }

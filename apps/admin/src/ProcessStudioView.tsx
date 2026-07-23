@@ -18,14 +18,18 @@ import {
   Sparkles,
   Workflow,
   Upload,
+  Archive,
+  LockKeyhole,
+  Trash2,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type ProcessRelease, type ScheduleData, type StudioData } from "./api";
+import { api, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
 import "./schedule-studio.css";
 
 interface Props {
   processId: string | null;
   processes: AgentBlueprint[];
+  session: SessionData | null;
   onSelect: (id: string | null) => void;
   onNotice: (message: string) => void;
   onCreate: () => void;
@@ -35,6 +39,7 @@ interface Props {
 export function ProcessStudioView({
   processId,
   processes,
+  session,
   onSelect,
   onNotice,
   onCreate,
@@ -45,6 +50,7 @@ export function ProcessStudioView({
   return (
     <Studio
       processId={processId}
+      session={session}
       onBack={() => onSelect(null)}
       onNotice={onNotice}
     />
@@ -136,16 +142,19 @@ function ProcessPortfolio({
 
 function Studio({
   processId,
+  session,
   onBack,
   onNotice,
 }: {
   processId: string;
+  session: SessionData | null;
   onBack: () => void;
   onNotice: (message: string) => void;
 }) {
   const [data, setData] = useState<StudioData | null>(null);
   const [scheduleData, setScheduleData] = useState<ScheduleData>({ schedules: [], dispatches: [] });
-  const [tab, setTab] = useState<"design" | "behavior" | "schedules" | "releases">("design");
+  const [retirementData, setRetirementData] = useState<ProcessRetirementData | null>(null);
+  const [tab, setTab] = useState<"design" | "behavior" | "schedules" | "releases" | "retirement">("design");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [instructions, setInstructions] = useState("");
   const [guardrails, setGuardrails] = useState("");
@@ -158,12 +167,14 @@ function Studio({
 
   async function load() {
     try {
-      const [result, schedules] = await Promise.all([
+      const [result, schedules, retirement] = await Promise.all([
         api.studio(processId).then((response) => response.data),
         api.schedules(processId).then((response) => response.data),
+        api.processRetirement(processId).then((response) => response.data),
       ]);
       setData(result);
       setScheduleData(schedules);
+      setRetirementData(retirement);
       setSystemPrompt(result.prompt.system_prompt);
       setInstructions(parseList(result.prompt.instructions_json).join("\n"));
       setGuardrails(parseList(result.prompt.guardrails_json).join("\n"));
@@ -265,7 +276,7 @@ function Studio({
         </div></div>
       </div>
       <nav className="studio-tabs">
-        {(["design", "behavior", "schedules", "releases"] as const).map((value) => (
+        {(["design", "behavior", "schedules", "releases", "retirement"] as const).map((value) => (
           <button
             className={tab === value ? "active" : ""}
             key={value}
@@ -277,6 +288,8 @@ function Studio({
               <FileCode2 size={15} />
             ) : value === "schedules" ? (
               <Clock3 size={15} />
+            ) : value === "retirement" ? (
+              <Archive size={15} />
             ) : (
               <History size={15} />
             )}{" "}
@@ -552,8 +565,94 @@ function Studio({
           ))}
         </div>
       )}
+      {tab === "retirement" && retirementData && <RetirementStudio processId={processId}
+        data={retirementData} session={session} busy={busy} setBusy={setBusy}
+        onReload={load} onNotice={onNotice}/>}
     </section>
   );
+}
+
+function RetirementStudio({ processId, data, session, busy, setBusy, onReload, onNotice }: {
+  processId: string; data: ProcessRetirementData; session: SessionData | null; busy: boolean;
+  setBusy: (value: boolean) => void; onReload: () => Promise<void>; onNotice: (message: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [scheduledFor, setScheduledFor] = useState(() => {
+    const date = new Date(Date.now() + 48 * 60 * 60_000);
+    return date.toISOString().slice(0, 16);
+  });
+  const [holdReason, setHoldReason] = useState("");
+  const [deleteExecutionPayloads, setDeleteExecutionPayloads] = useState(true);
+  const [deleteApprovalContent, setDeleteApprovalContent] = useState(true);
+  const [deletePromptContent, setDeletePromptContent] = useState(false);
+  const open = data.retirements.find((item) => ["requested","approved","disposing","failed"].includes(item.status));
+  const canRequest = ["admin","builder","owner"].includes(session?.user.role ?? "");
+  const canGovern = ["admin","owner"].includes(session?.user.role ?? "");
+  async function requestRetirement() {
+    setBusy(true);
+    try {
+      await api.requestProcessRetirement(processId, { reason, confirmName: confirmation,
+        deleteExecutionPayloads, deleteApprovalContent, deletePromptContent });
+      setReason(""); setConfirmation("");
+      await onReload();
+      onNotice("Retirement requested. The process, schedules, and webhooks are paused immediately.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Retirement request failed"); }
+    finally { setBusy(false); }
+  }
+  async function transition(body: Parameters<typeof api.transitionProcessRetirement>[2]) {
+    if (!open) return;
+    setBusy(true);
+    try {
+      await api.transitionProcessRetirement(processId, open.id, body);
+      setConfirmation(""); setHoldReason("");
+      await onReload();
+      onNotice(`Retirement ${body.action === "hold" ? body.legalHold ? "placed on legal hold" : "legal hold released" : body.action + "d"}.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Retirement update failed"); }
+    finally { setBusy(false); }
+  }
+  return <div className="retirement-layout">
+    <article className="retirement-control panel"><div className="section-head"><div><h2><Archive size={17}/> Process retirement</h2>
+      <p>Retirement stops new work first. Disposal requires a separate approver, a cooling period, and retained audit evidence.</p></div>
+      <span className={`retirement-status ${open?.status ?? "available"}`}>{open?.status ?? "Available"}</span></div>
+      {!open && <div className="retirement-request"><div className="retirement-warning"><Trash2 size={19}/><span><strong>This starts an irreversible governance workflow</strong>
+        <small>The process is paused immediately. Actual disposal cannot occur for at least 24 hours.</small></span></div>
+        <label>Business and compliance reason<textarea minLength={20} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)}
+          placeholder="Why the process is being retired, who authorized the change, and what records must remain."/></label>
+        <div className="retirement-scope"><label><input type="checkbox" checked={deleteExecutionPayloads} onChange={(event) => setDeleteExecutionPayloads(event.target.checked)}/>Dispose execution inputs and outputs</label>
+          <label><input type="checkbox" checked={deleteApprovalContent} onChange={(event) => setDeleteApprovalContent(event.target.checked)}/>Dispose approval content and discussion</label>
+          <label><input type="checkbox" checked={deletePromptContent} onChange={(event) => setDeletePromptContent(event.target.checked)}/>Dispose prompt content</label>
+          <span><ShieldCheck size={15}/>Audit metadata is always retained.</span></div>
+        <label>Enter the exact process name <strong>{data.process.name}</strong><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}/></label>
+        <button className="danger-action" disabled={busy || !canRequest || reason.trim().length < 20 || confirmation !== data.process.name}
+          onClick={() => void requestRetirement()}><Archive size={15}/>Request retirement and pause process</button></div>}
+      {open && <div className="retirement-active"><dl><div><dt>Requested by</dt><dd>{open.requested_by_name ?? open.requested_by}</dd></div>
+        <div><dt>Status</dt><dd>{open.status}</dd></div><div><dt>Legal hold</dt><dd>{open.legal_hold ? "Applied" : "None"}</dd></div>
+        <div><dt>Scheduled</dt><dd>{open.scheduled_for ? formatStudioDate(open.scheduled_for) : "Not approved"}</dd></div></dl>
+        <p>{open.reason}</p>{open.last_error && <div className="retirement-error">{open.last_error}</div>}
+        {open.evidence_json && <pre>{JSON.stringify(JSON.parse(open.evidence_json), null, 2)}</pre>}
+        {canGovern && !["disposing","disposed"].includes(open.status) && <div className="retirement-governance">
+          <section><h3><LockKeyhole size={15}/> Legal hold</h3>
+            {open.legal_hold ? <><p>{open.legal_hold_reason}</p><label>Type RELEASE LEGAL HOLD<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}/></label>
+              <button disabled={busy || confirmation !== "RELEASE LEGAL HOLD"} onClick={() => void transition({ action: "hold", legalHold: false, confirmation })}>Release hold</button></> :
+              <><label>Hold reason<input minLength={10} value={holdReason} onChange={(event) => setHoldReason(event.target.value)}/></label>
+              <button disabled={busy || holdReason.trim().length < 10} onClick={() => void transition({ action: "hold", legalHold: true, legalHoldReason: holdReason })}>Apply legal hold</button></>}</section>
+          {!open.legal_hold && ["requested","failed"].includes(open.status) && <section><h3><ShieldCheck size={15}/> Independent approval</h3>
+            <label>Disposal date and time<input type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)}/></label>
+            <label>Enter {data.process.name}<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}/></label>
+            <button className="danger-action" disabled={busy || open.requested_by === session?.user.id || confirmation !== data.process.name}
+              onClick={() => void transition({ action: "approve", scheduledFor: new Date(scheduledFor).toISOString(), confirmation })}>
+              Approve scheduled disposal</button>{open.requested_by === session?.user.id && <small>A different administrator or owner must approve.</small>}</section>}
+          <section><h3>Cancel retirement</h3><label>Type CANCEL RETIREMENT<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}/></label>
+            <button disabled={busy || confirmation !== "CANCEL RETIREMENT"} onClick={() => void transition({ action: "cancel", confirmation })}>Cancel request</button></section>
+        </div>}</div>}
+    </article>
+    <aside className="retirement-evidence panel"><h2>Preserved evidence</h2><ul><li>Retirement request and rationale</li><li>Legal-hold history</li>
+      <li>Independent approval identity</li><li>Scheduled disposal and Queue job</li><li>Counts of cleared durable actors and payloads</li>
+      <li>Immutable audit metadata</li></ul><p>Knowledge sources are not deleted because they may be shared. Process access is removed by pausing the process and its ingestion paths.</p>
+      {data.retirements.filter((item) => !open || item.id !== open.id).map((item) => <div className="retirement-history" key={item.id}>
+        <strong>{item.status}</strong><small>{formatStudioDate(item.requested_at)} · {item.requested_by_name ?? item.requested_by}</small></div>)}</aside>
+  </div>;
 }
 
 function ScheduleStudio({ processId, executionProfile, data, busy, setBusy, onReload, onNotice }: {
@@ -654,6 +753,12 @@ function nodeIcon(type: string) {
   if (type === "tool") return <Boxes size={20} />;
   if (type === "outcome") return <Check size={20} />;
   return <Play size={20} />;
+}
+function formatStudioDate(value: string) {
+  const date = new Date(value.endsWith("Z") ? value : `${value.replace(" ", "T")}Z`);
+  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit"
+  }).format(date);
 }
 function parseList(value: string): string[] {
   try {
