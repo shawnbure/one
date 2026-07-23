@@ -64,7 +64,7 @@ Conversation, consumer, entity, shared-shard, and temporary-durable profiles reu
 Requirements: Node.js 22+, a Cloudflare account, and Wrangler authentication for live Workers AI calls.
 
 ```bash
-npm install
+npm ci
 npm run cf:types
 npm run db:migrate:local -w @workrr/platform-worker
 npm run dev:worker
@@ -77,6 +77,14 @@ npm run dev
 ```
 
 The admin runs at `http://localhost:5173` and proxies `/api` to the Worker on port 8787. Development mode supplies the seeded `demo` tenant and local admin identity. Production does not accept that fallback.
+
+Before opening a pull request, run the same bounded verification used by CI:
+
+```bash
+npm run verify
+```
+
+The single Ubuntu CI job validates sequential D1 migrations, scans tracked text files for high-confidence committed secrets, typechecks, tests, and performs a Wrangler dry-run build. It has a 12-minute hard timeout and cancels superseded runs on the same branch. CodeQL and operating-system matrices are intentionally excluded; this keeps ordinary `dev`/`main` validation to one hosted job while retaining the application-level security suite.
 
 ## Provision and deploy
 

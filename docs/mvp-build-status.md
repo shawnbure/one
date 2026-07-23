@@ -6,6 +6,8 @@ This is the operational handoff for engineers and build agents. It describes wha
 
 Workrr One is a customer-owned, Cloudflare-native private AI operations platform for organizations that do not maintain an AI development staff. A forward-deployed engineer discovers a manual process, configures and versions its AI behavior, chooses its execution durability, establishes human controls, and leaves the customer with an observable operating application rather than a one-off automation.
 
+Repository CI uses one bounded Ubuntu job for `dev`, `main`, and pull requests. Superseded branch runs are cancelled, the job has a 12-minute ceiling, and it runs deterministic sequential-migration validation, high-confidence tracked-file secret detection, typechecking, the full test suite, and a Wrangler dry-run build. It deliberately avoids CodeQL and platform matrices so routine protection does not recreate the prior high Actions-minute burn.
+
 The product is deliberately process-first. Agents are an execution primitive, not the organizing metaphor in the customer UI.
 
 ## Implemented product surfaces
