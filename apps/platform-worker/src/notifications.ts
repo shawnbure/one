@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { getMicrosoftAccessToken } from "./oauth";
 
 interface DeliveryRow {
   id: string;
@@ -33,8 +34,8 @@ export async function emitNotification(env: Env, tenantId: string, event: {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(id, tenantId, policy.id, event.eventType, policy.severity, event.title, event.detail,
         event.targetType ?? null, event.targetId ?? null, status, status === "delivered" ? new Date().toISOString() : null).run();
-    if (channel === "webhook") {
-      await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId: id }, { contentType: "json" });
+    if (channel === "webhook" || channel === "email") {
+      await env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId: id, channel }, { contentType: "json" });
     }
   }
   return ids;
@@ -102,6 +103,73 @@ export async function deliverNotificationWebhook(env: Env, tenantId: string, eve
   return { delivered: true, duplicate: false, status: response.status };
 }
 
+export async function deliverNotification(env: Env, tenantId: string, eventId: string, channelHint?: "webhook" | "email") {
+  if (channelHint === "webhook") return deliverNotificationWebhook(env, tenantId, eventId);
+  if (channelHint === "email") return deliverNotificationEmail(env, tenantId, eventId);
+  const event = await env.DB.prepare(`SELECT e.delivery_status, p.channel FROM notification_events e
+    JOIN notification_policies p ON p.id=e.policy_id AND p.tenant_id=e.tenant_id
+    WHERE e.id=? AND e.tenant_id=?`).bind(eventId, tenantId)
+    .first<{ delivery_status: string; channel: string }>();
+  if (!event) throw new Error("Notification delivery was not found");
+  if (event.delivery_status === "delivered") return { delivered: true, duplicate: true };
+  if (event.channel === "webhook") return deliverNotificationWebhook(env, tenantId, eventId);
+  if (event.channel === "email") return deliverNotificationEmail(env, tenantId, eventId);
+  throw new Error("Notification channel does not use external delivery");
+}
+
+export async function deliverNotificationEmail(
+  env: Env,
+  tenantId: string,
+  eventId: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const delivery = await env.DB.prepare(`SELECT e.id, e.tenant_id, e.event_type, e.severity, e.title, e.detail,
+    e.target_type, e.target_id, e.delivery_status, e.created_at, p.destination, p.channel, NULL secret_binding
+    FROM notification_events e JOIN notification_policies p ON p.id = e.policy_id AND p.tenant_id = e.tenant_id
+    WHERE e.id = ? AND e.tenant_id = ?`).bind(eventId, tenantId).first<DeliveryRow>();
+  if (!delivery) throw new Error("Notification delivery was not found");
+  if (delivery.delivery_status === "delivered") return { delivered: true, duplicate: true };
+  if (delivery.channel !== "email") throw new Error("Notification is not an email delivery");
+  const destination = safeEmailDestination(delivery.destination);
+  const token = await getMicrosoftAccessToken(env, tenantId, "Mail.Send", fetcher);
+  const started = performance.now();
+  let response: Response;
+  try {
+    response = await fetcher("https://graph.microsoft.com/v1.0/me/sendMail", {
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+      headers: { authorization: `Bearer ${token.accessToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          subject: `[Workrr ${delivery.severity}] ${delivery.title}`.slice(0, 200),
+          body: {
+            contentType: "Text",
+            content: `${delivery.detail}\n\nEvent: ${delivery.event_type}\nReference: ${delivery.target_type ?? "event"} ${delivery.target_id ?? delivery.id}`,
+          },
+          toRecipients: [{ emailAddress: { address: destination } }],
+        },
+        saveToSentItems: true,
+      }),
+    });
+  } catch (error) {
+    await recordAttempt(env, tenantId, eventId, null, error instanceof Error ? error.message : String(error));
+    await recordMicrosoftLog(env, tenantId, eventId, 0, started);
+    throw error;
+  }
+  await recordMicrosoftLog(env, tenantId, eventId, response.status, started);
+  if (response.status !== 202) {
+    const message = `Microsoft Graph returned HTTP ${response.status}`;
+    await recordAttempt(env, tenantId, eventId, response.status, message);
+    throw new Error(message);
+  }
+  const now = new Date().toISOString();
+  await env.DB.prepare(`UPDATE notification_events SET delivery_status = 'delivered', delivered_at = ?,
+    attempt_count = attempt_count + 1, last_attempt_at = ?, last_error = NULL, response_status = 202
+    WHERE id = ? AND tenant_id = ? AND delivery_status <> 'delivered'`)
+    .bind(now, now, eventId, tenantId).run();
+  return { delivered: true, duplicate: false, status: 202 };
+}
+
 export async function failNotificationDelivery(env: Env, tenantId: string, eventId: string, error: unknown) {
   await env.DB.prepare(`UPDATE notification_events SET delivery_status = 'failed', last_error = ?,
     last_attempt_at = COALESCE(last_attempt_at, ?)
@@ -123,6 +191,15 @@ export function safeWebhookDestination(value: string | null | undefined): string
   return url.toString();
 }
 
+export function safeEmailDestination(value: string | null | undefined): string {
+  const email = value?.trim().toLowerCase() ?? "";
+  if (email.length > 254 || /[\r\n,;]/.test(email) ||
+      !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(email)) {
+    throw new Error("Email destination must be one valid recipient address");
+  }
+  return email;
+}
+
 async function recordAttempt(env: Env, tenantId: string, eventId: string, status: number | null, error: string) {
   await env.DB.prepare(`UPDATE notification_events SET attempt_count = attempt_count + 1, last_attempt_at = ?,
     last_error = ?, response_status = ? WHERE id = ? AND tenant_id = ? AND delivery_status <> 'delivered'`)
@@ -135,6 +212,13 @@ async function recordOutboundLog(env: Env, tenantId: string, eventId: string, de
     (id, tenant_id, actor_id, trace_id, direction, method, path, status, duration_ms, target)
     VALUES (?, ?, 'system', ?, 'outbound', 'POST', ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), tenantId, eventId, "/signed-notification", status, Math.round(performance.now() - started), url.origin).run();
+}
+
+async function recordMicrosoftLog(env: Env, tenantId: string, eventId: string, status: number, started: number) {
+  await env.DB.prepare(`INSERT INTO api_logs
+    (id, tenant_id, actor_id, trace_id, direction, method, path, status, duration_ms, target)
+    VALUES (?, ?, 'system', ?, 'outbound', 'POST', '/v1.0/me/sendMail', ?, ?, 'https://graph.microsoft.com')`)
+    .bind(crypto.randomUUID(), tenantId, eventId, status, Math.round(performance.now() - started)).run();
 }
 
 function secretValue(env: Env, binding: string | null): string | undefined {

@@ -13,7 +13,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and bounded Cron dispatch for tenant-configured recurring processes.
 - Tenant-scoped Queue operations evidence with attempt counts, retry/dead-letter states, bounded retention, and audited safe replay from redacted execution input.
 - Signed, idempotent webhook ingestion with a bounded request body and queue handoff.
-- HMAC-signed outbound webhook notifications with public-destination validation, Queue retries, delivery testing, and persisted attempt evidence.
+- HMAC-signed outbound webhook and delegated Microsoft 365 email notifications with destination validation, Queue retries, delivery testing, and persisted attempt evidence.
 - Tenant-scoped credential references whose values remain in Cloudflare secrets rather than D1, exports, logs, or browser bundles.
 - An idempotent customer launch package that establishes branding, membership, a paused first process, discovery baseline, evaluation gate, and immutable draft release without duplicating records on retry.
 - A release quality lab with curated golden cases, expected/prohibited output assertions, exact-release Workers AI runs, weighted scoring, release comparison, and token/cost evidence.
@@ -26,7 +26,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Isolated baseline-versus-candidate Cloudflare model trials with quality/cost recommendations and automatic masking of common sensitive patterns before case persistence.
 - Tenant-wide and per-process incident containment with drain/emergency-stop admission gates, deferred paused work, evidence timelines, guarded recovery, and critical notifications.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
-- Microsoft 365 delegated OAuth with PKCE, one-time state, selectable least-privilege Graph scopes, AES-256-GCM refresh-token storage, rotation-aware health checks, and disconnect evidence.
+- Microsoft 365 delegated OAuth with PKCE, one-time state, selectable least-privilege Graph scopes, AES-256-GCM refresh-token storage, rotation-aware health checks, Mail.Send notification delivery, and disconnect evidence.
 - Tenant-configurable DLP detectors with audit, redact, and block actions enforced before Queue, Workflow, Durable Agent, model, evaluation, and persisted-preview boundaries.
 - Shared typed contracts and tests for sticky identity routing.
 

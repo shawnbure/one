@@ -107,6 +107,22 @@ select,
 aside {
   overflow-y: auto;
 }
+
+/* The navigation rail is the only fixed aside. Semantic side panels must stay in their page grids. */
+.configuration,
+.release-safety,
+.model-rates,
+.event-list,
+.setup-checklist {
+  position: static;
+  inset: auto;
+  width: auto;
+  color: var(--ink);
+  display: block;
+  z-index: auto;
+}
+.model-rates,
+.event-list { padding: 0; }
 .empty-approval strong,
 .empty-approval span,
 .assignment-chip strong,

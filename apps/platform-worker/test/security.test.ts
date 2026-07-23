@@ -115,6 +115,32 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies SET"))).toBe(false);
   });
 
+  it("does not enable email delivery without delegated Microsoft Mail.Send", async () => {
+    const { env, queries } = environment("admin");
+    const originalPrepare = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql: string) => {
+      if (sql.includes("SELECT p.channel, p.destination")) {
+        queries.push(sql);
+        return {
+          bind() { return this; },
+          async first() { return { channel: "email", destination: "alerts@customer.example", secret_binding: null }; },
+        } as never;
+      }
+      if (sql.includes("SELECT 1 ready FROM oauth_connections")) {
+        queries.push(sql);
+        return { bind() { return this; }, async first() { return null; } } as never;
+      }
+      return originalPrepare(sql);
+    };
+    const response = await app.fetch(new Request("http://localhost/api/notifications/policies/notify-email", {
+      method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ enabled: true })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("Mail.Send") });
+    expect(queries.some((sql) => sql.includes("UPDATE notification_policies SET"))).toBe(false);
+  });
+
   it("prevents viewers from launching a customer baseline", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/onboarding/bootstrap", {

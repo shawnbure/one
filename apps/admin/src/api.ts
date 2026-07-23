@@ -263,6 +263,7 @@ export interface NotificationData {
     attempt_count: number; last_error: string | null; response_status: number | null; created_at: string }>;
   credentials: Array<{ id: string; name: string; provider: string; secret_binding: string; purpose: string; status: string;
     last_validated_at: string | null; configured: number }>;
+  microsoftEmail: null | { account_email: string | null; account_name: string | null; status: string; configured: number };
 }
 export interface UsageData {
   summary: { executions: number; evaluation_cases: number; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number };

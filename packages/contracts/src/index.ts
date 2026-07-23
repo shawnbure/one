@@ -69,6 +69,7 @@ export interface NotificationDeliveryJob {
   kind: "notification_delivery";
   tenantId: string;
   eventId: string;
+  channel?: "webhook" | "email";
 }
 
 export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob;

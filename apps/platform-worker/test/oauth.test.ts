@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completeMicrosoftOAuth, decryptSecret, encryptSecret, startMicrosoftOAuth } from "../src/oauth";
+import { completeMicrosoftOAuth, decryptSecret, encryptSecret, getMicrosoftAccessToken, startMicrosoftOAuth } from "../src/oauth";
 
 const encryptionKey = Buffer.from(Uint8Array.from({ length: 32 }, (_, index) => index + 1)).toString("base64url");
 const secrets = {
@@ -15,7 +15,9 @@ describe("Microsoft OAuth lifecycle", () => {
     expect(encrypted.ciphertext).not.toContain("refresh-token-secret");
     expect(encrypted.iv).not.toHaveLength(0);
     await expect(decryptSecret(encryptionKey, encrypted.ciphertext, encrypted.iv)).resolves.toBe("refresh-token-secret");
-    await expect(decryptSecret(encryptionKey, `${encrypted.ciphertext.slice(0, -1)}A`, encrypted.iv)).rejects.toThrow();
+    const tampered = Buffer.from(encrypted.ciphertext, "base64url");
+    tampered[0] = tampered[0]! ^ 1;
+    await expect(decryptSecret(encryptionKey, tampered.toString("base64url"), encrypted.iv)).rejects.toThrow();
   });
 
   it("creates a short-lived PKCE request with only selected capability scopes", async () => {
@@ -38,6 +40,15 @@ describe("Microsoft OAuth lifecycle", () => {
     expect(insert[2]).toBe("member-1");
     expect(insert.join(" ")).not.toContain(authorization.searchParams.get("state")!);
     expect(insert.join(" ")).not.toContain("client-secret-value");
+  });
+
+  it("requests Mail.Send only when notification delivery is explicitly selected", async () => {
+    const env = { ...secrets, DB: { prepare() {
+      return { bind() { return this; }, async run() { return { meta: { changes: 1 } }; } };
+    } } };
+    const result = await startMicrosoftOAuth(env as never, "tenant-1", "member-1", ["mail_send"]);
+    expect(result.scopes).toContain("Mail.Send");
+    expect(result.scopes).not.toContain("Mail.ReadBasic");
   });
 
   it("claims state once before exchanging the authorization code", async () => {
@@ -118,5 +129,37 @@ describe("Microsoft OAuth lifecycle", () => {
     await expect(startMicrosoftOAuth(env as never, "tenant-1", "member-1", ["mail"]))
       .rejects.toThrow("must be 32 bytes");
     expect(writes).toBe(0);
+  });
+
+  it("refreshes a scoped access token and rotates refresh material without exposing it", async () => {
+    const encrypted = await encryptSecret(encryptionKey, "old-refresh");
+    const writes: Array<{ sql: string; bindings: unknown[] }> = [];
+    const env = { ...secrets, DB: {
+      prepare(sql: string) {
+        let bindings: unknown[] = [];
+        const statement = {
+          bind(...values: unknown[]) { bindings = values; return statement; },
+          async first() { return {
+            id: "oauth-1", connection_id: "conn-1", account_email: "ops@example.com", account_name: "Ops",
+            scopes_json: '["openid","offline_access","Mail.Send"]',
+            refresh_token_ciphertext: encrypted.ciphertext, refresh_token_iv: encrypted.iv,
+          }; },
+          async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; },
+        };
+        return statement;
+      },
+      async batch(statements: Array<{ run(): Promise<unknown> }>) {
+        for (const statement of statements) await statement.run();
+        return [];
+      },
+    } };
+    const result = await getMicrosoftAccessToken(env as never, "tenant-1", "Mail.Send", async () =>
+      Response.json({ access_token: "short-access", refresh_token: "new-refresh", expires_in: 3600,
+        scope: "openid offline_access Mail.Send" })) ;
+    expect(result).toMatchObject({ accessToken: "short-access", accountEmail: "ops@example.com" });
+    expect(JSON.stringify(writes)).not.toContain("new-refresh");
+    const oauthWrite = writes.find((write) => write.sql.includes("UPDATE oauth_connections SET status='connected'"));
+    await expect(decryptSecret(encryptionKey, String(oauthWrite?.bindings[1]), String(oauthWrite?.bindings[2])))
+      .resolves.toBe("new-refresh");
   });
 });

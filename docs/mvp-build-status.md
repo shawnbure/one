@@ -23,7 +23,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | API Logs | Correlated request history and webhook visibility |
 | Foundations | Connections, knowledge, evaluations, and model profile starting points |
 | Customer setup | Idempotent launch manifest for profile, membership, paused first process, baseline, evaluation gate, draft release, readiness, and secret-free export |
-| Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook delivery through Queue retries, test sends, and persisted attempt evidence |
+| Notifications | Tenant-scoped in-app routing plus HMAC-signed webhook and delegated Microsoft 365 email delivery through Queue retries, test sends, and persisted attempt evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
 | Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, and optional hard limit |
 | Incident response | Tenant and process emergency stops, drain/defer admission behavior, incident ownership/lifecycle, evidence timeline, recovery gates, audit, and critical notifications |
@@ -118,6 +118,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 25. `0025_rubric_publisher_trust.sql`: tenant publisher keys and manual, automatic, or blocked trust policy.
 26. `0026_process_schedules.sql`: tenant recurring-process controls and per-occurrence dispatch evidence.
 27. `0027_queue_operations.sql`: application-level Queue lifecycle, retry/dead-letter evidence, and replay lineage.
+28. `0028_microsoft_email_notifications.sql`: disabled-by-default operational email routes for Microsoft Graph delivery.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
@@ -161,6 +162,8 @@ Evaluation scenarios export as a versioned `workrr-evaluation/v1` JSON package c
 
 Model grading is optional and additive to deterministic assertions. A case may define up to three short rubric criteria and uses one secondary `fast` Cloudflare Workers AI call to score all of them. Candidate output is treated as untrusted data; the judge is instructed to return compact JSON scores and brief evidence without hidden reasoning. Judge input and output cross the tenant DLP boundary, judge tokens and estimated cost are added to the case ledger, a score of at least 0.8 passes a criterion, and no suite may contain more than 25 model-graded cases.
 
+Microsoft email notification policies are disabled by default. An owner must connect a delegated operating account with the explicit `Mail.Send` capability, configure exactly one validated recipient per policy, and then enable or test the route. Queue workers obtain short-lived access tokens from the encrypted rotating refresh token and call Microsoft Graph `/me/sendMail`; refresh tokens and access tokens are never returned to the browser, logged, or stored as notification evidence. Graph HTTP 202 is recorded as provider acceptance, not proof of final mailbox delivery.
+
 Organizations may maintain up to 20 tenant-scoped rubric templates, each containing one to three weighted quality criteria. New tenants receive actionable operations, safe communication, and structured handoff templates. Builders can create, archive, and restore templates in the Evaluation Lab; viewers can inspect them. Applying a template copies its criteria into the golden case rather than retaining a live reference. That preserves historical evidence, prevents later template edits from silently changing an existing release gate, and avoids a template lookup on every evaluation case execution. Case creation uses one consolidated scenario/count query, an additional D1 read only when a template is selected, and a batched case/scenario write.
 
 Rubric libraries export as `workrr-rubrics/v1` packages containing only names, descriptions, bounded criteria, dimensions, weights, and prior activation state. Tenant IDs, D1 IDs, actors, credentials, and secret values are excluded. Destination imports merge idempotently by case-insensitive name, reject sensitive content and packages beyond the 20-template ceiling, write new rows in one D1 batch, and keep every imported template archived until a destination administrator explicitly reviews and restores it. Viewers may export standards; only owners, admins, and builders may import them.
@@ -174,8 +177,7 @@ The foundation is usable, but these are the highest-value next slices:
 1. Register and credential the first customer Microsoft Entra application. The provider-specific lifecycle is implemented with delegated PKCE authorization, capability-scoped consent, encrypted refresh-token persistence, rotation-aware health checks, and disconnect/reconnect controls.
 2. Add key-expiry and rotation handoff when centrally managed publishers need scheduled cryptographic rollover. Tenant-specific exact-key trust policies, manual/automatic/block decisions, suspension, Ed25519-signed v2 publisher metadata, tamper verification, owner/admin approval, audit evidence, and archived destination activation are implemented.
 3. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
-4. Add authenticated email delivery using the Microsoft lifecycle; Queue-backed signed webhook delivery is implemented.
-5. Provision a least-privilege Cloudflare Access service token for each environment, register its Client ID as an operator service principal, and run the implemented `smoke:live` command. It authenticates through Access, validates tenant identity and read surfaces, and creates/reads/deletes a ten-minute tenant-scoped fixture with failure cleanup. Promotion already provides dry-run planning, clean/fast-forward Git gates, exact-SHA confirmation, required-secret inventory, mandatory verification, ordered D1 migrations, Cloudflare build polling, Worker version evidence, and Access redirect verification.
-6. Expand the current identity, tenant, role, OAuth replay/encryption, package, durable-stickiness, Workflow accounting, webhook-deduplication, Access-handoff, and promotion tests into those live-environment smoke tests.
+4. Provision a least-privilege Cloudflare Access service token for each environment, register its Client ID as an operator service principal, and run the implemented `smoke:live` command. It authenticates through Access, validates tenant identity and read surfaces, and creates/reads/deletes a ten-minute tenant-scoped fixture with failure cleanup. Promotion already provides dry-run planning, clean/fast-forward Git gates, exact-SHA confirmation, required-secret inventory, mandatory verification, ordered D1 migrations, Cloudflare build polling, Worker version evidence, and Access redirect verification.
+5. Expand the current identity, tenant, role, OAuth replay/encryption, package, durable-stickiness, Workflow accounting, webhook-deduplication, Access-handoff, and promotion tests into those live-environment smoke tests.
 
 Each slice should preserve the core boundary: D1 controls configuration and reporting, durable actors own sticky conversational state, Workflows own long-running orchestration, and Queues own burst absorption.

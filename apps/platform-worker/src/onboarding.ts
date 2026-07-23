@@ -252,6 +252,14 @@ async function provisionDefaultControls(env: Env, tenantId: string, actorId: str
       VALUES (?, ?, 'execution.failed', 'webhook', NULL, 0, 'critical', ?)`)
       .bind(`notify-execution-webhook-${suffix}`, tenantId, credentialId),
     ...[
+      ["approval.pending", "warning", "approval"],
+      ["execution.failed", "critical", "execution"],
+      ["queue.retry_exhausted", "critical", "queue"],
+    ].map(([eventType, severity, name]) => env.DB.prepare(`INSERT OR IGNORE INTO notification_policies
+      (id, tenant_id, event_type, channel, destination, enabled, severity)
+      VALUES (?, ?, ?, 'email', NULL, 0, ?)`)
+      .bind(`notify-${name}-email-${suffix}`, tenantId, eventType, severity)),
+    ...[
       ["email", "Email addresses", "redact"],
       ["phone", "Phone numbers", "redact"],
       ["ssn", "US Social Security numbers", "block"],

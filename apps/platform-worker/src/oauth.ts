@@ -6,6 +6,7 @@ const MICROSOFT_ME = "https://graph.microsoft.com/v1.0/me?$select=id,displayName
 const BASE_SCOPES = ["openid", "profile", "email", "offline_access", "User.Read"];
 const CAPABILITY_SCOPES = {
   mail: "Mail.ReadBasic",
+  mail_send: "Mail.Send",
   calendar: "Calendars.ReadBasic",
   files: "Files.Read"
 } as const;
@@ -110,9 +111,11 @@ export async function completeMicrosoftOAuth(env: Env, state: string, code: stri
        updated_at=CURRENT_TIMESTAMP`)
       .bind(id, row.tenant_id, connectionId, profile.id, profile.mail ?? profile.userPrincipalName ?? null,
         profile.displayName ?? null, JSON.stringify(scopes), encrypted.ciphertext, encrypted.iv, tokenExpiresAt, row.actor_id),
-    env.DB.prepare(`UPDATE connections SET status='healthy', secret_configured=1, scopes_json=?,
+    env.DB.prepare(`UPDATE connections SET status='healthy', secret_configured=1, scopes_json=?, access_mode=?,
       last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`)
-      .bind(JSON.stringify(scopes.filter((scope) => !BASE_SCOPES.includes(scope))), connectionId, row.tenant_id),
+      .bind(JSON.stringify(scopes.filter((scope) => !BASE_SCOPES.includes(scope))),
+        scopes.some((scope) => scope.toLowerCase() === "mail.send") ? "read_write" : "read",
+        connectionId, row.tenant_id),
     audit(env, row.tenant_id, row.actor_id, "connection.oauth_connected", connectionId, {
       provider: "microsoft", account: profile.mail ?? profile.userPrincipalName ?? null, scopes
     })
@@ -161,6 +164,63 @@ export async function checkMicrosoftConnection(env: Env, tenantId: string, actor
         .bind(detail, row.id, tenantId),
       env.DB.prepare("UPDATE connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")
         .bind(row.connection_id, tenantId)
+    ]);
+    throw new Error(detail);
+  }
+}
+
+export async function getMicrosoftAccessToken(
+  env: Env,
+  tenantId: string,
+  requiredScope: string,
+  fetcher: typeof fetch = fetch,
+) {
+  assertMicrosoftConfiguration(env);
+  const row = await env.DB.prepare(`SELECT o.*, c.id connection_id FROM oauth_connections o
+    JOIN connections c ON c.id=o.connection_id AND c.tenant_id=o.tenant_id
+    WHERE o.tenant_id=? AND o.provider='microsoft' AND o.status!='disconnected'`)
+    .bind(tenantId).first<OAuthConnectionRow>();
+  if (!row) throw new Error("Microsoft 365 is not connected");
+  const scopes = JSON.parse(row.scopes_json) as string[];
+  if (!scopes.some((scope) => scope.toLowerCase() === requiredScope.toLowerCase())) {
+    throw new Error(`Microsoft 365 must be reconnected with ${requiredScope} permission`);
+  }
+  try {
+    const refreshToken = await decryptSecret(env.OAUTH_TOKEN_ENCRYPTION_KEY!, row.refresh_token_ciphertext, row.refresh_token_iv);
+    const token = await tokenRequest(env, {
+      client_id: env.MICROSOFT_CLIENT_ID!,
+      client_secret: env.MICROSOFT_CLIENT_SECRET!,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      scope: scopes.join(" "),
+    }, fetcher);
+    if (!token.access_token) throw new Error("Microsoft token refresh did not return an access token");
+    const returnedScopes = token.scope?.split(/\s+/).filter(Boolean) ?? scopes;
+    if (!returnedScopes.some((scope) => scope.toLowerCase() === requiredScope.toLowerCase())) {
+      throw new Error(`Microsoft token does not grant ${requiredScope}`);
+    }
+    const rotated = token.refresh_token ? await encryptSecret(env.OAUTH_TOKEN_ENCRYPTION_KEY!, token.refresh_token) : null;
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE oauth_connections SET status='connected', scopes_json=?,
+        refresh_token_ciphertext=COALESCE(?,refresh_token_ciphertext), refresh_token_iv=COALESCE(?,refresh_token_iv),
+        token_expires_at=?, last_checked_at=CURRENT_TIMESTAMP, last_error=NULL, updated_at=CURRENT_TIMESTAMP
+        WHERE id=? AND tenant_id=?`)
+        .bind(JSON.stringify(returnedScopes), rotated?.ciphertext ?? null, rotated?.iv ?? null,
+          new Date(Date.now() + Math.max(60, Number(token.expires_in ?? 3600)) * 1000).toISOString(), row.id, tenantId),
+      env.DB.prepare(`UPDATE connections SET status='healthy', scopes_json=?, access_mode=?,
+        last_checked_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`)
+        .bind(JSON.stringify(returnedScopes.filter((scope) => !BASE_SCOPES.includes(scope))),
+          returnedScopes.some((scope) => scope.toLowerCase() === "mail.send") ? "read_write" : "read",
+          row.connection_id, tenantId),
+    ]);
+    return { accessToken: token.access_token, accountEmail: row.account_email, connectionId: row.connection_id };
+  } catch (error) {
+    const detail = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE oauth_connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP,
+        last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`).bind(detail, row.id, tenantId),
+      env.DB.prepare(`UPDATE connections SET status='attention', last_checked_at=CURRENT_TIMESTAMP
+        WHERE id=? AND tenant_id=?`).bind(row.connection_id, tenantId),
     ]);
     throw new Error(detail);
   }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deliverNotificationWebhook, emitNotification, safeWebhookDestination } from "../src/notifications";
+import { deliverNotificationEmail, deliverNotificationWebhook, emitNotification, safeEmailDestination, safeWebhookDestination } from "../src/notifications";
+import { encryptSecret } from "../src/oauth";
 
 const deliveryRow = {
   id: "event-1",
@@ -46,6 +47,13 @@ describe("signed notification delivery", () => {
     expect(() => safeWebhookDestination("https://customer.example/hooks?token=secret")).toThrow("public HTTPS");
   });
 
+  it("accepts one normalized email recipient and rejects header or recipient injection", () => {
+    expect(safeEmailDestination(" Operations@Customer.Example ")).toBe("operations@customer.example");
+    expect(() => safeEmailDestination("one@example.com,two@example.com")).toThrow("one valid recipient");
+    expect(() => safeEmailDestination("ops@example.com\nBcc: bad@example.com")).toThrow("one valid recipient");
+    expect(() => safeEmailDestination("not-an-email")).toThrow("one valid recipient");
+  });
+
   it("signs a stable delivery envelope and records a successful attempt", async () => {
     let request: { url: string; init: RequestInit } | null = null;
     vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
@@ -84,7 +92,8 @@ describe("signed notification delivery", () => {
           bind() { return statement; },
           async all() { return { results: [
             { id: "in-app", channel: "in_app", severity: "warning" },
-            { id: "webhook", channel: "webhook", severity: "critical" }
+            { id: "webhook", channel: "webhook", severity: "critical" },
+            { id: "email", channel: "email", severity: "critical" }
           ] }; },
           async run() { writes.push(sql); return { meta: { changes: 1 } }; }
         };
@@ -95,8 +104,63 @@ describe("signed notification delivery", () => {
     const ids = await emitNotification(env as never, "tenant-1", {
       eventType: "execution.failed", title: "Failed", detail: "Reason"
     });
-    expect(ids).toHaveLength(2);
-    expect(jobs).toEqual([expect.objectContaining({ kind: "notification_delivery", tenantId: "tenant-1" })]);
-    expect(writes).toHaveLength(2);
+    expect(ids).toHaveLength(3);
+    expect(jobs).toEqual([
+      expect.objectContaining({ kind: "notification_delivery", tenantId: "tenant-1" }),
+      expect.objectContaining({ kind: "notification_delivery", tenantId: "tenant-1" }),
+    ]);
+    expect(writes).toHaveLength(3);
+  });
+
+  it("refreshes delegated Mail.Send and records Microsoft Graph acceptance", async () => {
+    const encryptionKey = Buffer.from(Uint8Array.from({ length: 32 }, (_, index) => index + 1)).toString("base64url");
+    const encrypted = await encryptSecret(encryptionKey, "refresh-secret");
+    const writes: Array<{ sql: string; bindings: unknown[] }> = [];
+    const row = { ...deliveryRow, channel: "email", destination: "alerts@customer.example", secret_binding: null };
+    const DB = {
+      prepare(sql: string) {
+        let bindings: unknown[] = [];
+        const statement = {
+          bind(...values: unknown[]) { bindings = values; return statement; },
+          async first() {
+            if (sql.includes("FROM notification_events")) return row;
+            if (sql.includes("FROM oauth_connections")) return {
+              id: "oauth-1", connection_id: "conn-1", account_email: "sender@customer.example", account_name: "Sender",
+              scopes_json: '["offline_access","User.Read","Mail.Send"]',
+              refresh_token_ciphertext: encrypted.ciphertext, refresh_token_iv: encrypted.iv,
+            };
+            return null;
+          },
+          async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; },
+        };
+        return statement;
+      },
+      async batch(statements: Array<{ run(): Promise<unknown> }>) {
+        for (const statement of statements) await statement.run();
+        return [];
+      },
+    };
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(url), init: init ?? {} });
+      if (String(url).includes("/token")) return Response.json({
+        access_token: "short-access", refresh_token: "rotated-refresh", expires_in: 3600,
+        scope: "offline_access User.Read Mail.Send",
+      });
+      return new Response(null, { status: 202 });
+    };
+    const env = { DB, MICROSOFT_CLIENT_ID: "client", MICROSOFT_CLIENT_SECRET: "secret",
+      OAUTH_TOKEN_ENCRYPTION_KEY: encryptionKey };
+    await expect(deliverNotificationEmail(env as never, "tenant-1", "event-1", fetcher as typeof fetch))
+      .resolves.toMatchObject({ delivered: true, status: 202 });
+    const graph = requests.find((request) => request.url.endsWith("/me/sendMail"));
+    expect(new Headers(graph?.init.headers).get("authorization")).toBe("Bearer short-access");
+    expect(JSON.parse(String(graph?.init.body))).toMatchObject({
+      message: { toRecipients: [{ emailAddress: { address: "alerts@customer.example" } }] },
+      saveToSentItems: true,
+    });
+    expect(writes.some((write) => write.sql.includes("delivery_status = 'delivered'") &&
+      write.bindings.includes("event-1"))).toBe(true);
+    expect(JSON.stringify(writes)).not.toContain("rotated-refresh");
   });
 });

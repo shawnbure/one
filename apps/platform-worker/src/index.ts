@@ -9,7 +9,7 @@ import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
-import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
+import { deliverNotification, emitNotification, failNotificationDelivery, safeEmailDestination, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate, exportEvaluationDataset, exportRubricPackage, getEvaluationDetail, importEvaluationDataset, importRubricPackage, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust, updateRubricTemplate } from "./evaluation";
 import { getUsageLedger } from "./usage";
@@ -124,9 +124,12 @@ app.post("/api/oauth/microsoft/disconnect", requireRoles("admin", "owner"), asyn
 });
 
 app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {
-  const [policies, events, credentials] = await Promise.all([
+  const [policies, events, credentials, microsoftEmail] = await Promise.all([
     c.env.DB.prepare(`SELECT p.*, r.name credential_name, r.secret_binding,
-      CASE WHEN r.secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END credential_configured
+      CASE WHEN p.channel = 'email' THEN EXISTS (
+        SELECT 1 FROM oauth_connections o WHERE o.tenant_id=p.tenant_id AND o.provider='microsoft'
+        AND o.status='connected' AND LOWER(o.scopes_json) LIKE '%mail.send%'
+      ) WHEN r.secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END credential_configured
       FROM notification_policies p LEFT JOIN integration_credential_refs r
       ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
       WHERE p.tenant_id = ? ORDER BY p.event_type, p.channel`)
@@ -135,9 +138,12 @@ app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer
     c.env.DB.prepare(`SELECT id, name, provider, secret_binding, purpose, status, last_validated_at,
       CASE WHEN secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END configured
       FROM integration_credential_refs WHERE tenant_id = ? ORDER BY name`)
-      .bind(c.env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, c.get("tenantId")).all()
+      .bind(c.env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, c.get("tenantId")).all(),
+    c.env.DB.prepare(`SELECT account_email, account_name, status,
+      CASE WHEN status='connected' AND LOWER(scopes_json) LIKE '%mail.send%' THEN 1 ELSE 0 END configured
+      FROM oauth_connections WHERE tenant_id=? AND provider='microsoft'`).bind(c.get("tenantId")).first()
   ]);
-  return c.json({ data: { policies: policies.results, events: events.results, credentials: credentials.results } });
+  return c.json({ data: { policies: policies.results, events: events.results, credentials: credentials.results, microsoftEmail } });
 });
 
 app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), async (c) => {
@@ -155,9 +161,23 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
       return c.json({ error: error instanceof Error ? error.message : "Invalid webhook destination" }, 400);
     }
   }
+  if (policy.channel === "email" && destination) {
+    try { safeEmailDestination(destination); } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Invalid email destination" }, 400);
+    }
+  }
   if (policy.channel === "webhook" && body.enabled === true &&
       (!destination || policy.secret_binding !== "NOTIFICATION_WEBHOOK_SECRET" || !c.env.NOTIFICATION_WEBHOOK_SECRET)) {
     return c.json({ error: "Configure a public HTTPS destination and the outbound signing credential before enabling delivery" }, 409);
+  }
+  if (policy.channel === "email" && body.enabled === true) {
+    if (!destination) return c.json({ error: "Configure one notification recipient before enabling email delivery" }, 409);
+    const connected = await c.env.DB.prepare(`SELECT 1 ready FROM oauth_connections
+      WHERE tenant_id=? AND provider='microsoft' AND status='connected'
+      AND LOWER(scopes_json) LIKE '%mail.send%'`).bind(c.get("tenantId")).first();
+    if (!connected) return c.json({
+      error: "Reconnect Microsoft 365 with Send notifications (Mail.Send) permission before enabling email delivery",
+    }, 409);
   }
   const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled),
     destination = CASE WHEN ? = 1 THEN ? ELSE destination END,
@@ -178,12 +198,24 @@ app.post("/api/notifications/policies/:id/test", requireRoles("admin", "owner"),
     WHERE p.id = ? AND p.tenant_id = ?`).bind(policyId, tenantId)
     .first<{ event_type: string; channel: string; destination: string | null; enabled: number; secret_binding: string | null }>();
   if (!policy) return c.json({ error: "Notification policy not found" }, 404);
-  if (policy.channel !== "webhook") return c.json({ error: "Only webhook policies require an external delivery test" }, 409);
-  try { safeWebhookDestination(policy.destination); } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Invalid webhook destination" }, 409);
+  if (!["webhook", "email"].includes(policy.channel)) {
+    return c.json({ error: "Only external delivery policies can be tested" }, 409);
   }
-  if (policy.secret_binding !== "NOTIFICATION_WEBHOOK_SECRET" || !c.env.NOTIFICATION_WEBHOOK_SECRET) {
-    return c.json({ error: "Outbound webhook signing credential is not configured" }, 409);
+  if (policy.channel === "webhook") {
+    try { safeWebhookDestination(policy.destination); } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Invalid webhook destination" }, 409);
+    }
+    if (policy.secret_binding !== "NOTIFICATION_WEBHOOK_SECRET" || !c.env.NOTIFICATION_WEBHOOK_SECRET) {
+      return c.json({ error: "Outbound webhook signing credential is not configured" }, 409);
+    }
+  } else {
+    try { safeEmailDestination(policy.destination); } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Invalid email destination" }, 409);
+    }
+    const connected = await c.env.DB.prepare(`SELECT 1 ready FROM oauth_connections
+      WHERE tenant_id=? AND provider='microsoft' AND status='connected'
+      AND LOWER(scopes_json) LIKE '%mail.send%'`).bind(tenantId).first();
+    if (!connected) return c.json({ error: "Microsoft 365 Mail.Send permission is not connected" }, 409);
   }
   const eventId = crypto.randomUUID();
   await c.env.DB.prepare(`INSERT INTO notification_events
@@ -192,7 +224,8 @@ app.post("/api/notifications/policies/:id/test", requireRoles("admin", "owner"),
       'This signed test verifies the configured notification destination.', 'notification_policy', id, 'pending'
     FROM notification_policies WHERE id = ? AND tenant_id = ?`)
     .bind(eventId, policyId, tenantId).run();
-  await c.env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId }, { contentType: "json" });
+  await c.env.PROCESS_QUEUE.send({ kind: "notification_delivery", tenantId, eventId,
+    channel: policy.channel as "webhook" | "email" }, { contentType: "json" });
   await writeAudit(c.env, tenantId, c.get("actorId"), "notification_policy.test_queued", "notification_policy", policyId, { eventId });
   return c.json({ eventId, status: "pending" }, 202);
 });
@@ -970,7 +1003,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
     for (const message of batch.messages) {
       if (message.body.kind === "notification_delivery") {
         try {
-          await deliverNotificationWebhook(env, message.body.tenantId, message.body.eventId);
+          await deliverNotification(env, message.body.tenantId, message.body.eventId, message.body.channel);
           message.ack();
         } catch (error) {
           console.error(JSON.stringify({ event: "notification_delivery_failed", eventId: message.body.eventId, error: String(error) }));

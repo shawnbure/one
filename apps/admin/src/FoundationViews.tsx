@@ -57,7 +57,7 @@ export function FoundationView({ section, onNotice }: Props) {
 function Connections({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
   const [checking, setChecking] = useState<string | null>(null);
   const [oauthBusy, setOauthBusy] = useState(false);
-  const [capabilities, setCapabilities] = useState({ mail: true, calendar: true, files: false });
+  const [capabilities, setCapabilities] = useState({ mail: true, mail_send: true, calendar: true, files: false });
   async function test(id: string) {
     setChecking(id);
     try {
@@ -105,12 +105,13 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
       <article className="microsoft-connect panel">
         <div className="microsoft-mark">M</div>
         <div><span className="eyebrow"><KeyRound size={14}/> DELEGATED OAUTH</span><h2>Microsoft 365</h2>
-          <p>Connect one operating account with selectable read-only permissions. Tokens are encrypted before D1 persistence and never returned to the browser.</p>
+          <p>Connect one operating account with selectable least-privilege permissions. Tokens are encrypted before D1 persistence and never returned to the browser.</p>
           {microsoftConnected && <small className="oauth-account">Connected as {String(microsoft?.oauth_account_email || microsoft?.oauth_account_name || "delegated account")}</small>}
         </div>
         <div className="oauth-capabilities">
           <strong>Requested capabilities</strong>
           <label><input type="checkbox" checked={capabilities.mail} onChange={(event) => setCapabilities({ ...capabilities, mail: event.target.checked })}/> Mail metadata <small>Mail.ReadBasic</small></label>
+          <label><input type="checkbox" checked={capabilities.mail_send} onChange={(event) => setCapabilities({ ...capabilities, mail_send: event.target.checked })}/> Send notifications <small>Mail.Send</small></label>
           <label><input type="checkbox" checked={capabilities.calendar} onChange={(event) => setCapabilities({ ...capabilities, calendar: event.target.checked })}/> Calendar basics <small>Calendars.ReadBasic</small></label>
           <label><input type="checkbox" checked={capabilities.files} onChange={(event) => setCapabilities({ ...capabilities, files: event.target.checked })}/> User files <small>Files.Read</small></label>
         </div>
