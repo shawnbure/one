@@ -95,7 +95,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
         .bind(output, new Date().toISOString(), executionId, tenantId).run();
       return { executionId, instanceKey, profile: blueprint.executionProfile, status: "completed", output, startedAt };
     }
-    await assertBudgetAvailable(env, tenantId);
+    await assertBudgetAvailable(env, tenantId, blueprint.id);
 
     if (blueprint.executionProfile === "workflow") {
       await env.PROCESS_WORKFLOW.create({ id: executionId as `${string}-${string}-${string}-${string}-${string}`,

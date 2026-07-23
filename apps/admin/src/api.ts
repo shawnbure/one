@@ -927,7 +927,8 @@ export interface UsageData {
   budget: { monthly_limit_usd: number; warning_percent: number; hard_limit: number } | null;
   models: Array<{ model_id: string; label: string; input_usd_per_million: number; output_usd_per_million: number; context_tokens: number; pricing_effective_at: string; pricing_source: string }>;
   byModel: Array<{ model: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
-  byProcess: Array<{ blueprint_id: string; process_name: string; executions: number; total_tokens: number; estimated_cost_usd: number }>;
+  byProcess: Array<{ blueprint_id: string; process_name: string; executions: number; total_tokens: number;
+    estimated_cost_usd: number; monthly_limit_usd: number | null; warning_percent: number | null; hard_limit: number | null }>;
   recent: Array<{ id: string; blueprint_id: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; estimated_cost_usd: number; started_at: string }>;
   reconciliations: Array<{ id: string; period_start: string; period_end: string; source: string;
     source_reference: string; workers_ai_neurons: number | null; workers_ai_cost_usd: number;
@@ -1667,4 +1668,9 @@ export const api = {
       { method: "POST", body: JSON.stringify({ reason }) }),
   updateBudget: (body: { monthlyLimitUsd: number; warningPercent: number; hardLimit: boolean }) =>
     request<{ updated: boolean }>("/api/usage/budget", { method: "PATCH", body: JSON.stringify(body) }),
+  updateProcessBudget: (blueprintId: string, body: {
+    enabled: boolean; monthlyLimitUsd: number; warningPercent: number; hardLimit: boolean;
+  }) => request<{ data: { blueprintId: string; enabled: boolean } }>(
+    `/api/usage/process-budgets/${encodeURIComponent(blueprintId)}`,
+    { method: "PUT", body: JSON.stringify(body) }),
 };

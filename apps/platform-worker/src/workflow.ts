@@ -4,7 +4,7 @@ import { getBlueprintForRelease, getPromptBundle } from "./repository";
 import { runModel } from "./model";
 import type { Env } from "./types";
 import { emitNotification } from "./notifications";
-import { pricedCompletionSql } from "./usage";
+import { assertBudgetAvailable, pricedCompletionSql } from "./usage";
 import { applyDlp, DlpBlockedError, isDlpBlocked } from "./dlp";
 import { augmentWithKnowledge } from "./knowledge";
 import { isContractViolation, outputContractInstruction, parseContracts, validateContractInput, validateContractOutput } from "./contracts";
@@ -42,6 +42,8 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
       const contracts = parseContracts(context.blueprint.inputSchemaJson, context.blueprint.outputSchemaJson);
       return outputContractInstruction(grounded.input, contracts.outputSchema);
     });
+    await step.do("recheck AI budget", () =>
+      assertBudgetAvailable(this.env, tenantId, request.blueprintId));
     const rawResult = await step.do("run model task", { retries: { limit: 3, delay: "5 seconds", backoff: "exponential" } }, () =>
       runModel(this.env, context.blueprint.modelProfile, context.prompt, groundedInput, undefined, {
         tenantId, executionId: event.instanceId, autonomy: autonomyPlan(context.blueprint).effective,

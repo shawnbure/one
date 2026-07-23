@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BarChart3, CircleDollarSign, FileUp, Gauge, RefreshCw, Scale, ShieldAlert, Zap } from "lucide-react";
 import { api, type SessionData, type UsageData } from "./api";
+import "./process-budgets.css";
 
 export function UsageView({ session, onNotice }: { session: SessionData | null; onNotice: (message: string) => void }) {
   const [data, setData] = useState<UsageData | null>(null);
@@ -8,6 +9,9 @@ export function UsageView({ session, onNotice }: { session: SessionData | null; 
   const [limit, setLimit] = useState(25);
   const [warning, setWarning] = useState(80);
   const [hardLimit, setHardLimit] = useState(false);
+  const [processBudget, setProcessBudget] = useState({
+    blueprintId: "", enabled: false, monthlyLimitUsd: 5, warningPercent: 80, hardLimit: false
+  });
   const [reconcileBusy, setReconcileBusy] = useState(false);
   const [voiding, setVoiding] = useState<string | null>(null);
   const [voidReason, setVoidReason] = useState("");
@@ -17,11 +21,36 @@ export function UsageView({ session, onNotice }: { session: SessionData | null; 
     workersRequests: "", d1RowsRead: "", d1RowsWritten: "", queueOperations: "", workflowWallTimeMs: ""
   }));
   async function load() {
-    try { const result = (await api.usage()).data; setData(result); setLimit(result.budget?.monthly_limit_usd ?? 25); setWarning(result.budget?.warning_percent ?? 80); setHardLimit(Boolean(result.budget?.hard_limit)); }
+    try {
+      const result = (await api.usage()).data;
+      setData(result); setLimit(result.budget?.monthly_limit_usd ?? 25);
+      setWarning(result.budget?.warning_percent ?? 80); setHardLimit(Boolean(result.budget?.hard_limit));
+      const selected = result.byProcess.find((item) => item.blueprint_id === processBudget.blueprintId) ?? result.byProcess[0];
+      if (selected) selectProcessBudget(selected);
+    }
     catch (error) { onNotice(error instanceof Error ? error.message : "Usage ledger could not load"); }
   }
   useEffect(() => { void load(); }, []);
   async function save() { setSaving(true); try { await api.updateBudget({ monthlyLimitUsd: limit, warningPercent: warning, hardLimit }); await load(); onNotice("Monthly AI budget policy saved and audited."); } catch (error) { onNotice(error instanceof Error ? error.message : "Budget could not be saved"); } finally { setSaving(false); } }
+  function selectProcessBudget(item: UsageData["byProcess"][number]) {
+    setProcessBudget({
+      blueprintId: item.blueprint_id, enabled: item.monthly_limit_usd !== null,
+      monthlyLimitUsd: Number(item.monthly_limit_usd ?? 5),
+      warningPercent: Number(item.warning_percent ?? 80), hardLimit: Boolean(item.hard_limit)
+    });
+  }
+  async function saveProcessBudget() {
+    if (!processBudget.blueprintId) return;
+    setSaving(true);
+    try {
+      await api.updateProcessBudget(processBudget.blueprintId, processBudget);
+      await load();
+      onNotice(processBudget.enabled
+        ? "Process AI budget saved and enforced across Agents, Workflows, and evaluations."
+        : "Process-specific budget removed; the organization budget still applies.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Process budget could not be saved"); }
+    finally { setSaving(false); }
+  }
   async function reconcile() {
     setReconcileBusy(true);
     try {
@@ -59,7 +88,38 @@ export function UsageView({ session, onNotice }: { session: SessionData | null; 
   return <section className="usage-page"><div className="page-title"><div><span className="eyebrow"><CircleDollarSign size={14}/> AI COST GOVERNANCE</span><h1>Usage & budgets</h1><p>Explainable Workers AI consumption by process, model, and execution.</p></div><button className="refresh-button" onClick={() => void load()}><RefreshCw size={15}/>Refresh</button></div>
     <div className="usage-metrics"><article className="panel"><span className="metric-icon green"><CircleDollarSign size={18}/></span><div><small>ESTIMATED THIS MONTH</small><strong>{money(spent)}</strong><p>{percent.toFixed(1)}% of {money(budget)} budget</p></div></article><article className="panel"><span className="metric-icon blue"><Zap size={18}/></span><div><small>MODEL TOKENS</small><strong>{number(data.summary.total_tokens)}</strong><p>{number(data.summary.input_tokens)} in · {number(data.summary.output_tokens)} out</p></div></article><article className="panel"><span className="metric-icon violet"><BarChart3 size={18}/></span><div><small>AI RUNS</small><strong>{number(data.summary.executions + data.summary.evaluation_cases)}</strong><p>{number(data.summary.executions)} operations · {number(data.summary.evaluation_cases)} evaluation cases</p></div></article></div>
     <div className="budget-panel panel"><div><span><Gauge size={18}/><strong>Monthly budget consumption</strong></span><div className="budget-track"><i style={{ width: `${percent}%` }}/></div><small>{money(spent)} estimated of {money(budget)}</small></div><label>Budget USD<input type="number" min="1" max="1000000" value={limit} onChange={(e) => setLimit(Number(e.target.value))}/></label><label>Warn at %<input type="number" min="1" max="100" value={warning} onChange={(e) => setWarning(Number(e.target.value))}/></label><label className="hard-limit"><input type="checkbox" checked={hardLimit} onChange={(e) => setHardLimit(e.target.checked)}/><span><strong>Hard limit</strong><small>Reject new AI executions at budget</small></span></label><button className="primary" disabled={saving || !["admin","owner"].includes(session?.user.role ?? "")} onClick={() => void save()}>{saving ? "Saving…" : "Save policy"}</button></div>
-    <div className="usage-layout"><article className="usage-table panel"><div className="section-head"><div><h2>Cost by process</h2><p>Estimated from captured input/output tokens.</p></div></div><div className="usage-head"><span>Process</span><span>Runs</span><span>Tokens</span><span>Estimated</span></div>{data.byProcess.map((item) => <div className="usage-row" key={item.blueprint_id}><strong>{item.process_name}</strong><span>{number(item.executions)}</span><span>{number(item.total_tokens)}</span><strong>{money(item.estimated_cost_usd)}</strong></div>)}</article>
+    <article className="process-budget-panel panel"><div className="section-head"><div><h2>Process allocation guardrail</h2>
+      <p>Contain one noisy process without stopping every other approved use case.</p></div></div>
+      <div className="process-budget-fields">
+        <label>AI process<select value={processBudget.blueprintId} onChange={(event) => {
+          const item = data.byProcess.find((candidate) => candidate.blueprint_id === event.target.value);
+          if (item) selectProcessBudget(item);
+        }}>{data.byProcess.map((item) => <option key={item.blueprint_id} value={item.blueprint_id}>{item.process_name}</option>)}</select></label>
+        <label className="hard-limit"><input type="checkbox" checked={processBudget.enabled}
+          onChange={(event) => setProcessBudget({ ...processBudget, enabled: event.target.checked })}/>
+          <span><strong>Use process budget</strong><small>Organization budget always remains authoritative</small></span></label>
+        <label>Monthly USD<input type="number" min="0.01" max="1000000" step="0.01"
+          disabled={!processBudget.enabled} value={processBudget.monthlyLimitUsd}
+          onChange={(event) => setProcessBudget({ ...processBudget, monthlyLimitUsd: Number(event.target.value) })}/></label>
+        <label>Warn at %<input type="number" min="1" max="100" disabled={!processBudget.enabled}
+          value={processBudget.warningPercent}
+          onChange={(event) => setProcessBudget({ ...processBudget, warningPercent: Number(event.target.value) })}/></label>
+        <label className="hard-limit"><input type="checkbox" checked={processBudget.hardLimit}
+          disabled={!processBudget.enabled}
+          onChange={(event) => setProcessBudget({ ...processBudget, hardLimit: event.target.checked })}/>
+          <span><strong>Hard limit</strong><small>Reject new model calls for this process</small></span></label>
+        <button className="primary" disabled={saving || !canManage || !processBudget.blueprintId}
+          onClick={() => void saveProcessBudget()}>{saving ? "Saving…" : "Save allocation"}</button>
+      </div>
+      {processBudget.blueprintId && <p className="process-budget-boundary">Enforcement uses captured month-to-date execution and evaluation cost. Delayed Workflows recheck immediately before inference; parallel in-flight calls may settle just beyond the boundary.</p>}
+    </article>
+    <div className="usage-layout"><article className="usage-table panel"><div className="section-head"><div><h2>Cost by process</h2><p>Estimated from captured input/output tokens.</p></div></div><div className="usage-head"><span>Process</span><span>Runs</span><span>Tokens</span><span>Estimated</span></div>{data.byProcess.map((item) => {
+      const processPercent = Number(item.monthly_limit_usd) > 0
+        ? Number(item.estimated_cost_usd) / Number(item.monthly_limit_usd) * 100 : 0;
+      const warned = item.warning_percent !== null && processPercent >= Number(item.warning_percent);
+      return <div className="usage-row" key={item.blueprint_id}><strong>{item.process_name}{item.monthly_limit_usd !== null &&
+        <small className={warned ? "allocation-warning" : ""}>{money(item.estimated_cost_usd)} of {money(item.monthly_limit_usd)} · {warned ? "warning reached" : item.hard_limit ? "hard stop enabled" : "warning only"}</small>}</strong><span>{number(item.executions)}</span><span>{number(item.total_tokens)}</span><strong>{money(item.estimated_cost_usd)}</strong></div>;
+    })}</article>
       <aside className="model-rates panel"><div className="section-head"><div><h2>Cloudflare model rates</h2><p>Price snapshot used by this ledger.</p></div></div>{data.models.map((model) => <div className="model-rate" key={model.model_id}><span><strong>{model.label}</strong><small>{model.model_id}</small></span><span><strong>${model.input_usd_per_million}/M in</strong><small>${model.output_usd_per_million}/M out · {number(model.context_tokens)} context</small></span></div>)}</aside></div>
     <article className="billing-reconciliation panel">
       <div className="section-head"><div><span className="eyebrow"><Scale size={14}/> VERIFIED COST EVIDENCE</span><h2>Cloudflare reconciliation</h2><p>Compare Workrr estimates with normalized dashboard, invoice, or API totals.</p></div>

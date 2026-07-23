@@ -996,6 +996,8 @@ Deliverables:
 - prompt/model A/B release support;
 - performance dashboards and SLO alerts.
 
+Cost governance has two nested monthly boundaries. A tenant budget always applies, and an owner may optionally allocate a lower budget to one process. Both use captured Workers AI cost evidence from operations and evaluation cases. Hard limits are checked at synchronous admission and again inside delayed Workflow/evaluation steps immediately before model use; warning-only policies remain visible without blocking. The boundary is intentionally a settled-evidence guardrail rather than a distributed prepaid reservation system, so bounded parallel calls may settle just beyond it.
+
 Exit criteria: multiple tenants can operate with measurable isolation, reliability, and cost controls.
 
 ### Phase 4 — AI Gateway handoff

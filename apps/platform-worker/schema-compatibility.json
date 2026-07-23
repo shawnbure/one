@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 77,
-  "requiredMigrationName": "0077_qwen3_model_choice.sql"
+  "requiredMigrationId": 78,
+  "requiredMigrationName": "0078_process_budgets.sql"
 }

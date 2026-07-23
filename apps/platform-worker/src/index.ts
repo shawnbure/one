@@ -25,7 +25,7 @@ import { createEvaluationCase, createRubricPublisherTrust, createRubricTemplate,
   listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult,
   reviewRubricKeyRotation, reviewRubricPackage, runEvaluation, updateRubricPublisherTrust,
   updateRubricTemplate } from "./evaluation";
-import { getUsageLedger, importBillingEvidence, voidBillingEvidence } from "./usage";
+import { getUsageLedger, importBillingEvidence, updateProcessBudget, voidBillingEvidence } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
 import { isDlpBlocked, updateDlpRule } from "./dlp";
@@ -1006,6 +1006,26 @@ app.patch("/api/usage/budget", requireRoles("admin", "owner"), async (c) => {
     .bind(c.get("tenantId"), body.monthlyLimitUsd, body.warningPercent, Number(Boolean(body.hardLimit)), c.get("actorId")).run();
   await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "usage_budget.updated", "tenant", c.get("tenantId"), body);
   return c.json({ updated: true });
+});
+
+app.put("/api/usage/process-budgets/:blueprintId", requireRoles("admin", "owner"), async (c) => {
+  const blueprintId = c.req.param("blueprintId");
+  if (!blueprintId) return c.json({ error: "Process ID is required" }, 400);
+  try {
+    const body = await c.req.json<{
+      monthlyLimitUsd?: number; warningPercent?: number; hardLimit?: boolean; enabled?: boolean;
+    }>();
+    const result = await updateProcessBudget(
+      c.env, c.get("tenantId"), c.get("actorId"), blueprintId, body
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+      result.enabled ? "process_budget.updated" : "process_budget.removed",
+      "process", blueprintId, result);
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Process budget could not be updated";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+  }
 });
 
 app.get("/api/processes/:id/studio",

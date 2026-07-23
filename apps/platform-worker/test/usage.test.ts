@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertBudgetAvailable, importBillingEvidence, pricedCompletionSql, voidBillingEvidence } from "../src/usage";
+import { assertBudgetAvailable, importBillingEvidence, pricedCompletionSql, updateProcessBudget, voidBillingEvidence } from "../src/usage";
 
 function budgetEnvironment(row: { monthly_limit_usd: number; spent: number } | null, sqls: string[] = []) {
   return { DB: { prepare(sql: string) { sqls.push(sql); const statement = { bind() { return statement; }, async first() { return row; } }; return statement; } } };
@@ -21,11 +21,64 @@ describe("usage budget enforcement", () => {
     expect(sqls[0]).toContain("evaluation_case_results");
   });
 
+  it("enforces a tenant-scoped process allocation after the organization budget", async () => {
+    const sqls: string[] = [];
+    const env = { DB: { prepare(sql: string) {
+      sqls.push(sql);
+      const statement = {
+        bind(...bindings: unknown[]) {
+          expect(bindings).not.toContain("tenant-2");
+          return statement;
+        },
+        async first() {
+          return sql.includes("FROM process_budgets") ? { monthly_limit_usd: 5, spent: 5.2 } : null;
+        }
+      };
+      return statement;
+    } } };
+    await expect(assertBudgetAvailable(env as never, "tenant-1", "process-1"))
+      .rejects.toThrow("This process has reached");
+    expect(sqls[1]).toContain("r.blueprint_id");
+    expect(sqls[1]).toContain("blueprint_id=?");
+  });
+
   it("prices input and output independently from the captured model rate", () => {
     const sql = pricedCompletionSql();
     expect(sql).toContain("input_usd_per_million");
     expect(sql).toContain("output_usd_per_million");
     expect(sql).toContain("estimated_cost_usd");
+  });
+});
+
+describe("process budget policy", () => {
+  function environment(processExists = true) {
+    const writes: Array<{ sql: string; bindings: unknown[] }> = [];
+    const DB = { prepare(sql: string) {
+      let bindings: unknown[] = [];
+      const statement = {
+        bind(...values: unknown[]) { bindings = values; return statement; },
+        async first() { return sql.includes("FROM agent_blueprints") && processExists ? { id: "process-1" } : null; },
+        async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; }
+      };
+      return statement;
+    } };
+    return { env: { DB } as never, writes };
+  }
+
+  it("writes and removes only the same-tenant process policy with bounded values", async () => {
+    const state = environment();
+    await expect(updateProcessBudget(state.env, "tenant-1", "owner-1", "process-1", {
+      enabled: true, monthlyLimitUsd: 5, warningPercent: 75, hardLimit: true
+    })).resolves.toMatchObject({ enabled: true, hardLimit: true });
+    expect(state.writes.some(({ sql, bindings }) =>
+      sql.includes("INSERT INTO process_budgets") && bindings[0] === "tenant-1" && bindings[1] === "process-1")).toBe(true);
+    await expect(updateProcessBudget(state.env, "tenant-1", "owner-1", "process-1", {
+      enabled: false
+    })).resolves.toMatchObject({ enabled: false });
+    expect(state.writes.some(({ sql }) => sql.includes("DELETE FROM process_budgets"))).toBe(true);
+    await expect(updateProcessBudget(environment(false).env, "tenant-1", "owner-1", "process-2", {
+      enabled: true, monthlyLimitUsd: 5, warningPercent: 75, hardLimit: true
+    })).rejects.toThrow("Process not found");
   });
 });
 

@@ -1,11 +1,24 @@
 import type { Env } from "./types";
 
-export async function assertBudgetAvailable(env: Env, tenantId: string) {
+export async function assertBudgetAvailable(env: Env, tenantId: string, blueprintId?: string) {
   const budget = await env.DB.prepare(`SELECT monthly_limit_usd,
     ((SELECT COALESCE(SUM(estimated_cost_usd),0) FROM executions WHERE tenant_id = ? AND started_at >= date('now','start of month')) +
      (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM evaluation_case_results WHERE tenant_id = ? AND created_at >= date('now','start of month'))) spent
     FROM tenant_budgets WHERE tenant_id = ? AND hard_limit = 1`).bind(tenantId, tenantId, tenantId).first<{ monthly_limit_usd: number; spent: number }>();
   if (budget && Number(budget.spent) >= Number(budget.monthly_limit_usd)) throw new Error("Monthly AI budget hard limit has been reached");
+  if (!blueprintId) return;
+  const processBudget = await env.DB.prepare(`SELECT monthly_limit_usd,
+    ((SELECT COALESCE(SUM(estimated_cost_usd),0) FROM executions
+      WHERE tenant_id=? AND blueprint_id=? AND started_at >= date('now','start of month')) +
+     (SELECT COALESCE(SUM(c.estimated_cost_usd),0) FROM evaluation_case_results c
+      JOIN evaluation_runs r ON r.id=c.run_id AND r.tenant_id=c.tenant_id
+      WHERE c.tenant_id=? AND r.blueprint_id=? AND c.created_at >= date('now','start of month'))) spent
+    FROM process_budgets WHERE tenant_id=? AND blueprint_id=? AND hard_limit=1`)
+    .bind(tenantId, blueprintId, tenantId, blueprintId, tenantId, blueprintId)
+    .first<{ monthly_limit_usd: number; spent: number }>();
+  if (processBudget && Number(processBudget.spent) >= Number(processBudget.monthly_limit_usd)) {
+    throw new Error("This process has reached its monthly AI budget hard limit");
+  }
 }
 
 export async function getUsageLedger(env: Env, tenantId: string) {
@@ -32,17 +45,28 @@ export async function getUsageLedger(env: Env, tenantId: string) {
         SELECT model, COUNT(*), SUM(input_tokens), SUM(output_tokens), SUM(total_tokens), SUM(estimated_cost_usd)
           FROM evaluation_case_results WHERE tenant_id = ? AND created_at >= date('now','start of month') AND model IS NOT NULL GROUP BY model
       ) GROUP BY model ORDER BY estimated_cost_usd DESC`).bind(tenantId, tenantId).all(),
-    env.DB.prepare(`SELECT blueprint_id, process_name, SUM(executions) executions, SUM(total_tokens) total_tokens,
-      SUM(estimated_cost_usd) estimated_cost_usd FROM (
-        SELECT e.blueprint_id, b.name process_name, COUNT(*) executions, SUM(e.total_tokens) total_tokens, SUM(e.estimated_cost_usd) estimated_cost_usd
-          FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
-          WHERE e.tenant_id = ? AND e.started_at >= date('now','start of month') GROUP BY e.blueprint_id, b.name
-        UNION ALL
-        SELECT r.blueprint_id, b.name, COUNT(*), SUM(c.total_tokens), SUM(c.estimated_cost_usd)
-          FROM evaluation_case_results c JOIN evaluation_runs r ON r.id = c.run_id
-          JOIN agent_blueprints b ON b.id = r.blueprint_id
-          WHERE c.tenant_id = ? AND c.created_at >= date('now','start of month') GROUP BY r.blueprint_id, b.name
-      ) GROUP BY blueprint_id, process_name ORDER BY estimated_cost_usd DESC`).bind(tenantId, tenantId).all(),
+    env.DB.prepare(`WITH usage AS (
+        SELECT blueprint_id, SUM(executions) executions, SUM(total_tokens) total_tokens,
+          SUM(estimated_cost_usd) estimated_cost_usd FROM (
+          SELECT e.blueprint_id, COUNT(*) executions, SUM(e.total_tokens) total_tokens,
+            SUM(e.estimated_cost_usd) estimated_cost_usd
+            FROM executions e WHERE e.tenant_id=? AND e.started_at >= date('now','start of month')
+            GROUP BY e.blueprint_id
+          UNION ALL
+          SELECT r.blueprint_id, COUNT(*), SUM(c.total_tokens), SUM(c.estimated_cost_usd)
+            FROM evaluation_case_results c JOIN evaluation_runs r ON r.id=c.run_id
+            WHERE c.tenant_id=? AND c.created_at >= date('now','start of month')
+            GROUP BY r.blueprint_id
+        ) GROUP BY blueprint_id
+      )
+      SELECT b.id blueprint_id, b.name process_name, COALESCE(usage.executions,0) executions,
+      COALESCE(usage.total_tokens,0) total_tokens, COALESCE(usage.estimated_cost_usd,0) estimated_cost_usd,
+      pb.monthly_limit_usd, pb.warning_percent, pb.hard_limit
+      FROM agent_blueprints b
+      LEFT JOIN usage ON usage.blueprint_id=b.id
+      LEFT JOIN process_budgets pb ON pb.tenant_id=b.tenant_id AND pb.blueprint_id=b.id
+      WHERE b.tenant_id=?
+      ORDER BY estimated_cost_usd DESC, b.name`).bind(tenantId, tenantId, tenantId).all(),
     env.DB.prepare(`SELECT id, blueprint_id, model, input_tokens, output_tokens, total_tokens, estimated_cost_usd, started_at
       FROM executions WHERE tenant_id = ? AND model IS NOT NULL ORDER BY started_at DESC LIMIT 50`).bind(tenantId).all(),
     env.DB.prepare(`SELECT id, period_start, period_end, source, source_reference, workers_ai_neurons,
@@ -55,6 +79,35 @@ export async function getUsageLedger(env: Env, tenantId: string) {
   return { summary, budget, models: models.results, byModel: byModel.results, byProcess: byProcess.results, recent: recent.results,
     reconciliations: reconciliations.results,
     estimateNotice: "Estimates use the model rate captured in Workrr and may differ from Cloudflare invoices, free allocations, cached input, or future pricing." };
+}
+
+export async function updateProcessBudget(env: Env, tenantId: string, actorId: string, blueprintId: string, input: {
+  monthlyLimitUsd?: number; warningPercent?: number; hardLimit?: boolean; enabled?: boolean;
+}) {
+  const process = await env.DB.prepare("SELECT id FROM agent_blueprints WHERE id=? AND tenant_id=?")
+    .bind(blueprintId, tenantId).first();
+  if (!process) throw new Error("Process not found");
+  if (input.enabled === false) {
+    await env.DB.prepare("DELETE FROM process_budgets WHERE tenant_id=? AND blueprint_id=?")
+      .bind(tenantId, blueprintId).run();
+    return { blueprintId, enabled: false };
+  }
+  const monthlyLimitUsd = Number(input.monthlyLimitUsd);
+  const warningPercent = Number(input.warningPercent);
+  if (!Number.isFinite(monthlyLimitUsd) || monthlyLimitUsd < 0.01 || monthlyLimitUsd > 1_000_000) {
+    throw new Error("Process monthly budget must be between $0.01 and $1,000,000");
+  }
+  if (!Number.isInteger(warningPercent) || warningPercent < 1 || warningPercent > 100) {
+    throw new Error("Process warning threshold must be 1–100%");
+  }
+  await env.DB.prepare(`INSERT INTO process_budgets
+    (tenant_id, blueprint_id, monthly_limit_usd, warning_percent, hard_limit, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(tenant_id, blueprint_id) DO UPDATE SET monthly_limit_usd=excluded.monthly_limit_usd,
+      warning_percent=excluded.warning_percent, hard_limit=excluded.hard_limit,
+      updated_at=CURRENT_TIMESTAMP, updated_by=excluded.updated_by`)
+    .bind(tenantId, blueprintId, monthlyLimitUsd, warningPercent, Number(Boolean(input.hardLimit)), actorId).run();
+  return { blueprintId, enabled: true, monthlyLimitUsd, warningPercent, hardLimit: Boolean(input.hardLimit) };
 }
 
 export interface BillingEvidenceInput {

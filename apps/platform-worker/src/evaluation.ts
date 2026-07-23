@@ -86,11 +86,11 @@ export interface RubricTemplate {
 
 export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioId: string, requestedReleaseId?: string,
   requestedModelProfile?: string, maxCases = 10): Promise<PreparedEvaluation> {
-  await assertBudgetAvailable(env, tenantId);
   const scenario = await env.DB.prepare(`SELECT e.*, b.active_release_id, b.operating_mode, b.prompt_release_id
     FROM evaluation_scenarios e JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first<Record<string, string | number | null>>();
   if (!scenario) throw new Error("Evaluation scenario not found");
+  await assertBudgetAvailable(env, tenantId, String(scenario.blueprint_id));
   const releaseId = requestedReleaseId || String(scenario.active_release_id || "");
   const release = releaseId ? await env.DB.prepare(`SELECT r.id, r.prompt_release_id, r.model_profile, r.model_id, p.version,
     p.system_prompt, p.instructions_json, p.guardrails_json, p.checksum, p.published_at,
@@ -161,6 +161,7 @@ export async function evaluatePreparedCase(env: Env, tenantId: string, runId: st
   const assertions = parseAssertions(item.assertions_json);
   try {
     if (!prepared.prompt || !prepared.modelProfile) throw new Error("Evaluation release is unavailable");
+    await assertBudgetAvailable(env, tenantId, String(prepared.scenario.blueprint_id));
     const contracts = parseContracts(prepared.contracts.inputSchemaJson, prepared.contracts.outputSchemaJson);
     const protectedInput = await applyDlp(env, tenantId, item.input_text, {
       direction: "input", stage: "evaluation", executionId: `${runId}:${item.id}`,
@@ -245,6 +246,7 @@ async function evaluateModelRubrics(env: Env, tenantId: string, runId: string, p
     blueprintId: String(prepared.scenario.blueprint_id)
   }, prepared.dlpRules);
   if (protectedInput.blocked) throw new DlpBlockedError(protectedInput.blockedDetectors);
+  await assertBudgetAvailable(env, tenantId, String(prepared.scenario.blueprint_id));
   const judged = await runModel(env, "fast", judgePrompt, protectedInput.modelText,
     `evaluation-judge:${prepared.releaseId}:${item.id}`);
   const protectedOutput = await applyDlp(env, tenantId, judged.output, {
@@ -1089,13 +1091,13 @@ export async function importEvaluationDataset(env: Env, tenantId: string, scenar
 
 export async function queueModelTrial(env: Env, tenantId: string, actorId: string, scenarioId: string, candidateProfile: string,
   requestedReleaseId?: string) {
-  await assertBudgetAvailable(env, tenantId);
   if (!(candidateProfile in modelProfiles)) throw new Error("Select a supported Cloudflare model profile");
   const scenario = await env.DB.prepare(`SELECT e.id, e.blueprint_id, b.active_release_id FROM evaluation_scenarios e
     JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId)
     .first<{ id: string; blueprint_id: string; active_release_id: string | null }>();
   if (!scenario) throw new Error("Evaluation scenario not found");
+  await assertBudgetAvailable(env, tenantId, scenario.blueprint_id);
   const releaseId = requestedReleaseId || scenario.active_release_id;
   if (!releaseId) throw new Error("Select or publish a process release before comparing models");
   const release = await env.DB.prepare(`SELECT id, model_profile FROM process_releases
@@ -1127,12 +1129,12 @@ export async function queueModelTrial(env: Env, tenantId: string, actorId: strin
 
 export async function queueEvaluationSuite(env: Env, tenantId: string, actorId: string, scenarioId: string,
   requestedReleaseId?: string, mode: "regression" | "shadow" = "regression") {
-  await assertBudgetAvailable(env, tenantId);
   const scenario = await env.DB.prepare(`SELECT e.id, e.blueprint_id, b.active_release_id FROM evaluation_scenarios e
     JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId)
     .first<{ id: string; blueprint_id: string; active_release_id: string | null }>();
   if (!scenario) throw new Error("Evaluation scenario not found");
+  await assertBudgetAvailable(env, tenantId, scenario.blueprint_id);
   const releaseId = requestedReleaseId || scenario.active_release_id;
   if (!releaseId) throw new Error("Select or publish a process release before starting a suite");
   const release = await env.DB.prepare("SELECT id FROM process_releases WHERE id = ? AND tenant_id = ? AND blueprint_id = ?")
