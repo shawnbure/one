@@ -43,10 +43,47 @@ app.get("/api/overview", async (c) => {
 });
 
 app.get("/api/executions", async (c) => {
+  const status = c.req.query("status");
+  const blueprintId = c.req.query("process");
+  const filters: string[] = ["tenant_id = ?"];
+  const bindings: string[] = [c.get("tenantId")];
+  if (status) { filters.push("status = ?"); bindings.push(status); }
+  if (blueprintId) { filters.push("blueprint_id = ?"); bindings.push(blueprintId); }
   const { results } = await c.env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status,
     input_preview, output_preview, model, started_at, completed_at, error
-    FROM executions WHERE tenant_id = ? ORDER BY started_at DESC LIMIT 100`).bind(c.get("tenantId")).all();
+    FROM executions WHERE ${filters.join(" AND ")} ORDER BY started_at DESC LIMIT 100`).bind(...bindings).all();
   return c.json({ data: results });
+});
+
+app.get("/api/executions/:id", async (c) => {
+  const executionId = c.req.param("id");
+  const execution = await c.env.DB.prepare(`SELECT e.*, b.name blueprint_name, b.autonomy, b.prompt_release_id
+    FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
+    WHERE e.id = ? AND e.tenant_id = ?`).bind(executionId, c.get("tenantId")).first();
+  if (!execution) return c.json({ error: "Execution not found" }, 404);
+  const [approvals, audit] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM approvals WHERE tenant_id = ? AND execution_id = ? ORDER BY requested_at")
+      .bind(c.get("tenantId"), executionId).all(),
+    c.env.DB.prepare(`SELECT actor_id, event_type, target_type, target_id, detail_json, created_at FROM audit_events
+      WHERE tenant_id = ? AND ((target_type = 'execution' AND target_id = ?) OR
+      (target_type = 'approval' AND target_id IN (SELECT id FROM approvals WHERE execution_id = ?))) ORDER BY created_at`)
+      .bind(c.get("tenantId"), executionId, executionId).all()
+  ]);
+  return c.json({ data: execution, approvals: approvals.results, audit: audit.results });
+});
+
+app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  const sourceId = c.req.param("id");
+  const source = await c.env.DB.prepare(`SELECT blueprint_id, execution_profile, instance_key, input_preview
+    FROM executions WHERE id = ? AND tenant_id = ?`).bind(sourceId, c.get("tenantId")).first<{
+      blueprint_id: string; execution_profile: string; instance_key: string | null; input_preview: string;
+    }>();
+  if (!source) return c.json({ error: "Execution not found" }, 404);
+  const request = replayRequest(source);
+  const result = await executeRequest(c.env, c.get("tenantId"), request);
+  await c.env.DB.prepare("UPDATE executions SET retry_of = ? WHERE id = ?").bind(sourceId, result.executionId).run();
+  await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "execution.retried", "execution", result.executionId, { sourceExecutionId: sourceId });
+  return c.json(result, 202);
 });
 
 app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
@@ -155,4 +192,15 @@ async function writeAudit(env: Env, tenantId: string, actorId: string, eventType
     (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
     VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), tenantId, actorId, eventType, targetType, targetId, JSON.stringify(detail ?? {})).run();
+}
+
+function replayRequest(source: { blueprint_id: string; execution_profile: string; instance_key: string | null; input_preview: string }): ExecutionRequest {
+  const request: ExecutionRequest = { blueprintId: source.blueprint_id, input: source.input_preview };
+  const key = source.instance_key ?? "";
+  if (source.execution_profile === "conversation") request.threadId = key.split(":thread:")[1];
+  if (source.execution_profile === "consumer") request.consumerId = key.split(":consumer:")[1];
+  if (source.execution_profile === "entity") request.entityId = key.split(":entity:")[1];
+  if (source.execution_profile === "shared_shard") request.shardKey = key.split(":shard:")[1];
+  if (source.execution_profile === "temporary_durable") request.idempotencyKey = crypto.randomUUID();
+  return request;
 }

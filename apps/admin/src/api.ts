@@ -43,6 +43,24 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface Execution {
+  id: string;
+  blueprint_id: string;
+  blueprint_name?: string;
+  instance_key: string | null;
+  execution_profile: string;
+  status: string;
+  input_preview: string;
+  output_preview: string | null;
+  model: string | null;
+  started_at: string;
+  completed_at: string | null;
+  error: string | null;
+  autonomy?: string;
+  prompt_release_id?: string;
+  retry_of?: string | null;
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -69,5 +87,8 @@ export const api = {
   decideApproval: (id: string, decision: "approved" | "rejected", note?: string) =>
     request<{ updated: boolean }>(`/api/approvals/${encodeURIComponent(id)}/${decision}`, { method: "POST", body: JSON.stringify({ note }) }),
   assignApproval: (id: string, assignedTo: string) =>
-    request<{ updated: boolean }>(`/api/approvals/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ assignedTo }) })
+    request<{ updated: boolean }>(`/api/approvals/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ assignedTo }) }),
+  executions: () => request<{ data: Execution[] }>("/api/executions"),
+  execution: (id: string) => request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[] }>(`/api/executions/${encodeURIComponent(id)}`),
+  retryExecution: (id: string) => request<{ executionId: string; status: string }>(`/api/executions/${encodeURIComponent(id)}/retry`, { method: "POST" })
 };
