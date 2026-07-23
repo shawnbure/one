@@ -104,6 +104,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 14. `0014_customer_bootstrap.sql`: idempotent customer launch evidence and provisioned baseline references.
 15. `0015_evaluation_lab.sql`: curated golden cases, case-level results, release scores, inference usage, and comparison evidence.
 16. `0016_evaluation_operations.sql`: durable suite lifecycle, Workflow correlation, and tenant-scoped human review scorecards.
+17. `0017_evaluation_score_backfill.sql`: truthful percentage scores for evaluation evidence created before case-level scoring.
 
 Development migrations are applied before each matching development deploy. Production migration remains an explicit reviewed release action.
 
