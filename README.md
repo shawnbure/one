@@ -88,6 +88,22 @@ The single Ubuntu CI job validates sequential D1 migrations, scans tracked text 
 
 ## Provision and deploy
 
+Generate a customer-owned configuration outside the live file first:
+
+```bash
+npm run customer:config -- \
+  --slug acme \
+  --account-id 0123456789abcdef0123456789abcdef \
+  --production-domain one.acme.example \
+  --development-domain one-dev.acme.example \
+  --access-team-domain https://acme.cloudflareaccess.com \
+  --production-audience <64-character-production-audience> \
+  --development-audience <64-character-development-audience> \
+  --output /tmp/acme-wrangler.jsonc
+```
+
+The generator validates account, hostname, Access origin, slug, and audience formats; requires separate production/development domains and audiences; emits no credentials; omits account-assigned D1 IDs for provisioning; writes with owner-only permissions; and refuses to overwrite a file. Review it before replacing `apps/platform-worker/wrangler.jsonc` in the customer fork. Worker typechecking regenerates ignored Wrangler binding types from that customer file before compiling, so customer domains and audiences never depend on Workrr’s development literals.
+
 Review the idempotent resource plan for the selected customer environment:
 
 ```bash

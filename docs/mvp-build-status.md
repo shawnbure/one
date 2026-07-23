@@ -10,6 +10,8 @@ Repository CI uses one bounded Ubuntu job for `dev`, `main`, and pull requests. 
 
 The FDE provisioning command derives environment-isolated D1, R2, Vectorize, Queue, and DLQ names from Wrangler configuration and checks the explicitly configured Cloudflare account before making changes. It defaults to a read-only plan, exact-matches inventory names, creates only missing resources, and requires a distinct typed confirmation for development or production. Deployment, migrations, secret configuration, Access policy, and live verification remain separate observable gates.
 
+Customer forks no longer require hand-editing every account-specific binding. A configuration generator validates the customer slug, Cloudflare account ID, production/development hostnames, Access organization origin, and distinct Access audiences before emitting a complete two-environment Wrangler file. Resource and Workflow names are deterministically isolated by customer and environment, D1 identifiers remain unassigned until provisioning, no credential values are accepted or emitted, output permissions are owner-only, and existing files are never overwritten.
+
 The product is deliberately process-first. Agents are an execution primitive, not the organizing metaphor in the customer UI.
 
 ## Implemented product surfaces
