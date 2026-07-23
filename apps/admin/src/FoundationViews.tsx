@@ -259,7 +259,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "",
     format: "text" as "text" | "json", maxChars: 2000,
     dimension: "groundedness" as "groundedness" | "completeness" | "safety" | "clarity" | "format",
-    assertionWeight: 1, caseWeight: 1 });
+    assertionWeight: 1, caseWeight: 1, rubricCriterion: "" });
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
   ).length;
@@ -294,10 +294,11 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
         name: caseForm.name, input: caseForm.input,
         expectedPhrases: phrases(caseForm.expected), prohibitedPhrases: phrases(caseForm.prohibited),
         format: caseForm.format, maxChars: caseForm.maxChars, dimension: caseForm.dimension,
-        assertionWeight: caseForm.assertionWeight, caseWeight: caseForm.caseWeight
+        assertionWeight: caseForm.assertionWeight, caseWeight: caseForm.caseWeight,
+        rubricCriterion: caseForm.rubricCriterion
       });
       setCaseForm({ name: "", input: "", expected: "", prohibited: "", format: "text", maxChars: 2000,
-        dimension: "groundedness", assertionWeight: 1, caseWeight: 1 });
+        dimension: "groundedness", assertionWeight: 1, caseWeight: 1, rubricCriterion: "" });
       await inspect(selected);
       await onReload();
       onNotice("Golden case added; the scenario must be rerun before release promotion.");
@@ -465,6 +466,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <label>Anonymized input<textarea value={caseForm.input} onChange={(event) => setCaseForm({ ...caseForm, input: event.target.value })}/></label>
               <label>Required phrases <small>comma separated</small><input value={caseForm.expected} onChange={(event) => setCaseForm({ ...caseForm, expected: event.target.value })}/></label>
               <label>Prohibited phrases <small>comma separated</small><input value={caseForm.prohibited} onChange={(event) => setCaseForm({ ...caseForm, prohibited: event.target.value })}/></label>
+              <label>AI judge criterion <small>optional · one bounded Cloudflare AI grading call</small><textarea className="rubric-criterion" maxLength={500} placeholder="Example: The response identifies the operational risk and recommends a practical next action." value={caseForm.rubricCriterion} onChange={(event) => setCaseForm({ ...caseForm, rubricCriterion: event.target.value })}/></label>
               <div className="case-fields"><label>Quality dimension<select value={caseForm.dimension} onChange={(event) => setCaseForm({ ...caseForm, dimension: event.target.value as typeof caseForm.dimension })}><option value="groundedness">Groundedness</option><option value="completeness">Completeness</option><option value="safety">Safety</option><option value="clarity">Clarity</option><option value="format">Format</option></select></label><label>Case weight<input type="number" min="0.1" max="10" step="0.1" value={caseForm.caseWeight} onChange={(event) => setCaseForm({ ...caseForm, caseWeight: Number(event.target.value) })}/></label></div>
               <div className="case-fields"><label>Format<select value={caseForm.format} onChange={(event) => setCaseForm({ ...caseForm, format: event.target.value as "text" | "json" })}><option value="text">Text</option><option value="json">Valid JSON</option></select></label><label>Assertion weight<input type="number" min="0.1" max="10" step="0.1" value={caseForm.assertionWeight} onChange={(event) => setCaseForm({ ...caseForm, assertionWeight: Number(event.target.value) })}/></label></div>
               <label>Maximum characters<input type="number" min="1" max="50000" value={caseForm.maxChars} onChange={(event) => setCaseForm({ ...caseForm, maxChars: Number(event.target.value) })}/></label>

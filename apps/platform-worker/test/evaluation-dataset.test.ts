@@ -21,8 +21,8 @@ function datasetEnvironment(options: {
         async all() {
           if (sql.includes("FROM dlp_rules")) return { results: [] };
           if (sql.includes("SELECT name, input_text")) return { results: options.exportCases ?? [] };
-          if (sql.includes("SELECT name FROM evaluation_cases")) {
-            return { results: (options.existingNames ?? []).map((name) => ({ name })) };
+          if (sql.includes("SELECT name, assertions_json FROM evaluation_cases")) {
+            return { results: (options.existingNames ?? []).map((name) => ({ name, assertions_json: "[]" })) };
           }
           if (sql.includes("SELECT assertions_json FROM evaluation_cases")) return { results: [] };
           return { results: [] };

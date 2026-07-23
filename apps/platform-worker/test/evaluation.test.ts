@@ -126,4 +126,51 @@ describe("release-specific evaluation evidence", () => {
     ]));
     expect(writes.some(({ sql, values }) => sql.includes("INSERT INTO evaluation_cases") && values.includes(3))).toBe(true);
   });
+
+  it("uses one bounded Cloudflare judge call and records compact model-rubric evidence", async () => {
+    const judgedCase = {
+      ...goldenCase,
+      assertions_json: JSON.stringify([
+        { type: "contains_all", value: ["identifier"], dimension: "groundedness", weight: 1 },
+        { type: "model_rubric", value: "Provides a practical next action", dimension: "completeness", weight: 2 }
+      ])
+    };
+    vi.mocked(runModel)
+      .mockResolvedValueOnce({
+        output: "Use the supplied identifier and ask the operator for the missing record.",
+        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", inputTokens: 100, outputTokens: 20, totalTokens: 120
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ scores: [{ index: 0, score: 0.98, reason: "Recommends asking the operator for the record" }] }),
+        model: "@cf/meta/llama-3.1-8b-instruct-fp8", inputTokens: 70, outputTokens: 15, totalTokens: 85
+      });
+    const { env, writes } = evaluationEnvironment({ cases: [judgedCase] });
+    const result = await runEvaluation(env, "tenant-1", "actor-1", "scenario-1", "release-live");
+    expect(result).toMatchObject({ status: "failing", totalTokens: 205 });
+    expect(result.score).toBeGreaterThan(0.99);
+    expect(result.score).toBeLessThan(1);
+    expect(runModel).toHaveBeenCalledTimes(2);
+    expect(runModel).toHaveBeenNthCalledWith(2, expect.anything(), "fast",
+      expect.objectContaining({ releaseId: "workrr-evaluation-judge-v1" }),
+      expect.stringContaining("Provides a practical next action"),
+      "evaluation-judge:release-live:case-1");
+    const caseWrite = writes.find(({ sql }) => sql.includes("INSERT INTO evaluation_case_results"));
+    expect(caseWrite?.values.some((value) => typeof value === "string" &&
+      value.includes('"assertion":"model_rubric"') && value.includes("98%"))).toBe(true);
+  });
+
+  it("refuses an evaluation that would exceed the secondary-judge call ceiling", async () => {
+    const judgedCases = Array.from({ length: 26 }, (_, index) => ({
+      ...goldenCase,
+      id: `case-${index}`,
+      name: `Judged case ${index}`,
+      assertions_json: JSON.stringify([
+        { type: "model_rubric", value: "Is operationally useful", dimension: "completeness", weight: 1 }
+      ])
+    }));
+    const { env } = evaluationEnvironment({ cases: judgedCases });
+    await expect(runEvaluation(env, "tenant-1", "actor-1", "scenario-1", "release-live"))
+      .rejects.toThrow("at most 25 cases");
+    expect(runModel).not.toHaveBeenCalled();
+  });
 });

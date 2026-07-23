@@ -385,7 +385,7 @@ export const api = {
   createEvaluationCase: (id: string, body: { name: string; input: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number;
     dimension: "groundedness" | "completeness" | "safety" | "clarity" | "format";
-    assertionWeight: number; caseWeight: number }) =>
+    assertionWeight: number; caseWeight: number; rubricCriterion: string }) =>
     request<{ data: { id: string; assertionCount: number } }>(`/api/evaluations/${encodeURIComponent(id)}/cases`,
       { method: "POST", body: JSON.stringify(body) }),
   exportEvaluationDataset: (id: string) =>
