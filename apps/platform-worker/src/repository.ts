@@ -17,6 +17,10 @@ export async function getBlueprint(env: Env, tenantId: string, id: string): Prom
           AND c.status='healthy' AND c.secret_configured=1
           AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s
             WHERE lower(CAST(s.value AS TEXT))='calendars.readbasic') THEN 1
+        WHEN json_extract(policy.value, '$.handlerKey')='microsoft.calendar.event.create'
+          AND c.status='healthy' AND c.secret_configured=1
+          AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s
+            WHERE lower(CAST(s.value AS TEXT))='calendars.readwrite') THEN 1
         WHEN json_extract(policy.value, '$.handlerKey') IS NULL
           AND c.status='healthy' AND c.secret_configured=1 THEN 1
         ELSE 0

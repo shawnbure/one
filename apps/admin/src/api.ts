@@ -55,6 +55,27 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface ToolActionDispatch {
+  id: string;
+  approval_id: string;
+  execution_id: string;
+  invocation_id: string;
+  tool_name: string;
+  handler_key: string | null;
+  status: "pending" | "queued" | "processing" | "retrying" | "completed" | "failed" | "enqueue_failed" | "rejected";
+  input_json: string;
+  output_json: string | null;
+  provider_resource_id: string | null;
+  attempt_count: number;
+  last_error: string | null;
+  approved_by: string;
+  created_at: string;
+  enqueued_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+}
+
 export interface Execution {
   id: string;
   blueprint_id: string;
@@ -244,6 +265,8 @@ export interface ToolAdapterDefinition {
   key: string;
   label: string;
   adapterKind: string;
+  accessMode: "read" | "write";
+  riskLevel: "low" | "medium" | "high";
   scope: string;
   inputSchema: Record<string, unknown>;
 }
@@ -473,7 +496,7 @@ export const api = {
   overview: () => request<OverviewData>("/api/overview"),
   approvals: () => request<{ data: Approval[] }>("/api/approvals"),
   approval: (id: string) =>
-    request<{ data: ApprovalDetail; audit: AuditEvent[] }>(
+    request<{ data: ApprovalDetail; audit: AuditEvent[]; actions: ToolActionDispatch[] }>(
       `/api/approvals/${encodeURIComponent(id)}`,
     ),
   execute: (body: ExecutionRequest) =>
@@ -486,7 +509,7 @@ export const api = {
     decision: "approved" | "rejected",
     note?: string,
   ) =>
-    request<{ updated: boolean }>(
+    request<{ updated: boolean; dispatched: number; enqueueFailed: number }>(
       `/api/approvals/${encodeURIComponent(id)}/${decision}`,
       { method: "POST", body: JSON.stringify({ note }) },
     ),
@@ -503,7 +526,7 @@ export const api = {
     ),
   execution: (id: string) =>
     request<{ data: Execution; approvals: Approval[]; audit: AuditEvent[]; citations: ExecutionKnowledgeCitation[];
-      toolInvocations: ToolInvocation[] }>(
+      toolInvocations: ToolInvocation[]; toolActions: ToolActionDispatch[] }>(
       `/api/executions/${encodeURIComponent(id)}`,
     ),
   retryExecution: (id: string) =>

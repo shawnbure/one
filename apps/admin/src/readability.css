@@ -364,6 +364,18 @@ a:focus-visible {
 .run-tool-evidence > span { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #e7ece9; }
 .run-tool-evidence strong,
 .run-tool-evidence small { font-size: 12px; line-height: 1.45; }
+.evidence-block pre {
+  margin: 12px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #dbe7e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #263b32;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 /* Studio tabs are a semantic nav inside the page, not part of the dark application rail. */
 .studio-tabs button:hover { background: #eef5f1 !important; color: #285f4a !important; }

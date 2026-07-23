@@ -68,7 +68,9 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
     inputSchema: '{\n  "type": "object",\n  "additionalProperties": true\n}',
     outputSchema: '{\n  "type": "object",\n  "additionalProperties": true\n}'
   });
-  const [capabilities, setCapabilities] = useState({ mail: true, mail_send: true, calendar: true, files: false });
+  const [capabilities, setCapabilities] = useState({
+    mail: true, mail_send: true, calendar: true, calendar_write: false, files: false
+  });
   async function loadTools() {
     try {
       const [catalog, adapters] = await Promise.all([api.tools(), api.toolAdapters()]);
@@ -170,6 +172,7 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
           <label><input type="checkbox" checked={capabilities.mail} onChange={(event) => setCapabilities({ ...capabilities, mail: event.target.checked })}/> Mail metadata <small>Mail.ReadBasic</small></label>
           <label><input type="checkbox" checked={capabilities.mail_send} onChange={(event) => setCapabilities({ ...capabilities, mail_send: event.target.checked })}/> Send notifications <small>Mail.Send</small></label>
           <label><input type="checkbox" checked={capabilities.calendar} onChange={(event) => setCapabilities({ ...capabilities, calendar: event.target.checked })}/> Calendar basics <small>Calendars.ReadBasic</small></label>
+          <label><input type="checkbox" checked={capabilities.calendar_write} onChange={(event) => setCapabilities({ ...capabilities, calendar_write: event.target.checked })}/> Create calendar events <small>Calendars.ReadWrite</small></label>
           <label><input type="checkbox" checked={capabilities.files} onChange={(event) => setCapabilities({ ...capabilities, files: event.target.checked })}/> User files <small>Files.Read</small></label>
         </div>
         <div className="oauth-actions">
@@ -271,8 +274,12 @@ function Connections({ data, onReload, onNotice }: { data: GovernanceData; onRel
                 <option value="import_export">Import / export</option></select></label></div>
             <label>Implementation<select value={toolForm.handlerKey} onChange={(event) => setToolForm({
               ...toolForm, handlerKey: event.target.value,
-              accessMode: event.target.value ? "read" : toolForm.accessMode,
-              riskLevel: event.target.value ? "low" : toolForm.riskLevel,
+              accessMode: event.target.value
+                ? toolAdapters.find((adapter) => adapter.key === event.target.value)?.accessMode ?? "read"
+                : toolForm.accessMode,
+              riskLevel: event.target.value
+                ? toolAdapters.find((adapter) => adapter.key === event.target.value)?.riskLevel ?? "low"
+                : toolForm.riskLevel,
               connectionId: event.target.value
                 ? String(data.connections.find((item) => String(item.name) === "Microsoft 365")?.id ?? "")
                 : toolForm.connectionId,

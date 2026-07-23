@@ -30,6 +30,8 @@ export async function listTools(env: Env, tenantId: string) {
         AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='mail.readbasic') THEN 1
       WHEN t.handler_key='microsoft.calendar.list' AND c.status='healthy' AND c.secret_configured=1
         AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='calendars.readbasic') THEN 1
+      WHEN t.handler_key='microsoft.calendar.event.create' AND c.status='healthy' AND c.secret_configured=1
+        AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='calendars.readwrite') THEN 1
       ELSE 0
     END handler_ready,
     COALESCE(group_concat(DISTINCT b.name), '') process_names,
@@ -56,8 +58,10 @@ export async function createTool(env: Env, tenantId: string, actorId: string, in
   if (!["mock", "http", "microsoft", "database", "import_export"].includes(adapterKind)) throw new Error("Unsupported tool adapter");
   const handlerKey = normalizeHandlerKey(input.handlerKey);
   if (handlerKey && !handlerKey.startsWith(`${adapterKind}.`)) throw new Error("Tool implementation does not match its adapter");
-  if (handlerKey && (input.accessMode !== "read" || input.riskLevel !== "low")) {
-    throw new Error("Current bound implementations are limited to low-risk reads");
+  if (isBoundAdapter(handlerKey) &&
+    (input.accessMode !== boundAdapterCatalog[handlerKey].accessMode ||
+      input.riskLevel !== boundAdapterCatalog[handlerKey].riskLevel)) {
+    throw new Error("Tool access and risk must match the registered implementation");
   }
   if (!["read", "write"].includes(input.accessMode)) throw new Error("Tool access mode must be read or write");
   if (!["low", "medium", "high"].includes(input.riskLevel)) throw new Error("Tool risk level is invalid");
@@ -120,6 +124,8 @@ export async function releaseToolPolicies(env: Env, tenantId: string, blueprintI
         AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='mail.readbasic') THEN 1
       WHEN t.handler_key='microsoft.calendar.list' AND c.status='healthy' AND c.secret_configured=1
         AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='calendars.readbasic') THEN 1
+      WHEN t.handler_key='microsoft.calendar.event.create' AND c.status='healthy' AND c.secret_configured=1
+        AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) s WHERE lower(CAST(s.value AS TEXT))='calendars.readwrite') THEN 1
       WHEN t.handler_key IS NULL AND c.status='healthy' AND c.secret_configured=1 THEN 1
       ELSE 0 END connection_ready
     FROM process_tool_bindings pt
@@ -212,7 +218,8 @@ const defaultSchema = { type: "object", additionalProperties: true };
 
 function normalizeHandlerKey(value: string | null | undefined) {
   const key = value?.trim() || null;
-  if (key && !["microsoft.profile.get", "microsoft.mail.list", "microsoft.calendar.list"].includes(key)) {
+  if (key && !["microsoft.profile.get", "microsoft.mail.list", "microsoft.calendar.list",
+    "microsoft.calendar.event.create"].includes(key)) {
     throw new Error("Unsupported tool implementation");
   }
   return key;

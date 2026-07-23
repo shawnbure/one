@@ -100,7 +100,13 @@ export interface KnowledgeIndexJob {
   sourceId: string;
 }
 
-export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob | KnowledgeIndexJob;
+export interface ToolActionJob {
+  kind: "tool_action";
+  tenantId: string;
+  dispatchId: string;
+}
+
+export type WorkrrQueueJob = QueueJob | NotificationDeliveryJob | KnowledgeIndexJob | ToolActionJob;
 
 export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequest): string | null {
   const base = request.blueprintId;

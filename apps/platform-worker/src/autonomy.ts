@@ -69,13 +69,18 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
   if (!plan.requiresApproval) return null;
   const approvalId = `approval-${executionId}`;
   const now = new Date().toISOString();
-  const actionName = blueprint.tools.length ? "review_proposed_tool_action" : "review_ai_outcome";
+  const { results: proposedActions } = await env.DB.prepare(`SELECT id, tool_name, handler_key,
+    access_mode, risk_level, input_json FROM tool_invocations
+    WHERE tenant_id=? AND execution_id=? AND status='proposed' ORDER BY started_at`)
+    .bind(tenantId, executionId).all<Record<string, unknown>>();
+  const actionName = proposedActions.length ? "review_proposed_tool_action" : "review_ai_outcome";
   const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO approvals
       (id, tenant_id, execution_id, action_name, action_input_json, status, requested_at, title,
        description, impact, autonomy_level, action_risk)
       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'medium', ?, 'medium')`)
     .bind(approvalId, tenantId, executionId, actionName,
-      JSON.stringify({ tools: blueprint.toolPolicies ?? blueprint.tools, proposedOutput: output.slice(0, 4000) }), now,
+      JSON.stringify({ tools: blueprint.toolPolicies ?? blueprint.tools, proposedActions,
+        proposedOutput: output.slice(0, 4000) }), now,
       `Review ${blueprint.name} proposal`, plan.explanation, plan.effective).run();
   await env.DB.batch([
     env.DB.prepare(`UPDATE executions SET status='waiting_approval', autonomy_disposition='waiting_approval',
@@ -85,7 +90,8 @@ export async function routeApproval(env: Env, tenantId: string, executionId: str
       VALUES (?, ?, 'system', 'approval.requested', 'approval', ?, ?, ?)`)
       .bind(`audit-autonomy-${executionId}`, tenantId, approvalId,
         JSON.stringify({ executionId, blueprintId: blueprint.id, autonomy: plan.effective,
-          tools: blueprint.toolPolicies ?? blueprint.tools }), now)
+          tools: blueprint.toolPolicies ?? blueprint.tools,
+          proposedActions: proposedActions.map((item) => item.id) }), now)
   ]);
   if (inserted.meta.changes === 1) {
     try {

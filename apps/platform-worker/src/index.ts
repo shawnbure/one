@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { executionProfiles, type ExecutionRequest, type KnowledgeIndexJob, type QueueJob, type WorkrrQueueJob } from "@workrr/contracts";
+import { executionProfiles, type ExecutionRequest, type KnowledgeIndexJob, type QueueJob, type ToolActionJob,
+  type WorkrrQueueJob } from "@workrr/contracts";
 import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
 import { listBlueprints } from "./repository";
@@ -23,6 +24,7 @@ import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, mar
 import { ContractViolationError, isContractViolation } from "./contracts";
 import { createTool, listTools, setToolBindings, setToolEnabled } from "./tools";
 import { listBoundAdapters } from "./tool-adapters";
+import { decideApproval, enqueueRecoverableToolActions, markToolActionFailure, processToolAction } from "./tool-actions";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -507,7 +509,7 @@ app.get("/api/executions/:id", async (c) => {
     FROM executions e JOIN agent_blueprints b ON b.id = e.blueprint_id
     WHERE e.id = ? AND e.tenant_id = ?`).bind(executionId, c.get("tenantId")).first();
   if (!execution) return c.json({ error: "Execution not found" }, 404);
-  const [approvals, audit, citations, toolInvocations] = await Promise.all([
+  const [approvals, audit, citations, toolInvocations, toolActions] = await Promise.all([
     c.env.DB.prepare("SELECT * FROM approvals WHERE tenant_id = ? AND execution_id = ? ORDER BY requested_at")
       .bind(c.get("tenantId"), executionId).all(),
     c.env.DB.prepare(`SELECT actor_id, event_type, target_type, target_id, detail_json, created_at FROM audit_events
@@ -520,10 +522,14 @@ app.get("/api/executions/:id", async (c) => {
     c.env.DB.prepare(`SELECT id, tool_name, tool_version, status, execution_mode, access_mode, risk_level,
       adapter_kind, input_json, output_json, error, started_at, completed_at
       FROM tool_invocations WHERE tenant_id=? AND execution_id=? ORDER BY started_at`)
+      .bind(c.get("tenantId"), executionId).all(),
+    c.env.DB.prepare(`SELECT d.*, i.tool_name, i.handler_key, i.input_json, i.output_json
+      FROM tool_action_dispatches d JOIN tool_invocations i ON i.id=d.invocation_id AND i.tenant_id=d.tenant_id
+      WHERE d.tenant_id=? AND d.execution_id=? ORDER BY d.created_at`)
       .bind(c.get("tenantId"), executionId).all()
   ]);
   return c.json({ data: execution, approvals: approvals.results, audit: audit.results,
-    citations: citations.results, toolInvocations: toolInvocations.results });
+    citations: citations.results, toolInvocations: toolInvocations.results, toolActions: toolActions.results });
 });
 
 app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
@@ -615,16 +621,20 @@ app.get("/api/approvals", async (c) => {
 });
 
 app.get("/api/approvals/:id", async (c) => {
-  const [approval, audit] = await Promise.all([
+  const [approval, audit, actions] = await Promise.all([
     c.env.DB.prepare(`SELECT a.*, e.blueprint_id, e.input_preview, e.output_preview, e.model
       FROM approvals a JOIN executions e ON e.id = a.execution_id
       WHERE a.id = ? AND a.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first(),
     c.env.DB.prepare(`SELECT actor_id, event_type, detail_json, created_at FROM audit_events
       WHERE tenant_id = ? AND target_type = 'approval' AND target_id = ? ORDER BY created_at`)
+      .bind(c.get("tenantId"), c.req.param("id")).all(),
+    c.env.DB.prepare(`SELECT d.*, i.tool_name, i.handler_key, i.input_json, i.output_json
+      FROM tool_action_dispatches d JOIN tool_invocations i ON i.id=d.invocation_id AND i.tenant_id=d.tenant_id
+      WHERE d.tenant_id=? AND d.approval_id=? ORDER BY d.created_at`)
       .bind(c.get("tenantId"), c.req.param("id")).all()
   ]);
   if (!approval) return c.json({ error: "Review item not found" }, 404);
-  return c.json({ data: approval, audit: audit.results });
+  return c.json({ data: approval, audit: audit.results, actions: actions.results });
 });
 
 app.post("/api/approvals/:id/assign", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
@@ -1095,17 +1105,12 @@ app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewe
   if (!approvalId || (decisionParam !== "approved" && decisionParam !== "rejected")) return c.json({ error: "Invalid decision" }, 400);
   const decision: "approved" | "rejected" = decisionParam;
   const body: { note?: string } = await c.req.json<{ note?: string }>().catch(() => ({}));
-  const result = await c.env.DB.prepare(`UPDATE approvals SET status = ?, decided_at = ?, decided_by = ?, decision_note = ?
-    WHERE id = ? AND tenant_id = ? AND status = 'pending'`)
-    .bind(decision, new Date().toISOString(), c.get("actorId"), body.note ?? null, approvalId, c.get("tenantId")).run();
-  if (result.meta.changes === 1) {
-    await c.env.DB.prepare(`UPDATE executions SET status=?, autonomy_disposition=?
-      WHERE tenant_id=? AND approval_id=? AND status='waiting_approval'`)
-      .bind(decision === "approved" ? "completed" : "blocked", decision,
-        c.get("tenantId"), approvalId).run();
-    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `approval.${decision}`, "approval", approvalId, { decision, note: body.note });
+  try {
+    return c.json(await decideApproval(c.env, c.get("tenantId"), c.get("actorId"),
+      approvalId, decision, body.note));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Approval decision failed" }, 409);
   }
-  return c.json({ updated: result.meta.changes === 1 });
 });
 
 app.get("/api/system/capabilities", (c) => c.json({
@@ -1139,6 +1144,20 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
           console.error(JSON.stringify({ event: "knowledge_index_failed", sourceId: job.sourceId, error: String(error) }));
           if (message.attempts >= 5) await markKnowledgeIndexFailure(env, job, error);
           message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
+        }
+        continue;
+      }
+      if (message.body.kind === "tool_action") {
+        const job: ToolActionJob = message.body;
+        try {
+          await processToolAction(env, job);
+          message.ack();
+        } catch (error) {
+          console.error(JSON.stringify({ event: "tool_action_failed", dispatchId: job.dispatchId, error: String(error) }));
+          const terminal = message.attempts >= 5;
+          await markToolActionFailure(env, job, error, terminal);
+          if (terminal) message.ack();
+          else message.retry({ delaySeconds: Math.min(300, 2 ** message.attempts) });
         }
         continue;
       }
@@ -1193,6 +1212,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
           .bind(crypto.randomUUID(), JSON.stringify({ at: now.toISOString() }))
       ]),
       dispatchDueSchedules(env, now),
+      enqueueRecoverableToolActions(env),
       expireKnowledgeSources(env, now)
     ]));
   }

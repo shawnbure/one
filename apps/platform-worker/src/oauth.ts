@@ -8,6 +8,7 @@ const CAPABILITY_SCOPES = {
   mail: "Mail.ReadBasic",
   mail_send: "Mail.Send",
   calendar: "Calendars.ReadBasic",
+  calendar_write: "Calendars.ReadWrite",
   files: "Files.Read"
 } as const;
 export type MicrosoftCapability = keyof typeof CAPABILITY_SCOPES;
@@ -180,6 +181,7 @@ export async function getMicrosoftAccessToken(
   const row = await env.DB.prepare(`SELECT o.*, c.id connection_id FROM oauth_connections o
     JOIN connections c ON c.id=o.connection_id AND c.tenant_id=o.tenant_id
     WHERE o.tenant_id=? AND o.provider='microsoft' AND o.status!='disconnected'
+      AND c.status='healthy' AND c.secret_configured=1
       AND (? IS NULL OR c.id=?)`)
     .bind(tenantId, expectedConnectionId ?? null, expectedConnectionId ?? null).first<OAuthConnectionRow>();
   if (!row) throw new Error("Microsoft 365 is not connected");

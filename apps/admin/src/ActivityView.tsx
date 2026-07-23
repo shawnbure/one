@@ -19,6 +19,7 @@ import {
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
   type QueueOperationsData, type ToolInvocation } from "./api";
+import type { ToolActionDispatch } from "./api";
 import "./queue-operations.css";
 
 interface Props {
@@ -35,6 +36,7 @@ export function ActivityView({ processes, onNotice }: Props) {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [citations, setCitations] = useState<ExecutionKnowledgeCitation[]>([]);
   const [toolInvocations, setToolInvocations] = useState<ToolInvocation[]>([]);
+  const [toolActions, setToolActions] = useState<ToolActionDispatch[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -66,6 +68,7 @@ export function ActivityView({ processes, onNotice }: Props) {
         setAudit(result.audit);
         setCitations(result.citations);
         setToolInvocations(result.toolInvocations);
+        setToolActions(result.toolActions);
       })
       .catch((error: Error) => onNotice(error.message));
   }, [selectedId]);
@@ -223,6 +226,17 @@ export function ActivityView({ processes, onNotice }: Props) {
                   </span>)}
                 </div>
               )}
+              {toolActions.length > 0 && (
+                <div className="run-tool-evidence invocation-evidence">
+                  <div><ShieldCheck size={17}/><span><strong>Approved action delivery</strong>
+                    <small>Queue delivery and provider completion evidence for this run</small></span></div>
+                  {toolActions.map((action) => <span key={action.id}>
+                    <strong>{action.tool_name.replaceAll("_", " ")}</strong>
+                    <small>{action.status.replaceAll("_", " ")} · {action.attempt_count} attempt{action.attempt_count === 1 ? "" : "s"}</small>
+                    <em>{action.provider_resource_id ? `Provider resource ${action.provider_resource_id}` : action.last_error ?? "No provider completion evidence yet."}</em>
+                  </span>)}
+                </div>
+              )}
               <div className="payload-card">
                 <label>INPUT</label>
                 <p>{detail.input_preview}</p>
@@ -313,6 +327,11 @@ export function ActivityView({ processes, onNotice }: Props) {
                     detail={`${approval.status} · ${approval.title ?? approval.action_name}`}
                     state={approval.status === "pending" ? "waiting" : "done"}
                   />
+                ))}
+                {toolActions.map((action) => (
+                  <TraceItem key={action.id} title={`Action ${action.status.replaceAll("_", " ")}`}
+                    detail={`${action.tool_name.replaceAll("_", " ")} · ${action.attempt_count} attempt${action.attempt_count === 1 ? "" : "s"}`}
+                    state={action.status === "failed" ? "failed" : ["completed"].includes(action.status) ? "done" : "waiting"} />
                 ))}
                 {audit.map((event) => (
                   <TraceItem

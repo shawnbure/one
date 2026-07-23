@@ -145,15 +145,16 @@ async function recordInvocation(env: Env, context: ToolRuntimeContext, policy: T
   const now = new Date().toISOString();
   await env.DB.prepare(`INSERT INTO tool_invocations
     (id, tenant_id, execution_id, tool_id, tool_name, tool_version, tool_call_id, status,
-     execution_mode, access_mode, risk_level, adapter_kind, input_json, output_json, error,
+     execution_mode, access_mode, risk_level, adapter_kind, handler_key, input_json, output_json, error,
      idempotency_key, started_at, completed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(tenant_id, idempotency_key) DO UPDATE SET
       tool_call_id=excluded.tool_call_id, status=excluded.status, output_json=excluded.output_json,
       error=excluded.error, started_at=excluded.started_at, completed_at=excluded.completed_at`)
     .bind(value.id, context.tenantId, context.executionId, policy.id, policy.name, policy.version,
       value.toolCallId, value.status, value.mode, policy.accessMode, policy.riskLevel, policy.adapterKind,
-      value.inputJson, value.outputJson, value.error?.slice(0, 500) ?? null, value.idempotencyKey, now, now).run();
+      policy.handlerKey ?? null, value.inputJson, value.outputJson, value.error?.slice(0, 500) ?? null,
+      value.idempotencyKey, now, now).run();
 }
 
 function parseEvidence(value: string | null) {

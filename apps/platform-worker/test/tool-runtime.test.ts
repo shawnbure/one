@@ -67,9 +67,9 @@ describe("governed tool runtime", () => {
           async run() {
             if (sql.includes("INSERT INTO tool_invocations")) {
               inserts += 1;
-              rows.set(String(values[15]), {
+              rows.set(String(values[16]), {
                 status: "simulated", execution_mode: "simulation",
-                output_json: String(values[13]), error: null
+                output_json: String(values[14]), error: null
               });
             }
             return { meta: { changes: 1 } };
