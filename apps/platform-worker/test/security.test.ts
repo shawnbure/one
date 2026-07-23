@@ -188,6 +188,18 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("status = 'active' ORDER BY email"))).toBe(false);
   });
 
+  it("allows auditors to download the secret-free privacy architecture report", async () => {
+    const { env } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/governance/privacy-report", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(response.headers.get("content-disposition")).toContain("workrr-privacy-architecture");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toContain("Privacy &amp; Architecture Summary");
+  });
+
   it("prevents viewers from starting or disconnecting provider OAuth", async () => {
     for (const path of ["/api/oauth/microsoft/start", "/api/oauth/microsoft/disconnect"]) {
       const { env, queries } = environment("viewer");

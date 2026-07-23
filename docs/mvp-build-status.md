@@ -18,7 +18,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Work Inbox | Evidence and rationale review, assignment, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, approved external-action queue, inputs/outputs, failures, and safe replay/recovery |
 | Queue operations | Tenant-scoped process and approved-action enqueue/processing/retry/dead-letter evidence, bounded retention, and operator-authorized safe replay |
-| Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, and JSON evidence export |
+| Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, JSON evidence export, and printable privacy/architecture summary |
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
 | API Logs | Correlated request history and webhook visibility |
 | Knowledge Center | Governed text/file intake, pre-storage DLP, R2 source/chunk storage, queued Workers AI embedding, tenant-filtered Vectorize retrieval, process bindings, review/expiry enforcement, execution citation evidence, diagnostics, test query, reindex, and removal |
@@ -105,7 +105,7 @@ The Worker currently exposes these route groups:
 - Portability: `/api/processes/:id/package`, `/api/process-packages/import`
 - Execution: `/api/execute`, `/api/execute/async`, `/api/executions`, retry, `/api/queue-operations`, `/api/tool-actions`, failed Queue-job replay, and approved-action retry/cancel
 - Human review: `/api/approvals`, assignment, approve/decline
-- Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`
+- Evidence: `/api/audit`, `/api/logs`, `/api/governance`, `/api/governance/export`, `/api/governance/privacy-report`
 - Integration intake: `/webhooks/:endpointId`, `/api/webhooks`
 - Operational delivery: `/api/notifications`, policy configuration, and signed delivery tests
 - Knowledge: `/api/knowledge-sources`, reindex/removal, and `/api/knowledge/query`
@@ -114,6 +114,8 @@ The Worker currently exposes these route groups:
 - Operations: `/health`, `/api/overview`, `/api/system/capabilities`
 
 Role checks are attached at the route boundary and repository queries remain tenant-scoped.
+
+The customer-facing privacy and architecture report is a printable, self-contained HTML download with a machine-readable JSON option. It inventories configured processes and owners, Cloudflare services and storage, model profiles, knowledge and webhook inputs, retention/deletion rules, external destinations, connection scopes and credential readiness, typed tools, human oversight, release versions, logging/export behavior, subprocessors, readiness controls, and explicit limitations. The report selects no credential ciphertext or secret values, emits `no-store` and `nosniff`, uses a restrictive Content Security Policy, and HTML-escapes tenant-controlled content. The existing governance JSON remains available as lower-level evidence.
 
 ## Database migration order
 

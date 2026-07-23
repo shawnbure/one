@@ -26,6 +26,7 @@ import { createTool, listTools, setToolBindings, setToolEnabled } from "./tools"
 import { listBoundAdapters } from "./tool-adapters";
 import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markToolActionFailure,
   processToolAction, retryToolAction } from "./tool-actions";
+import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -760,6 +761,23 @@ app.get("/api/governance/export", requireRoles("admin", "owner", "viewer"), asyn
     privacyPosture: "Customer-dedicated Cloudflare deployment; Workers AI default; no hidden external model calls",
     ...governance
   });
+});
+
+app.get("/api/governance/privacy-report", requireRoles("admin", "owner", "viewer"), async (c) => {
+  const governance = await getGovernance(c.env, c.get("tenantId"));
+  const report = await getPrivacyArchitectureReport(c.env, c.get("tenantId"), c.get("actorEmail"),
+    governance.readiness);
+  c.header("cache-control", "no-store");
+  c.header("x-content-type-options", "nosniff");
+  if (c.req.query("format") === "json") {
+    c.header("content-disposition",
+      `attachment; filename="workrr-privacy-architecture-${new Date().toISOString().slice(0, 10)}.json"`);
+    return c.json({ data: report });
+  }
+  c.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
+  c.header("content-disposition",
+    `attachment; filename="workrr-privacy-architecture-${new Date().toISOString().slice(0, 10)}.html"`);
+  return c.html(renderPrivacyArchitectureHtml(report));
 });
 
 app.post("/api/evaluations/:id/run", requireRoles("admin", "builder", "owner", "operator"), async (c) => {

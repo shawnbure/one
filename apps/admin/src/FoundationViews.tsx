@@ -999,9 +999,14 @@ function Governance({
           title="Governance"
           text="A demonstrable private-AI posture: models, data flows, roles, retention, releases, and emergency controls."
         />
-        <a className="export-button" href="/api/governance/export">
-          <Download size={15} /> Export readiness evidence
-        </a>
+        <div className="governance-exports">
+          <a className="export-button" href="/api/governance/privacy-report">
+            <Download size={15} /> Download privacy summary
+          </a>
+          <a className="export-button" href="/api/governance/export">
+            <Download size={15} /> Export JSON evidence
+          </a>
+        </div>
       </div>
       <div className="governance-top">
         <article className="readiness panel">
