@@ -4,13 +4,15 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 
 ## What is implemented
 
-- A polished React operations console with process portfolio, review queue, platform health, execution profiles, model profiles, and process detail drawer.
-- A Cloudflare Worker API with tenant and role context, process discovery, execution history, approvals, and operational overview endpoints.
+- A polished React operations console with process discovery, Process Studio, Work Inbox, execution activity, governance, team roles, API logs, model profiles, and value reporting.
+- A Cloudflare Worker API with verified tenant and role context, immutable releases, execution history and replay, approvals, audit evidence, operating controls, and deployment exports.
 - Cloudflare Agents SDK durable actors with local SQLite conversation history and immutable prompt-release bundles.
 - Explicit routing for `conversation`, `consumer`, `entity`, `shared_shard`, `temporary_durable`, `instant`, and `workflow` execution profiles.
 - Workers AI model profiles with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations.
-- D1 control-plane schema for tenants, blueprints, prompt releases, executions, approvals, and audit events.
+- D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
 - Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and Cron maintenance wiring.
+- Signed, idempotent webhook ingestion with a bounded request body and queue handoff.
+- Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.
 - Shared typed contracts and tests for sticky identity routing.
 
 ## Architecture boundary
@@ -97,6 +99,7 @@ npm run build
 
 The broader product and build sequence are documented in:
 
+- `docs/mvp-build-status.md`
 - `docs/cloudflare-agent-framework-technical-outline.md`
 - `docs/cloudflare-agent-framework-deep-review.md`
 - `docs/mid-market-private-ai-product-requirements.md`

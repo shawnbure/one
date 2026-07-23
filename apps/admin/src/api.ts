@@ -163,6 +163,11 @@ export interface Member {
   created_at: string;
   last_seen_at: string | null;
 }
+export interface ValueData {
+  totals: { items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number; failure_count: number };
+  byProcess: Array<Record<string, string | number>>;
+  discoveries: Array<Record<string, string | number>>;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -295,4 +300,5 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  value: () => request<{ data: ValueData }>("/api/value"),
 };

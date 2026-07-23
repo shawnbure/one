@@ -234,6 +234,18 @@ app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "rev
 app.get("/api/governance", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
   c.json({ data: await getGovernance(c.env, c.get("tenantId")) }));
 
+app.get("/api/governance/export", requireRoles("admin", "owner", "viewer"), async (c) => {
+  const governance = await getGovernance(c.env, c.get("tenantId"));
+  c.header("content-disposition", `attachment; filename="workrr-deployment-readiness-${new Date().toISOString().slice(0, 10)}.json"`);
+  c.header("cache-control", "no-store");
+  return c.json({
+    generatedAt: new Date().toISOString(), tenantId: c.get("tenantId"), generatedBy: c.get("actorEmail"),
+    platform: "Workrr One on Cloudflare",
+    privacyPosture: "Customer-dedicated Cloudflare deployment; Workers AI default; no hidden external model calls",
+    ...governance
+  });
+});
+
 app.get("/api/logs", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT id, trace_id, direction, method, path, status, duration_ms, target, actor_id, created_at
     FROM api_logs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`).bind(c.get("tenantId")).all();

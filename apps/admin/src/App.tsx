@@ -33,10 +33,12 @@ import {
   type Approval,
   type OverviewData,
   type SessionData,
+  type ValueData,
 } from "./api";
 import "./live.css";
 import "./wizard.css";
 import "./team.css";
+import "./export.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";
@@ -117,6 +119,7 @@ export function App() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [session, setSession] = useState<SessionData | null>(null);
+  const [value, setValue] = useState<ValueData | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [runInput, setRunInput] = useState("");
@@ -137,17 +140,19 @@ export function App() {
 
   async function refresh() {
     try {
-      const [sessionResult, processResult, overviewResult, approvalResult] =
+      const [sessionResult, processResult, overviewResult, approvalResult, valueResult] =
         await Promise.all([
           api.session(),
           api.processes(),
           api.overview(),
           api.approvals(),
+          api.value(),
         ]);
       setSession(sessionResult);
       setProcesses(processResult.data);
       setOverview(overviewResult);
       setApprovals(approvalResult.data);
+      setValue(valueResult.data);
       setPreviewMode(false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401)
@@ -430,8 +435,8 @@ export function App() {
                     </span>
                     <small>TIME RETURNED</small>
                   </div>
-                  <strong>41.2h</strong>
-                  <p>Estimated this week</p>
+                  <strong>{value ? `${(value.totals.human_minutes_saved / 60).toFixed(1)}h` : "41.2h"}</strong>
+                  <p>{value ? `$${value.totals.estimated_value.toLocaleString()} estimated value` : "Estimated this week"}</p>
                 </article>
               </section>
 
