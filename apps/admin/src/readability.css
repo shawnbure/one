@@ -30,6 +30,7 @@ select {
 
 body { color: var(--ink); }
 p, small, dt { color: var(--muted); }
+.mobile-nav-toggle { display: none; }
 
 /* The initial visual prototype used 6–9px metadata. Product UI must remain readable at 100% zoom. */
 small,
@@ -834,18 +835,48 @@ a:focus-visible {
 }
 
 @media (max-width: 760px) {
-  body { min-width: 0; }
+  html, body { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .shell { display: block; }
-  aside { position: static; width: auto; min-height: auto; padding: 18px; }
-  aside nav { grid-template-columns: 1fr 1fr; }
+  aside { position: relative; width: auto; min-height: auto; padding: 14px 18px; }
+  aside .brand { padding: 0; }
+  aside .brand > div { min-width: 0; }
+  .mobile-nav-toggle {
+    display: grid;
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    z-index: 3;
+    place-items: center;
+    width: 42px;
+    min-height: 42px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid #2b4038;
+    border-radius: 9px;
+    background: #15231e;
+    color: #dbe9e3;
+  }
+  aside:not(.mobile-open) > .workspace,
+  aside:not(.mobile-open) > nav,
+  aside:not(.mobile-open) > .aside-bottom { display: none; }
+  aside.mobile-open .workspace { margin: 16px 0 12px; }
+  aside.mobile-open nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  aside.mobile-open nav button { min-width: 0; white-space: normal; }
   .aside-bottom { margin-top: 16px; }
   main { grid-column: auto; }
   header { padding: 0 18px; }
-  .content { padding: 18px; }
-  .hero { align-items: flex-start; gap: 16px; }
-  .metrics { grid-template-columns: 1fr 1fr; }
+  .content { width: 100%; padding: 18px; overflow: hidden; }
+  .content > * { min-width: 0; max-width: 100%; }
+  .hero { align-items: stretch; flex-direction: column; gap: 16px; }
+  .hero .primary { width: 100%; justify-content: center; }
+  .metrics { grid-template-columns: 1fr; }
   .grid-main { grid-template-columns: 1fr; }
   .side-stack { grid-template-columns: 1fr; }
+  .processes,
+  .process-list,
+  .process-row { min-width: 0; }
+  .process-row { grid-template-columns: 39px minmax(0, 1fr) 58px 18px; }
+  .process-copy { min-width: 0; }
   main > header {
     box-sizing: border-box;
     width: 100%;
@@ -1433,4 +1464,74 @@ nav button em,
   .template-kit > div > span { border-right: 0; }
   .template-kit > div > span:nth-last-child(2) { border-bottom: 1px solid #e4ebe7; }
   .template-kit header { align-items: flex-start; flex-direction: column; }
+}
+
+/*
+ * Product-wide legibility contract.
+ *
+ * Several workspaces are lazy-loaded and bring their original prototype CSS
+ * after the main bundle. These final, important declarations are intentional:
+ * they preserve a 13px metadata floor and a 14px interactive/body floor
+ * regardless of chunk load order. Badges remain compact without becoming
+ * unreadable. Do not add a smaller exception for a denser screen.
+ */
+:where(
+  small,
+  label,
+  time,
+  code,
+  kbd,
+  dt,
+  dd,
+  legend,
+  figcaption
+) {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+:where(
+  button,
+  input,
+  textarea,
+  select,
+  option,
+  p,
+  li,
+  td,
+  th
+) {
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+:where(
+  .status,
+  .healthy,
+  .connection-state,
+  .delivery,
+  .severity,
+  .risk,
+  .badge,
+  [class$="-badge"],
+  [class$="-status"],
+  [class$="-state"],
+  [class$="-label"]
+) {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]), textarea, select, button) {
+  min-height: 38px !important;
+}
+
+:where(button, [role="button"], a) {
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select, button) {
+    min-height: 42px !important;
+  }
 }

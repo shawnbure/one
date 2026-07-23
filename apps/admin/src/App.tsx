@@ -39,6 +39,7 @@ import {
   TrendingUp,
   Lightbulb,
   BookOpen,
+  Menu,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import {
@@ -273,6 +274,7 @@ export function App() {
   const [active, setActive] = useState(
     launchpadParams.get("workspace") === "launchpad" ? "Launchpad" : "Overview",
   );
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selected, setSelected] = useState<AgentBlueprint | null>(null);
   const [search, setSearch] = useState("");
   const [processes, setProcesses] =
@@ -448,7 +450,7 @@ export function App() {
     <div className={`shell${focusedLaunchpad ? " focused-launchpad" : ""}`}>
       <CommandCenter open={commandOpen} items={commandItems}
         onClose={() => setCommandOpen(false)} onChoose={chooseCommand}/>
-      <aside>
+      <aside className={mobileNavOpen ? "mobile-open" : ""}>
         <div className="brand">
           <span className="brandmark">
             <Command size={18} />
@@ -457,6 +459,11 @@ export function App() {
             <strong>workrr</strong>
             <small>PRIVATE AI OPERATIONS</small>
           </div>
+          <button className="mobile-nav-toggle" type="button"
+            aria-expanded={mobileNavOpen} aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+            onClick={() => setMobileNavOpen((open) => !open)}>
+            {mobileNavOpen ? <X size={20}/> : <Menu size={20}/>}
+          </button>
         </div>
         <div className="workspace">
           <span className="avatar">A</span>
@@ -473,6 +480,7 @@ export function App() {
               className={active === label ? "active" : ""}
               onClick={() => {
                 setActive(label);
+                setMobileNavOpen(false);
                 if (label === "Processes") setStudioProcessId(null);
               }}
             >
@@ -494,20 +502,20 @@ export function App() {
             </div>
           </div>
           {!consumerView && <>
-            <button onClick={() => setActive("Governance")}>
+            <button onClick={() => { setActive("Governance"); setMobileNavOpen(false); }}>
               <Settings2 size={17} />
               Settings
             </button>
-            <button onClick={() => setActive("Customer setup")}>
+            <button onClick={() => { setActive("Customer setup"); setMobileNavOpen(false); }}>
               <Settings2 size={17} />
               Customer setup
             </button>
-            <button onClick={() => setActive("Team & roles")}>
+            <button onClick={() => { setActive("Team & roles"); setMobileNavOpen(false); }}>
               <Users size={17} />
               Team & roles
             </button>
           </>}
-          <button onClick={() => setActive("Help Center")}>
+          <button onClick={() => { setActive("Help Center"); setMobileNavOpen(false); }}>
             <BookOpen size={17} />
             Help Center
           </button>
