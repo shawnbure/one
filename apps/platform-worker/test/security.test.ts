@@ -45,6 +45,17 @@ function environment(role = "admin") {
 const executionCtx = { waitUntil(promise: Promise<unknown>) { void promise; }, passThroughOnException() {} };
 
 describe("control-plane security boundary", () => {
+  it("returns failed MCP OAuth callbacks to the governed connector workspace without reflecting errors", async () => {
+    const { env } = environment();
+    const response = await app.fetch(new Request(
+      "http://localhost/oauth/mcp/callback?error=provider-secret-detail"
+    ), env as never, executionCtx as never);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://one-dev.workrr.ai/?workspace=connections&section=mcp&mcp=error"
+    );
+  });
+
   it("maps an Access service-token common name to one active tenant principal", async () => {
     let bound: unknown[] = [];
     const DB = { prepare(sql: string) {

@@ -29,8 +29,8 @@ export class McpConnectorAgent extends Agent<Env, ConnectorState> {
 
   onStart(): void {
     this.mcp.configureOAuthCallback({
-      successRedirect: `https://${this.env.APP_DOMAIN}/?mcp=connected`,
-      errorRedirect: `https://${this.env.APP_DOMAIN}/?mcp=error`
+      successRedirect: `https://${this.env.APP_DOMAIN}/?workspace=connections&section=mcp&mcp=connected`,
+      errorRedirect: `https://${this.env.APP_DOMAIN}/?workspace=connections&section=mcp&mcp=error`
     });
   }
 

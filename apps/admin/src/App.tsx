@@ -53,6 +53,7 @@ import {
 import { CommandCenter } from "./CommandCenter";
 import { AccountMenu } from "./AccountMenu";
 import { authorizedWorkspaceLabels, processVisibleInCommands, type CommandSearchItem } from "./command-search";
+import { startupRoute } from "./startup-route";
 import "./live.css";
 import "./wizard.css";
 import "./wizard-readability.css";
@@ -270,13 +271,10 @@ function Status({ value }: { value: string }) {
 }
 
 export function App() {
-  const launchpadParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const initialProcessId = launchpadParams.get("process");
-  const focusedLaunchpad = launchpadParams.get("workspace") === "launchpad" &&
-    launchpadParams.get("focus") === "1";
-  const [active, setActive] = useState(
-    launchpadParams.get("workspace") === "launchpad" ? "Launchpad" : "Overview",
-  );
+  const startup = useMemo(() => startupRoute(window.location.search), []);
+  const initialProcessId = startup.processId;
+  const focusedLaunchpad = startup.focusedLaunchpad;
+  const [active, setActive] = useState<string>(startup.workspace);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selected, setSelected] = useState<AgentBlueprint | null>(null);
   const [search, setSearch] = useState("");
@@ -362,10 +360,10 @@ export function App() {
 
   useEffect(() => {
     void refresh();
-    const oauth = new URLSearchParams(window.location.search).get("oauth");
-    if (oauth === "microsoft-connected") setNotice("Microsoft 365 connected with encrypted delegated credentials.");
-    if (oauth === "microsoft-error") setNotice("Microsoft authorization did not complete. Review the app registration and try again.");
-    if (oauth) window.history.replaceState({}, "", window.location.pathname);
+    if (startup.notice) setNotice(startup.notice);
+    if (startup.consumesReturnState) {
+      window.history.replaceState({}, "", `${window.location.pathname}${startup.anchor ?? ""}`);
+    }
   }, []);
 
   useEffect(() => {

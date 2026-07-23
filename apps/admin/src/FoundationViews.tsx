@@ -95,6 +95,13 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
   const [capabilities, setCapabilities] = useState({
     mail: true, mail_send: true, calendar: true, calendar_write: false, files: false
   });
+  useEffect(() => {
+    if (window.location.hash !== "#connection-mcp") return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("connection-mcp")?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tools.length, mcpCatalog.connectors.length]);
   async function loadTools() {
     try {
       const [catalog, adapters] = await Promise.all([api.tools(), api.toolAdapters()]);

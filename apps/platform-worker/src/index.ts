@@ -105,11 +105,11 @@ app.get("/oauth/microsoft/callback", async (c) => {
   try {
     if (providerError) throw new Error("Microsoft authorization was declined or could not be completed");
     await completeMicrosoftOAuth(c.env, state, code);
-    return c.redirect(`https://${c.env.APP_DOMAIN}/?oauth=microsoft-connected`);
+    return c.redirect(`https://${c.env.APP_DOMAIN}/?workspace=connections&oauth=microsoft-connected`);
   } catch (error) {
     console.error(JSON.stringify({ event: "microsoft_oauth_callback_failed",
       error: error instanceof Error ? error.message : String(error) }));
-    return c.redirect(`https://${c.env.APP_DOMAIN}/?oauth=microsoft-error`);
+    return c.redirect(`https://${c.env.APP_DOMAIN}/?workspace=connections&oauth=microsoft-error`);
   }
 });
 app.get("/oauth/mcp/callback", async (c) => {
@@ -118,7 +118,7 @@ app.get("/oauth/mcp/callback", async (c) => {
   } catch (error) {
     console.error(JSON.stringify({ event: "mcp_oauth_callback_failed",
       error: error instanceof Error ? error.message : String(error) }));
-    return c.redirect(`https://${c.env.APP_DOMAIN}/?mcp=error`);
+    return c.redirect(`https://${c.env.APP_DOMAIN}/?workspace=connections&section=mcp&mcp=error`);
   }
 });
 app.use("/api/*", requireIdentity);

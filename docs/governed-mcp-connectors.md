@@ -18,6 +18,8 @@ This is intentionally separate from process agents. A tenant may have many durab
 - Every newly discovered capability starts disabled, medium risk, confidential, and unbound.
 - A refresh marks capabilities removed by the provider unavailable and disables them before restoring the currently advertised set. A stale provider tool can therefore never remain executable.
 
+The OAuth callback returns to the Connections workspace's MCP section instead of the general overview. The admin shell accepts only bounded, explicit startup route values, removes the transient callback query from browser history, waits for connector and native-tool catalogs to settle, and then anchors the governed MCP controls. A dismissible result notice remains visible during that deep navigation. Provider error detail is not reflected into the browser URL or notice.
+
 ## Runtime policy
 
 Only an admin or owner can enable and govern a discovered tool. Governance requires an owner, access mode, risk, classification, rate limit, exact optimistic revision, and optional same-tenant process bindings.

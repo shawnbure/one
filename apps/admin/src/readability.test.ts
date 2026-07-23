@@ -75,4 +75,10 @@ describe("product readability contract", () => {
     expect(css).toContain("overflow-x: auto");
     expect(css).toContain(".connection-anchor { scroll-margin-top:");
   });
+
+  it("keeps return-route feedback visible after deep-linking into a workspace", () => {
+    expect(css).toContain(".notice");
+    expect(css).toContain("position: sticky");
+    expect(css).toContain("top: 76px");
+  });
 });

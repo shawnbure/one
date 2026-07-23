@@ -32,6 +32,18 @@ body { color: var(--ink); }
 p, small, dt { color: var(--muted); }
 .mobile-nav-toggle { display: none; }
 
+/* Operational results must remain visible when a return route lands on a deep workspace anchor. */
+.notice {
+  position: sticky;
+  top: 76px;
+  z-index: 30;
+  box-shadow: 0 8px 24px rgba(20, 42, 32, .12);
+}
+
+@media (max-width: 700px) {
+  .notice { top: 10px; }
+}
+
 /* The initial visual prototype used 6–9px metadata. Product UI must remain readable at 100% zoom. */
 small,
 label,

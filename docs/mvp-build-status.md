@@ -418,6 +418,8 @@ The Connections workspace now includes a governed MCP connector catalog for cust
 
 MCP release readiness is revalidated by the central blueprint loader against the exact same-tenant connector, exact handler identity, current connector state, and current tool enablement/availability. It does not route MCP connection IDs through the native OAuth `connections` table. Hourly maintenance checks a bounded 50 stale connector actors, records last-check/success evidence, disables tools when the durable SDK session is unavailable, and emits one critical accountable alert per 24-hour failure window. This keeps durable conversations, instant Workers, Queue jobs, and Workflows on the same live fail-closed boundary without adding a separate per-tool readiness request.
 
+MCP and Microsoft OAuth returns now reopen the Connections workspace rather than dropping an FDE on Overview. MCP returns wait for the asynchronous connection catalogs to settle before anchoring the MCP governance controls, retain a visible dismissible success/error notice while scrolled, and remove transient callback parameters from browser history. Startup navigation accepts only the known Connections and Launchpad states, so query input cannot select an arbitrary application view.
+
 ## Remaining aggressive-MVP work
 
 The foundation is usable, but these are the highest-value next slices:
