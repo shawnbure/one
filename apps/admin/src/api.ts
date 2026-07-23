@@ -168,6 +168,25 @@ export interface ExecutionExplanation {
   evidenceCompleteness: "complete" | "partial";
   generatedBy: "deterministic_evidence_rules";
 }
+export interface GovernedMemoryTurn {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sourceExecutionId: string | null;
+  status: "active" | "quarantined" | "deleted";
+  revision: number;
+  lastReason: string | null;
+  lastChangedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ExecutionMemory {
+  executionProfile: string;
+  storage: "agent_sqlite";
+  contextPolicy: { maximumTurns: number; maximumCharacters: number; maximumCharactersPerTurn: number };
+  durableFactPromotion: "disabled";
+  turns: GovernedMemoryTurn[];
+}
 export interface QueueOperation {
   id: string;
   execution_id: string;
@@ -791,6 +810,16 @@ export const api = {
       `/api/executions/${encodeURIComponent(id)}/retry`,
       { method: "POST" },
     ),
+  executionMemory: (id: string) =>
+    request<{ data: ExecutionMemory }>(`/api/executions/${encodeURIComponent(id)}/memory`),
+  governExecutionMemory: (executionId: string, turnId: string, body: {
+    action: "correct" | "quarantine" | "restore" | "delete";
+    expectedRevision: number;
+    content?: string;
+    reason: string;
+  }) => request<{ data: GovernedMemoryTurn }>(
+    `/api/executions/${encodeURIComponent(executionId)}/memory/${encodeURIComponent(turnId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   studio: (id: string) =>
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,

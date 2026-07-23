@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Box,
+  BrainCircuit,
   CheckCircle2,
   Clock3,
   CircleHelp,
@@ -12,15 +13,18 @@ import {
   FileCode2,
   GitBranch,
   ListRestart,
+  Pencil,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
+  Trash2,
+  Undo2,
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import { api, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
-  type ExecutionExplanation,
+  type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
   type QueueOperationsData, type SessionData, type ToolActionDispatch, type ToolActionOperationsData,
   type ToolInvocation } from "./api";
 import "./queue-operations.css";
@@ -231,6 +235,8 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                 </div>
                 <footer>Generated from persisted execution evidence with deterministic rules · no additional model call</footer>
               </section>}
+              {hasActorMemory(detail.execution_profile) && canGovernMemory(session) &&
+                <MemoryGovernance key={detail.id} executionId={detail.id} onNotice={onNotice}/>}
               {detail.autonomy_disposition && (
                 <div className={`autonomy-evidence ${detail.autonomy_disposition}`}>
                   <ShieldCheck size={17} />
@@ -574,6 +580,78 @@ export function ActivityView({ processes, session, onNotice }: Props) {
   );
 }
 
+function MemoryGovernance({ executionId, onNotice }: {
+  executionId: string; onNotice: (message: string) => void;
+}) {
+  const [memory, setMemory] = useState<ExecutionMemory | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [edit, setEdit] = useState<{ turn: GovernedMemoryTurn;
+    action: "correct" | "quarantine" | "restore" | "delete" } | null>(null);
+  const [reason, setReason] = useState("");
+  const [content, setContent] = useState("");
+
+  async function load() {
+    setLoading(true);
+    try { setMemory((await api.executionMemory(executionId)).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Actor memory could not load"); }
+    finally { setLoading(false); }
+  }
+  function start(turn: GovernedMemoryTurn, action: "correct" | "quarantine" | "restore" | "delete") {
+    setEdit({ turn, action }); setReason(""); setContent(action === "correct" ? turn.content : "");
+  }
+  async function save() {
+    if (!edit || reason.trim().length < 5) {
+      onNotice("Add a specific reason of at least five characters."); return;
+    }
+    setLoading(true);
+    try {
+      await api.governExecutionMemory(executionId, edit.turn.id, {
+        action: edit.action, expectedRevision: edit.turn.revision,
+        content: edit.action === "correct" ? content : undefined, reason: reason.trim()
+      });
+      setEdit(null); await load();
+      onNotice(`Actor memory ${edit.action === "correct" ? "corrected" : `${edit.action}d`} with audit evidence.`);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Actor memory could not change"); }
+    finally { setLoading(false); }
+  }
+
+  return <section className="memory-governance">
+    <div className="memory-heading"><span><BrainCircuit size={20}/></span><div>
+      <small>ACTOR-LOCAL MEMORY</small><h2>Govern this conversation</h2>
+      <p>Only active turns enter future model context. Content stays in this Durable Object—not in D1 or KV.</p>
+    </div>{!memory && <button disabled={loading} onClick={() => void load()}>
+      {loading ? "Loading…" : "Inspect memory"}</button>}</div>
+    {memory && <><div className="memory-policy">
+      <span><strong>{memory.turns.filter((turn) => turn.status === "active").length}</strong> active turns</span>
+      <span><strong>{memory.contextPolicy.maximumTurns}</strong> turn context ceiling</span>
+      <span><strong>{memory.contextPolicy.maximumCharacters.toLocaleString()}</strong> character ceiling</span>
+      <span><strong>Off</strong> automatic fact promotion</span>
+    </div>
+    <div className="memory-turns">{memory.turns.length ? memory.turns.map((turn) =>
+      <article className={turn.status} key={turn.id}><header><span>{turn.role}</span>
+        <em>{turn.status} · revision {turn.revision}</em></header>
+        <p>{turn.content}</p>
+        <footer><small>{formatDate(turn.createdAt)}{turn.sourceExecutionId ? ` · run ${turn.sourceExecutionId.slice(0, 8)}` : " · legacy turn"}</small>
+          {turn.status !== "deleted" && <span>
+            <button onClick={() => start(turn, "correct")}><Pencil size={12}/>Correct</button>
+            {turn.status === "active"
+              ? <button onClick={() => start(turn, "quarantine")}><XCircle size={12}/>Quarantine</button>
+              : <button onClick={() => start(turn, "restore")}><Undo2 size={12}/>Restore</button>}
+            <button className="delete" onClick={() => start(turn, "delete")}><Trash2 size={12}/>Delete</button>
+          </span>}</footer>
+        {turn.lastReason && <aside>Last change: {turn.lastReason}</aside>}
+      </article>) : <p className="memory-empty">This actor has no stored conversation turns yet.</p>}</div></>}
+    {edit && <div className="memory-editor"><div><strong>{edit.action} memory turn</strong>
+      <button onClick={() => setEdit(null)}>Cancel</button></div>
+      {edit.action === "correct" && <label>Corrected content<textarea maxLength={8000}
+        value={content} onChange={(event) => setContent(event.target.value)}/></label>}
+      <label>Reason<textarea maxLength={500} placeholder="Why is this change necessary?"
+        value={reason} onChange={(event) => setReason(event.target.value)}/></label>
+      <button disabled={loading || !reason.trim() || (edit.action === "correct" && !content.trim())}
+        onClick={() => void save()}>Apply governed change</button></div>}
+  </section>;
+}
+
 function TraceItem({
   title,
   detail,
@@ -657,4 +735,10 @@ function toolEvidence(value: string | null | undefined) {
 }
 function canOperate(session: SessionData | null) {
   return Boolean(session && ["admin", "owner", "operator"].includes(session.user.role));
+}
+function canGovernMemory(session: SessionData | null) {
+  return Boolean(session && ["admin", "builder", "owner", "operator"].includes(session.user.role));
+}
+function hasActorMemory(profile: string) {
+  return ["conversation", "consumer", "entity", "shared_shard", "temporary_durable"].includes(profile);
 }

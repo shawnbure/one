@@ -7,6 +7,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - A polished React operations console with process discovery, Process Studio, Work Inbox, execution activity, governance, team roles, API logs, model profiles, and value reporting.
 - A Cloudflare Worker API with verified tenant and role context, immutable releases, execution history and replay, deterministic “why did this happen?” explanations, redacted evidence exports, approvals, audit evidence, operating controls, and deployment exports.
 - Cloudflare Agents SDK durable actors with local SQLite conversation history and immutable prompt-release bundles.
+- Bounded actor-local conversational context with operator inspection, correction, quarantine, restoration, and content deletion; governance actions are revision-checked, audited, and never copied into D1 or KV.
 - Explicit routing for `conversation`, `consumer`, `entity`, `shared_shard`, `temporary_durable`, `instant`, and `workflow` execution profiles.
 - Workers AI model profiles with Agent `sessionAffinity` for prefix-cache locality on repeated durable conversations.
 - D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
@@ -40,6 +41,8 @@ Instant executions deliberately have no durable identity and load their release 
 Recurring processes are configured in Process Studio with hourly, daily, or weekly UTC schedules. Cron atomically claims at most 50 due occurrences and returns after handing them to Queue; it never performs AI inference inline. Queue routes each occurrence to the process's declared instant, sticky Agent, temporary actor, or Workflow profile. D1 retains schedule controls and dispatch evidence, while sticky state remains in the target Durable Agent.
 
 DLP rules are tenant-scoped in D1 and loaded at each execution boundary so policy changes affect already-queued Workflow work. Email and phone values redact by default; SSNs, valid payment-card numbers, and API-secret patterns block; IP addresses default to evidence-only inspection. Audit-only content may reach the selected private model, but Workrr still masks it in D1 previews and Durable Object conversation history. DLP evidence stores detector, action, stage, direction, and count—never the matched value.
+
+Conversation, consumer, entity, shared-shard, and temporary-durable profiles reuse only active actor-local turns. Each call is bounded to the 20 most recent turns, 24,000 total characters, and 8,000 characters per turn before the current request is added. Quarantined and deleted turns are excluded immediately. Workrr does not automatically extract or promote durable “facts”; that remains disabled until an allowlisted, provenance-bearing memory schema is implemented.
 
 ## Local development
 

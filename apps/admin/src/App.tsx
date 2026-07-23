@@ -47,6 +47,7 @@ import "./setup.css";
 import "./notifications.css";
 import "./usage.css";
 import "./execution-explainer.css";
+import "./memory-governance.css";
 import { WorkInbox } from "./WorkInbox";
 import { ActivityView } from "./ActivityView";
 import { ProcessStudioView } from "./ProcessStudioView";

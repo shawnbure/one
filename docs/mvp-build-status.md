@@ -18,6 +18,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Process Studio | Visual topology, explicit execution profile, enforced five-level autonomy, immutable prompt/model/input-output contract releases, publish/rollback, and recurring process schedules with dispatch history |
 | Work Inbox | Evidence and rationale review, validated assignment, comments, information request/response, escalation, approval/decline, and audit trail |
 | Activity | Run list, correlated timeline, deterministic outcome explanation, redacted evidence export, approved external-action queue, inputs/outputs, failures, and safe replay/recovery |
+| Memory governance | Bounded actor-local conversation context plus operating-role inspection, correction, quarantine, restoration, and content deletion without copying message bodies into D1 or KV |
 | Queue operations | Tenant-scoped process and approved-action enqueue/processing/retry/dead-letter evidence, bounded retention, and operator-authorized safe replay |
 | Governance | Model/data-flow inventory, retention posture, readiness, process and tenant operating modes, incident containment/recovery, JSON evidence export, and printable privacy/architecture summary |
 | Team & Roles | Tenant membership administration and server-enforced role assignments |
@@ -77,6 +78,8 @@ Bound invocations intentionally perform small D1 control-plane reads for prior i
 ## Prompt and memory read model
 
 D1 is the control-plane source of truth. Published prompt/process releases are immutable. A durable agent reads D1 only when it does not have the requested release in its local SQLite database, then installs that release locally. Repeated turns use the actor-local release and conversation state, avoiding a D1 read for every message.
+
+Durable conversational profiles supply the model with at most 20 active actor-local turns, 24,000 total characters, and 8,000 characters from any one turn. Operators can inspect that exact memory boundary from Activity and correct, quarantine, restore, or content-delete an individual turn. Every change requires a reason and expected revision, is tenant-routed through the execution's server-resolved actor identity, and writes only action metadata to the D1 audit log. Corrected content crosses tenant DLP before actor persistence. Quarantined and deleted turns stop contributing to inference immediately. Automatic fact extraction/promotion remains disabled; transcript persistence must not be represented as a trusted business-fact store.
 
 The stable agent identifier is passed to Workers AI as `sessionAffinity`, improving prefix-cache locality where supported. This is an optimization, not correctness state. Instant execution reads the required release from D1 because it intentionally has no durable actor-local cache.
 

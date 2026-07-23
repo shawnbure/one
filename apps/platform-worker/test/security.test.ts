@@ -155,6 +155,24 @@ describe("control-plane security boundary", () => {
       sql.includes("FROM executions e JOIN"))).toBe(false);
   });
 
+  it("keeps raw actor memory and its governance mutations within operating roles", async () => {
+    for (const role of ["viewer", "reviewer", "consumer"]) {
+      const principal = environment(role);
+      const read = await app.fetch(new Request("http://localhost/api/executions/execution-1/memory", {
+        headers: { "x-workrr-user": "operator@example.com" }
+      }), principal.env as never, executionCtx as never);
+      expect(read.status).toBe(403);
+      const change = await app.fetch(new Request(
+        "http://localhost/api/executions/execution-1/memory/turn-1", {
+          method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" },
+          body: JSON.stringify({ action: "delete", expectedRevision: 1, reason: "Privacy request" })
+        }), principal.env as never, executionCtx as never);
+      expect(change.status).toBe(403);
+      expect(principal.queries.some((sql) => sql.includes("SELECT blueprint_id, execution_profile, instance_key"))).toBe(false);
+    }
+  });
+
   it("prevents viewers from changing connection credential lifecycle metadata", async () => {
     const viewer = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/connections/connection-1/lifecycle", {

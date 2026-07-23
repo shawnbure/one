@@ -46,6 +46,7 @@ import { enforceAllTenantRetention, enforceTenantRetention, getRetentionOperatio
   updateRetentionControls } from "./retention";
 import { acknowledgeLearning, createHelpRequest, getHelpCenter, HelpRequestConflict, updateHelpRequest } from "./help-center";
 import { explainExecution, exportRedactedExecutionEvidence, getExecutionEvidence } from "./execution-evidence";
+import { governExecutionMemory, listExecutionMemory } from "./memory-governance";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -885,6 +886,44 @@ app.get("/api/executions/:id/evidence-export",
     c.header("content-disposition", `attachment; filename="workrr-execution-${safeFilenameId}.json"`);
     c.header("cache-control", "no-store");
     return c.json(exportRedactedExecutionEvidence(evidence));
+  });
+
+app.get("/api/executions/:id/memory",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      c.header("cache-control", "no-store");
+      return c.json({ data: await listExecutionMemory(c.env, c.get("tenantId"), executionId) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor memory could not be loaded";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 409);
+    }
+  });
+
+app.patch("/api/executions/:executionId/memory/:turnId",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const executionId = c.req.param("executionId");
+      const turnId = c.req.param("turnId");
+      if (!executionId || !turnId) return c.json({ error: "Execution and memory turn IDs are required" }, 400);
+      const input = await c.req.json<{
+        action?: string; expectedRevision?: number; content?: string; reason?: string;
+      }>();
+      const turn = await governExecutionMemory(c.env, c.get("tenantId"), c.get("actorId"),
+        executionId, turnId, input);
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `memory.${input.action}`,
+        "execution_memory", turnId, {
+          executionId, revision: turn.revision, status: turn.status
+        });
+      c.header("cache-control", "no-store");
+      return c.json({ data: turn });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor memory could not be changed";
+      const status = isDlpBlocked(error) ? 422 : message.includes("changed") ? 409 :
+        message.includes("not found") ? 404 : 400;
+      return c.json({ error: message }, status);
+    }
   });
 
 app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
