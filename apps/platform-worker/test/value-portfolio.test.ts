@@ -4,6 +4,7 @@ import { classifyPortfolioDecision, getValueDashboard } from "../src/discovery";
 const baseline = {
   itemsProcessed: 100, estimatedValue: 2000, overrideCount: 2, adverseRuns: 2, runs: 100,
   openIncidents: 0, safetyCap: null, opportunityScore: 75, status: "active", operatingMode: "normal"
+  , targetConfigured: true
 };
 
 describe("executive value portfolio", () => {
@@ -17,6 +18,9 @@ describe("executive value portfolio", () => {
   it("requires evidence for expansion and never treats sparse activity as success", () => {
     expect(classifyPortfolioDecision(baseline)).toMatchObject({ action: "expand", confidence: "high" });
     expect(classifyPortfolioDecision({ ...baseline, itemsProcessed: 2, runs: 2 }).action).toBe("observe");
+    expect(classifyPortfolioDecision({ ...baseline, targetConfigured: false })).toMatchObject({
+      action: "observe", reason: "No approved 30-day value target is configured"
+    });
   });
 
   it("reserves retirement for paused, low-opportunity work with no measured value", () => {

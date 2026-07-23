@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 71, name: "0071_business_value_measurements.sql", applied_at: "2026-07-23 19:00:00"
+            id: 72, name: "0072_process_value_targets.sql", applied_at: "2026-07-23 19:00:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -132,6 +132,20 @@ describe("control-plane security boundary", () => {
     }), viewer.env as never, executionCtx as never);
     expect(write.status).toBe(403);
     expect(viewer.queries.some((sql) => sql.includes("INSERT INTO business_value_measurements"))).toBe(false);
+  });
+
+  it("restricts process value target changes to owners and administrators", async () => {
+    const operator = environment("operator");
+    const response = await app.fetch(new Request("http://localhost/api/value/targets/process-1", {
+      method: "PUT", headers: {
+        origin: "http://localhost", "content-type": "application/json", "x-workrr-user": "operator@example.com"
+      }, body: JSON.stringify({ targetItems: 100, targetHumanMinutesSaved: 500, targetValue: 700,
+        maximumOverridePercent: 10, maximumFailurePercent: 5,
+        reviewDueAt: "2026-10-01T00:00:00Z", rationale: "Approved operating target for this process.",
+        evidenceReference: "operating-plan-1", expectedRevision: 0 })
+    }), operator.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(operator.queries.some((sql) => sql.includes("INSERT INTO process_value_targets"))).toBe(false);
   });
 
   it("rejects cross-origin browser mutations before business data changes", async () => {

@@ -8,6 +8,11 @@ interface ValueForm {
   actualHumanMinutes: string; averageCycleMinutes: string; overrideCount: string;
   failureCount: string; evidenceReference: string; note: string;
 }
+interface TargetForm {
+  processId: string; targetItems: string; targetHumanMinutesSaved: string; targetValue: string;
+  maximumOverridePercent: string; maximumFailurePercent: string; reviewDueAt: string;
+  rationale: string; evidenceReference: string; expectedRevision: number;
+}
 
 export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
   session: SessionData | null; onNotice: (message: string) => void; onOpenProcess: (id: string) => void;
@@ -18,6 +23,7 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
   const [busy, setBusy] = useState(false);
   const [voiding, setVoiding] = useState<string | null>(null);
   const [voidReason, setVoidReason] = useState("");
+  const [targetForm, setTargetForm] = useState<TargetForm | null>(null);
   const [form, setForm] = useState<ValueForm>(() => ({
     blueprintId: "", periodStart: monthStart(), periodEnd: today(), itemsProcessed: "",
     actualHumanMinutes: "", averageCycleMinutes: "", overrideCount: "0", failureCount: "0",
@@ -33,6 +39,7 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
   if (!data) return <div className="loading-card">Loading value evidence…</div>;
   const canRecord = ["admin", "owner", "operator"].includes(session?.user.role ?? "");
   const canVoid = ["admin", "owner"].includes(session?.user.role ?? "");
+  const canManageTarget = canVoid;
   const totals = data.totals ?? { items_processed: 0, human_minutes_saved: 0, estimated_value: 0, override_count: 0, failure_count: 0 };
   const actions = data.portfolio.reduce<Record<string, number>>((counts, item) => {
     counts[item.recommendation.action] = (counts[item.recommendation.action] ?? 0) + 1; return counts;
@@ -73,6 +80,23 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
       } catch (error) { onNotice(error instanceof Error ? error.message : "Value evidence could not be recorded"); }
       finally { setBusy(false); }
     }}/>}
+    {targetForm && <TargetEditor data={data} form={targetForm} setForm={setTargetForm} busy={busy}
+      onClose={() => setTargetForm(null)} onSave={async () => {
+        setBusy(true); try {
+          await api.updateValueTarget(targetForm.processId, {
+            targetItems: Number(targetForm.targetItems),
+            targetHumanMinutesSaved: Number(targetForm.targetHumanMinutesSaved),
+            targetValue: Number(targetForm.targetValue),
+            maximumOverridePercent: Number(targetForm.maximumOverridePercent),
+            maximumFailurePercent: Number(targetForm.maximumFailurePercent),
+            reviewDueAt: new Date(`${targetForm.reviewDueAt}T23:59:59Z`).toISOString(),
+            rationale: targetForm.rationale, evidenceReference: targetForm.evidenceReference,
+            expectedRevision: targetForm.expectedRevision
+          });
+          onNotice("Thirty-day process target saved and audited."); setTargetForm(null); await load();
+        } catch (error) { onNotice(error instanceof Error ? error.message : "Value target could not be saved"); }
+        finally { setBusy(false); }
+      }}/>}
     <div className="decision-filters" role="group" aria-label="Filter portfolio recommendations">
       {(["all","expand","correct","observe","hold","retire"] as const).map((action) =>
         <button key={action} className={filter === action ? "active" : ""} onClick={() => setFilter(action)}>
@@ -95,11 +119,14 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
           <Evidence label="Avg. cycle" value={duration(item.avg_cycle_ms)}/>
           <Evidence label="Open incidents" value={number(item.open_incidents)}/>
         </div>
+        <TargetProgress item={item}/>
         <div className="portfolio-reason"><strong>Why this recommendation</strong><p>{item.recommendation.reason}.</p>
           <small>{item.recommendation.nextStep}</small></div>
         <footer><span>{item.status} · {item.operating_mode.replaceAll("_"," ")}
           {item.safety_autonomy_cap ? ` · safety cap ${item.safety_autonomy_cap}` : ""}</span>
-          <button onClick={() => onOpenProcess(item.blueprint_id)}>Open Process Studio<ArrowRight size={14}/></button></footer>
+          <div>{canManageTarget && <button onClick={() => setTargetForm(targetFrom(item))}>
+            {item.target ? "Edit target" : "Set target"}</button>}
+          <button onClick={() => onOpenProcess(item.blueprint_id)}>Open Process Studio<ArrowRight size={14}/></button></div></footer>
       </article>)}
     </div>
     <section className="measurement-history panel"><div className="section-head"><div><span className="eyebrow"><FileCheck2 size={14}/> ATTRIBUTABLE EVIDENCE</span>
@@ -124,6 +151,62 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
       </article>)}
     </section>
   </section>;
+}
+
+function TargetProgress({ item }: { item: ValueData["portfolio"][number] }) {
+  if (!item.target) return <div className="target-missing"><Gauge size={15}/><span><strong>No 30-day target</strong>
+    <small>Define volume, effort, value, and exception thresholds before expanding.</small></span></div>;
+  return <div className={`target-progress ${item.target.status}`}><header><span><strong>30-day target</strong>
+    <small>{item.target.status.replace("_"," ")} · review {new Date(item.target_review_due_at!).toLocaleDateString()}</small></span>
+    <b>{Math.round(item.target.minimumPercent)}% minimum progress</b></header>
+    <div><TargetBar label="Items" value={item.target.itemPercent}/><TargetBar label="Effort" value={item.target.effortPercent}/>
+      <TargetBar label="Value" value={item.target.valuePercent}/></div>
+    <p>Exceptions {item.target.exceptionReady ? "within target" : "need attention"} · maximum {item.maximum_override_percent}% overrides / {item.maximum_failure_percent}% adverse runs</p>
+  </div>;
+}
+function TargetBar({ label, value }: { label: string; value: number }) {
+  return <span><small>{label}</small><i><b style={{ width: `${Math.min(100, value)}%` }}/></i><strong>{Math.round(value)}%</strong></span>;
+}
+
+function TargetEditor({ data, form, setForm, busy, onClose, onSave }: {
+  data: ValueData; form: TargetForm; setForm: (form: TargetForm) => void;
+  busy: boolean; onClose: () => void; onSave: () => Promise<void>;
+}) {
+  const item = data.portfolio.find((process) => process.blueprint_id === form.processId);
+  const valid = Number(form.targetItems) >= 1 && Number(form.targetHumanMinutesSaved) >= 0 &&
+    Number(form.targetValue) >= 0 && Number(form.maximumOverridePercent) >= 0 &&
+    Number(form.maximumOverridePercent) <= 100 && Number(form.maximumFailurePercent) >= 0 &&
+    Number(form.maximumFailurePercent) <= 100 && form.reviewDueAt &&
+    form.rationale.trim().length >= 20 && form.evidenceReference.trim().length >= 5;
+  return <section className="target-editor panel"><div className="section-head"><div><span className="eyebrow"><Gauge size={14}/> OWNER-APPROVED OUTCOME</span>
+    <h2>{item?.target ? "Edit" : "Set"} 30-day target · {item?.process_name}</h2>
+    <p>Targets guide portfolio decisions. They never increase autonomy or change process state automatically.</p></div>
+    <button onClick={onClose}><X size={15}/>Close</button></div>
+    <div className="target-fields">
+      <label>Target items<input type="number" min="1" value={form.targetItems} onChange={(e) => setForm({ ...form, targetItems: e.target.value })}/></label>
+      <label>Target effort returned · minutes<input type="number" min="0" value={form.targetHumanMinutesSaved} onChange={(e) => setForm({ ...form, targetHumanMinutesSaved: e.target.value })}/></label>
+      <label>Target value · USD<input type="number" min="0" value={form.targetValue} onChange={(e) => setForm({ ...form, targetValue: e.target.value })}/></label>
+      <label>Maximum overrides · %<input type="number" min="0" max="100" value={form.maximumOverridePercent} onChange={(e) => setForm({ ...form, maximumOverridePercent: e.target.value })}/></label>
+      <label>Maximum adverse runs · %<input type="number" min="0" max="100" value={form.maximumFailurePercent} onChange={(e) => setForm({ ...form, maximumFailurePercent: e.target.value })}/></label>
+      <label>Review due<input type="date" value={form.reviewDueAt} onChange={(e) => setForm({ ...form, reviewDueAt: e.target.value })}/></label>
+      <label className="target-wide">Rationale<textarea rows={3} value={form.rationale} onChange={(e) => setForm({ ...form, rationale: e.target.value })}/></label>
+      <label className="target-wide">Approval evidence reference<input value={form.evidenceReference} onChange={(e) => setForm({ ...form, evidenceReference: e.target.value })}/></label>
+    </div><footer><span>Baseline: {item?.baseline_volume ?? 0} items/month · {item?.baseline_minutes ?? 0} minutes/item · {money(item?.hourly_cost ?? 0)}/hour</span>
+      <button className="primary" disabled={busy || !valid} onClick={() => void onSave()}><Check size={15}/>{busy ? "Saving…" : "Save target"}</button></footer>
+  </section>;
+}
+
+function targetFrom(item: ValueData["portfolio"][number]): TargetForm {
+  return {
+    processId: item.blueprint_id, targetItems: String(item.target_items ?? Math.max(1, item.baseline_volume)),
+    targetHumanMinutesSaved: String(item.target_human_minutes_saved ?? Math.round(item.baseline_volume * item.baseline_minutes * .5)),
+    targetValue: String(item.target_value ?? Math.round(item.baseline_volume * item.baseline_minutes * .5 / 60 * item.hourly_cost)),
+    maximumOverridePercent: String(item.maximum_override_percent ?? 10),
+    maximumFailurePercent: String(item.maximum_failure_percent ?? 5),
+    reviewDueAt: item.target_review_due_at?.slice(0,10) ?? new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0,10),
+    rationale: item.target_rationale ?? "", evidenceReference: item.target_evidence_reference ?? "",
+    expectedRevision: item.target_revision ?? 0
+  };
 }
 
 function ValueCapture({ data, form, setForm, busy, onSave }: {

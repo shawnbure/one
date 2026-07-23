@@ -157,12 +157,17 @@ export async function getValueDashboard(env: Env, tenantId: string) {
         COALESCE(v.estimated_value,0) estimated_value, COALESCE(v.override_count,0) override_count,
         COALESCE(v.snapshot_failures,0) snapshot_failures, COALESCE(r.runs,0) runs,
         COALESCE(r.completed_runs,0) completed_runs, COALESCE(r.adverse_runs,0) adverse_runs,
-        r.avg_cycle_ms, COALESCE(i.open_incidents,0) open_incidents
+        r.avg_cycle_ms, COALESCE(i.open_incidents,0) open_incidents,
+        t.target_items, t.target_human_minutes_saved, t.target_value,
+        t.maximum_override_percent, t.maximum_failure_percent, t.review_due_at target_review_due_at,
+        t.rationale target_rationale, t.evidence_reference target_evidence_reference,
+        t.revision target_revision, t.updated_at target_updated_at
       FROM agent_blueprints b
       LEFT JOIN process_discovery d ON d.blueprint_id=b.id AND d.tenant_id=b.tenant_id
       LEFT JOIN value_30d v ON v.blueprint_id=b.id
       LEFT JOIN runs_30d r ON r.blueprint_id=b.id
       LEFT JOIN open_incidents i ON i.blueprint_id=b.id
+      LEFT JOIN process_value_targets t ON t.blueprint_id=b.id AND t.tenant_id=b.tenant_id
       WHERE b.tenant_id=? ORDER BY estimated_value DESC, b.name`)
       .bind(tenantId, tenantId, tenantId, tenantId).all<Record<string, unknown>>(),
     env.DB.prepare(`SELECT m.id, m.blueprint_id, b.name process_name, m.period_start, m.period_end,
@@ -187,9 +192,12 @@ export async function getValueDashboard(env: Env, tenantId: string) {
       safetyCap: typeof row.safety_autonomy_cap === "string" ? row.safety_autonomy_cap : null,
       opportunityScore: Number(row.opportunity_score ?? 0),
       status: String(row.status ?? "draft"),
-      operatingMode: String(row.operating_mode ?? "paused")
+      operatingMode: String(row.operating_mode ?? "paused"),
+      targetConfigured: row.target_value !== null && row.target_value !== undefined
     };
-    return { ...row, ...portfolioRates(metrics), recommendation: classifyPortfolioDecision(metrics) };
+    const rates = portfolioRates(metrics);
+    const target = targetProgress(row, rates);
+    return { ...row, ...rates, target, recommendation: classifyPortfolioDecision(metrics) };
   });
   return { totals, byProcess: byProcess.results, discoveries: discoveries.results, portfolio,
     measurements: measurements.results,
@@ -203,6 +211,7 @@ export async function getValueDashboard(env: Env, tenantId: string) {
 interface PortfolioMetrics {
   itemsProcessed: number; estimatedValue: number; overrideCount: number; adverseRuns: number; runs: number;
   openIncidents: number; safetyCap: string | null; opportunityScore: number; status: string; operatingMode: string;
+  targetConfigured: boolean;
 }
 
 export function classifyPortfolioDecision(metrics: PortfolioMetrics) {
@@ -212,6 +221,11 @@ export function classifyPortfolioDecision(metrics: PortfolioMetrics) {
       `autonomy is safety-capped at ${metrics.safetyCap}`;
     return { action: "correct" as const, confidence: metrics.itemsProcessed >= 10 || metrics.runs >= 10 ? "high" as const : "medium" as const,
       reason, nextStep: "Open Process Studio, review failure and human-feedback evidence, then publish a corrected evaluated release." };
+  }
+  if (!metrics.targetConfigured) {
+    return { action: "observe" as const, confidence: "low" as const,
+      reason: "No approved 30-day value target is configured",
+      nextStep: "Set an owner-approved target for volume, effort returned, value, and exception rates before expanding scope." };
   }
   if (metrics.itemsProcessed < 10 && metrics.runs < 10) {
     return { action: "observe" as const, confidence: "low" as const,
@@ -244,6 +258,31 @@ function portfolioRates(metrics: Pick<PortfolioMetrics, "itemsProcessed" | "over
     failureRate: metrics.runs > 0 ? metrics.adverseRuns / metrics.runs * 100 : 0,
     overrideRate: metrics.itemsProcessed > 0 ? metrics.overrideCount / metrics.itemsProcessed * 100 : 0
   };
+}
+
+function targetProgress(row: Record<string, unknown>, rates: { failureRate: number; overrideRate: number }) {
+  if (row.target_value === null || row.target_value === undefined) return null;
+  const targetItems = Number(row.target_items);
+  const targetMinutes = Number(row.target_human_minutes_saved);
+  const targetValue = Number(row.target_value);
+  const items = Number(row.items_processed ?? 0);
+  const minutes = Number(row.human_minutes_saved ?? 0);
+  const value = Number(row.estimated_value ?? 0);
+  const minimumProgress = Math.min(percent(items, targetItems), percent(minutes, targetMinutes), percent(value, targetValue));
+  const exceptionReady = rates.overrideRate <= Number(row.maximum_override_percent) &&
+    rates.failureRate <= Number(row.maximum_failure_percent);
+  const overdue = new Date(String(row.target_review_due_at)).valueOf() < Date.now();
+  return {
+    itemPercent: percent(items, targetItems), effortPercent: percent(minutes, targetMinutes),
+    valuePercent: percent(value, targetValue), minimumPercent: minimumProgress,
+    exceptionReady, overdue,
+    status: overdue ? "review_due" : minimumProgress >= 100 && exceptionReady ? "achieved" :
+      exceptionReady ? "tracking" : "attention"
+  };
+}
+function percent(actual: number, target: number) {
+  if (target <= 0) return actual > 0 ? 100 : 0;
+  return Math.round(Math.min(999, actual / target * 100) * 10) / 10;
 }
 
 function opportunityScore(baseline: CreateProcessInput["baseline"]): number {

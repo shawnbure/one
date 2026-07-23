@@ -14,6 +14,7 @@ import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { recordValueMeasurement, voidValueMeasurement } from "./value-evidence";
+import { updateValueTarget, ValueTargetConflict } from "./value-targets";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotification, emitNotification, enqueueDueNotificationDeliveries, failNotificationDelivery,
   safeEmailDestination, safeWebhookDestination } from "./notifications";
@@ -948,6 +949,19 @@ app.post("/api/value/measurements/:id/void", requireRoles("admin", "owner"), asy
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Value measurement could not be corrected" },
       isDlpBlocked(error) ? 422 : 409);
+  }
+});
+
+app.put("/api/value/targets/:processId", requireRoles("admin", "owner"), async (c) => {
+  const processId = c.req.param("processId");
+  if (!processId) return c.json({ error: "Process ID is required" }, 400);
+  try {
+    return c.json({ data: await updateValueTarget(
+      c.env, c.get("tenantId"), c.get("actorId"), processId, await c.req.json()
+    ) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Value target could not be saved" },
+      isDlpBlocked(error) ? 422 : error instanceof ValueTargetConflict ? 409 : 400);
   }
 });
 

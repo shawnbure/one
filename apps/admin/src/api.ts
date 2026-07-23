@@ -765,6 +765,12 @@ export interface ValueData {
     items_processed: number; human_minutes_saved: number; estimated_value: number; override_count: number;
     snapshot_failures: number; runs: number; completed_runs: number; adverse_runs: number;
     avg_cycle_ms: number | null; open_incidents: number; failureRate: number; overrideRate: number;
+    target_items: number | null; target_human_minutes_saved: number | null; target_value: number | null;
+    maximum_override_percent: number | null; maximum_failure_percent: number | null;
+    target_review_due_at: string | null; target_rationale: string | null;
+    target_evidence_reference: string | null; target_revision: number | null; target_updated_at: string | null;
+    target: null | { itemPercent: number; effortPercent: number; valuePercent: number; minimumPercent: number;
+      exceptionReady: boolean; overdue: boolean; status: "review_due" | "achieved" | "tracking" | "attention" };
     recommendation: { action: "expand" | "correct" | "retire" | "observe" | "hold";
       confidence: "high" | "medium" | "low"; reason: string; nextStep: string };
   }>;
@@ -1407,6 +1413,15 @@ export const api = {
       `/api/value/measurements/${encodeURIComponent(id)}/void`, {
         method: "POST", body: JSON.stringify({ reason, expectedRevision }),
       }),
+  updateValueTarget: (processId: string, body: {
+    targetItems: number; targetHumanMinutesSaved: number; targetValue: number;
+    maximumOverridePercent: number; maximumFailurePercent: number; reviewDueAt: string;
+    rationale: string; evidenceReference: string; expectedRevision: number;
+  }) => request<{ data: { blueprintId: string; targetItems: number; targetHumanMinutesSaved: number;
+    targetValue: number; maximumOverridePercent: number; maximumFailurePercent: number;
+    reviewDueAt: string; revision: number } }>(`/api/value/targets/${encodeURIComponent(processId)}`, {
+      method: "PUT", body: JSON.stringify(body),
+    }),
   runEvaluation: (id: string, releaseId?: string) => request<{ data: { id: string; status: string; score: number;
     passedAssertions: number; assertionCount: number; caseCount: number; totalTokens: number; estimatedCostUsd: number } }>(
       `/api/evaluations/${id}/run`, { method: "POST", body: JSON.stringify({ releaseId }) }),
