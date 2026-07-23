@@ -124,6 +124,8 @@ npm run build
 
 For changes to identity, tenant scoping, release publication, approval decisions, replay, or webhook handling, add endpoint-level tests before promotion. A successful frontend build alone is not adequate evidence.
 
+The Worker HTTP security suite currently proves that authenticated membership overrides forged tenant/role headers, cross-origin mutations are rejected before business writes, and viewer memberships cannot change administrative policies. These tests run locally with no Workers AI calls.
+
 ## Remaining aggressive-MVP work
 
 The foundation is usable, but these are the highest-value next slices:

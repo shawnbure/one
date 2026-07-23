@@ -14,7 +14,7 @@ import { emitNotification } from "./notifications";
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
 
-const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
+export const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 app.post("/webhooks/:endpointId", receiveWebhook);
 app.use("/api/*", requireIdentity);
