@@ -43,13 +43,26 @@ export function FoundationView({ section, onNotice }: Props) {
   }, []);
   if (!data)
     return <div className="loading-card">Loading {section.toLowerCase()}…</div>;
-  if (section === "Connections") return <Connections data={data} />;
+  if (section === "Connections") return <Connections data={data} onReload={load} onNotice={onNotice} />;
   if (section === "Knowledge") return <Knowledge data={data} />;
   if (section === "Evaluations") return <Evaluations data={data} onReload={load} onNotice={onNotice} />;
   return <Governance data={data} onReload={load} onNotice={onNotice} />;
 }
 
-function Connections({ data }: { data: GovernanceData }) {
+function Connections({ data, onReload, onNotice }: { data: GovernanceData; onReload: () => Promise<void>; onNotice: (message: string) => void }) {
+  const [checking, setChecking] = useState<string | null>(null);
+  async function test(id: string) {
+    setChecking(id);
+    try {
+      const result = await api.testConnection(id);
+      onNotice(result.data.detail);
+      await onReload();
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Connection check failed");
+    } finally {
+      setChecking(null);
+    }
+  }
   return (
     <section className="foundation-page">
       <Title
@@ -96,9 +109,9 @@ function Connections({ data }: { data: GovernanceData }) {
                 <span key={scope}>{scope}</span>
               ))}
             </div>
-            <button>
+            <button disabled={checking === String(item.id)} onClick={() => void test(String(item.id))}>
               <RefreshCw size={14} />
-              Test connection
+              {checking === String(item.id) ? "Checking…" : "Test connection"}
             </button>
           </article>
         ))}

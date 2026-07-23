@@ -309,4 +309,5 @@ export const api = {
     }),
   value: () => request<{ data: ValueData }>("/api/value"),
   runEvaluation: (id: string) => request<{ data: { id: string; status: string; passedAssertions: number; assertionCount: number } }>(`/api/evaluations/${id}/run`, { method: "POST" }),
+  testConnection: (id: string) => request<{ data: { id: string; status: string; detail: string; checkedAt: string } }>(`/api/connections/${id}/test`, { method: "POST" }),
 };

@@ -293,6 +293,26 @@ app.get("/api/webhooks", requireRoles("admin", "builder", "owner", "operator", "
   return c.json({ data: results });
 });
 
+app.post("/api/connections/:id/test", requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+  const tenantId = c.get("tenantId");
+  const connection = await c.env.DB.prepare("SELECT * FROM connections WHERE id = ? AND tenant_id = ?")
+    .bind(c.req.param("id"), tenantId).first<Record<string, string | number | null>>();
+  if (!connection) return c.json({ error: "Connection not found" }, 404);
+
+  const isWorkersAI = connection.kind === "model_provider" && connection.name === "Cloudflare Workers AI";
+  const configured = isWorkersAI || Number(connection.secret_configured) === 1;
+  const status = isWorkersAI ? "healthy" : configured ? "attention" : "disconnected";
+  const detail = isWorkersAI
+    ? "Workers AI binding is configured. No model tokens were consumed by this check."
+    : configured
+      ? "Credential metadata exists; a connector-specific live probe is still required."
+      : "Connector credential is not configured.";
+  await c.env.DB.prepare("UPDATE connections SET status = ?, last_checked_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")
+    .bind(status, connection.id, tenantId).run();
+  await writeAudit(c.env, tenantId, c.get("actorId"), "connection.checked", "connection", String(connection.id), { status, detail });
+  return c.json({ data: { id: connection.id, status, detail, checkedAt: new Date().toISOString() } });
+});
+
 app.patch("/api/webhooks/:id/status", requireRoles("admin", "builder"), async (c) => {
   const webhookId = c.req.param("id");
   const body = await c.req.json<{ status?: "active" | "disabled" }>();
