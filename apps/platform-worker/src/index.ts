@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { executionProfiles, type ExecutionRequest, type QueueJob } from "@workrr/contracts";
+import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } from "./auth";
 import { executeRequest } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
@@ -8,24 +8,17 @@ import type { Env } from "./types";
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
 
-type Variables = { tenantId: string; actorId: string; role: "admin" | "operator" | "reviewer" | "viewer" };
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
-app.use("/api/*", cors({ origin: (origin) => origin, allowHeaders: ["content-type", "x-workrr-tenant", "x-workrr-user", "x-workrr-role"] }));
-app.use("/api/*", async (c, next) => {
-  const tenantId = c.req.header("x-workrr-tenant") ?? (c.env.ENVIRONMENT === "development" ? "demo" : null);
-  const actorId = c.req.header("x-workrr-user") ?? (c.env.ENVIRONMENT === "development" ? "local-admin" : null);
-  const role = c.req.header("x-workrr-role") ?? (c.env.ENVIRONMENT === "development" ? "admin" : null);
-  if (!tenantId || !actorId || !role || !["admin", "operator", "reviewer", "viewer"].includes(role)) {
-    return c.json({ error: "Authenticated tenant context is required" }, 401);
-  }
-  c.set("tenantId", tenantId);
-  c.set("actorId", actorId);
-  c.set("role", role as Variables["role"]);
-  await next();
-});
+app.use("/api/*", requireIdentity);
+app.use("/api/*", requireSameOrigin);
 
 app.get("/health", (c) => c.json({ ok: true, service: "workrr-platform", environment: c.env.ENVIRONMENT }));
+
+app.get("/api/session", (c) => c.json({
+  user: { id: c.get("actorId"), email: c.get("actorEmail"), name: c.get("actorName"), role: c.get("role") },
+  tenantId: c.get("tenantId")
+}));
 
 app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
 
@@ -56,8 +49,7 @@ app.get("/api/executions", async (c) => {
   return c.json({ data: results });
 });
 
-app.post("/api/execute", async (c) => {
-  if (c.get("role") === "viewer") return c.json({ error: "Viewer role cannot run processes" }, 403);
+app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
   const request = await c.req.json<ExecutionRequest>();
   if (!request.blueprintId || !request.input) return c.json({ error: "blueprintId and input are required" }, 400);
   try {
@@ -67,8 +59,7 @@ app.post("/api/execute", async (c) => {
   }
 });
 
-app.post("/api/execute/async", async (c) => {
-  if (c.get("role") === "viewer") return c.json({ error: "Viewer role cannot run processes" }, 403);
+app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
   const request = await c.req.json<ExecutionRequest>();
   const executionId = crypto.randomUUID();
   const job: QueueJob = { ...request, executionId, attempt: 0 };
@@ -77,23 +68,54 @@ app.post("/api/execute/async", async (c) => {
 });
 
 app.get("/api/approvals", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT * FROM approvals WHERE tenant_id = ? ORDER BY requested_at DESC LIMIT 100")
+  const status = c.req.query("status");
+  const filter = status && ["pending", "approved", "rejected", "expired"].includes(status) ? " AND status = ?" : "";
+  const statement = c.env.DB.prepare(`SELECT * FROM approvals WHERE tenant_id = ?${filter} ORDER BY requested_at DESC LIMIT 100`);
+  const { results } = await (filter ? statement.bind(c.get("tenantId"), status) : statement.bind(c.get("tenantId"))).all();
+  return c.json({ data: results });
+});
+
+app.get("/api/approvals/:id", async (c) => {
+  const [approval, audit] = await Promise.all([
+    c.env.DB.prepare(`SELECT a.*, e.blueprint_id, e.input_preview, e.output_preview, e.model
+      FROM approvals a JOIN executions e ON e.id = a.execution_id
+      WHERE a.id = ? AND a.tenant_id = ?`).bind(c.req.param("id"), c.get("tenantId")).first(),
+    c.env.DB.prepare(`SELECT actor_id, event_type, detail_json, created_at FROM audit_events
+      WHERE tenant_id = ? AND target_type = 'approval' AND target_id = ? ORDER BY created_at`)
+      .bind(c.get("tenantId"), c.req.param("id")).all()
+  ]);
+  if (!approval) return c.json({ error: "Review item not found" }, 404);
+  return c.json({ data: approval, audit: audit.results });
+});
+
+app.post("/api/approvals/:id/assign", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
+  const approvalId = c.req.param("id");
+  const body = await c.req.json<{ assignedTo?: string }>();
+  if (!approvalId || !body.assignedTo) return c.json({ error: "assignedTo is required" }, 400);
+  const result = await c.env.DB.prepare("UPDATE approvals SET assigned_to = ? WHERE id = ? AND tenant_id = ? AND status = 'pending'")
+    .bind(body.assignedTo, approvalId, c.get("tenantId")).run();
+  if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "approval.assigned", "approval", approvalId, { assignedTo: body.assignedTo });
+  return c.json({ updated: result.meta.changes === 1 });
+});
+
+app.get("/api/audit", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT id, actor_id, event_type, target_type, target_id, detail_json, created_at
+    FROM audit_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`)
     .bind(c.get("tenantId")).all();
   return c.json({ data: results });
 });
 
-app.post("/api/approvals/:id/:decision", async (c) => {
-  if (!['admin', 'reviewer'].includes(c.get("role"))) return c.json({ error: "Reviewer role is required" }, 403);
-  const decision = c.req.param("decision");
-  if (!['approved', 'rejected'].includes(decision)) return c.json({ error: "Invalid decision" }, 400);
-  const result = await c.env.DB.prepare(`UPDATE approvals SET status = ?, decided_at = ?, decided_by = ?
+app.post("/api/approvals/:id/:decision", requireRoles("admin", "owner", "reviewer"), async (c) => {
+  const approvalId = c.req.param("id");
+  const decisionParam = c.req.param("decision");
+  if (!approvalId || (decisionParam !== "approved" && decisionParam !== "rejected")) return c.json({ error: "Invalid decision" }, 400);
+  const decision: "approved" | "rejected" = decisionParam;
+  const body: { note?: string } = await c.req.json<{ note?: string }>().catch(() => ({}));
+  const result = await c.env.DB.prepare(`UPDATE approvals SET status = ?, decided_at = ?, decided_by = ?, decision_note = ?
     WHERE id = ? AND tenant_id = ? AND status = 'pending'`)
-    .bind(decision, new Date().toISOString(), c.get("actorId"), c.req.param("id"), c.get("tenantId")).run();
+    .bind(decision, new Date().toISOString(), c.get("actorId"), body.note ?? null, approvalId, c.get("tenantId")).run();
   if (result.meta.changes === 1) {
-    await c.env.DB.prepare(`INSERT INTO audit_events
-      (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
-      VALUES (?, ?, ?, ?, 'approval', ?, ?)`)
-      .bind(crypto.randomUUID(), c.get("tenantId"), c.get("actorId"), `approval.${decision}`, c.req.param("id"), JSON.stringify({ decision })).run();
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `approval.${decision}`, "approval", approvalId, { decision, note: body.note });
   }
   return c.json({ updated: result.meta.changes === 1 });
 });
@@ -127,3 +149,10 @@ const handler: ExportedHandler<Env, QueueJob> = {
 };
 
 export default handler;
+
+async function writeAudit(env: Env, tenantId: string, actorId: string, eventType: string, targetType: string, targetId: string, detail: unknown): Promise<void> {
+  await env.DB.prepare(`INSERT INTO audit_events
+    (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), tenantId, actorId, eventType, targetType, targetId, JSON.stringify(detail ?? {})).run();
+}

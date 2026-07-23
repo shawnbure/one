@@ -5,8 +5,9 @@ import {
   ShieldCheck, Sparkles, Users, Workflow, X
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, ApiError, type Approval, type OverviewData } from "./api";
+import { api, ApiError, type Approval, type OverviewData, type SessionData } from "./api";
 import "./live.css";
+import { WorkInbox } from "./WorkInbox";
 
 const previewProcesses: AgentBlueprint[] = [
   { id: "customer-ops", name: "Customer Operations", description: "Maintains customer conversations and prepares approved business actions.", executionProfile: "conversation", modelProfile: "balanced", promptReleaseId: "prompt-customer-v1", autonomy: "approve", status: "active", tools: ["Lookup customer", "Draft reply", "Update CRM"], updatedAt: "2 min ago" },
@@ -30,6 +31,7 @@ export function App() {
   const [processes, setProcesses] = useState<AgentBlueprint[]>(previewProcesses);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [session, setSession] = useState<SessionData | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [runInput, setRunInput] = useState("");
@@ -40,7 +42,8 @@ export function App() {
 
   async function refresh() {
     try {
-      const [processResult, overviewResult, approvalResult] = await Promise.all([api.processes(), api.overview(), api.approvals()]);
+      const [sessionResult, processResult, overviewResult, approvalResult] = await Promise.all([api.session(), api.processes(), api.overview(), api.approvals()]);
+      setSession(sessionResult);
       setProcesses(processResult.data);
       setOverview(overviewResult);
       setApprovals(approvalResult.data);
@@ -88,16 +91,17 @@ export function App() {
     <aside>
       <div className="brand"><span className="brandmark"><Command size={18} /></span><div><strong>workrr</strong><small>PRIVATE AI OPERATIONS</small></div></div>
       <div className="workspace"><span className="avatar">A</span><div><strong>Acme Operations</strong><small>Dedicated environment</small></div><ChevronDown size={15} /></div>
-      <nav>{nav.map(([label, Icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}><Icon size={18} />{label}{label === "Work inbox" && <em>3</em>}</button>)}</nav>
+      <nav>{nav.map(([label, Icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}><Icon size={18} />{label}{label === "Work inbox" && (overview?.pendingApprovals ?? 0) > 0 && <em>{overview?.pendingApprovals}</em>}</button>)}</nav>
       <div className="aside-bottom"><div className="private"><LockKeyhole size={16}/><div><strong>Private by design</strong><small>Cloudflare dedicated</small></div></div><button><Settings2 size={17}/>Settings</button><button><Users size={17}/>Team & roles</button></div>
     </aside>
 
     <main>
-      <header><div className="crumb">OPERATIONS <span>/</span> OVERVIEW</div><div className="header-actions"><button className="search"><Search size={17}/>Search <kbd>⌘ K</kbd></button><button className="icon-button"><Inbox size={17}/><i /></button><div className="user">SB</div></div></header>
+      <header><div className="crumb">OPERATIONS <span>/</span> {active.toUpperCase()}</div><div className="header-actions"><button className="search"><Search size={17}/>Search <kbd>⌘ K</kbd></button><button className="icon-button" onClick={() => setActive("Work inbox")}><Inbox size={17}/>{(overview?.pendingApprovals ?? 0) > 0 && <i />}</button><div className="user">{session?.user.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() ?? "SB"}</div></div></header>
       <div className="content">
         {previewMode && <div className="environment-banner"><LockKeyhole size={15}/><span><strong>Secure preview</strong> Live operations unlock after identity is connected.</span></div>}
         {notice && <button className="notice" onClick={() => setNotice(null)}>{notice}<X size={14}/></button>}
-        <section className="hero"><div><div className="eyebrow"><Sparkles size={14}/> YOUR AI OPERATIONS</div><h1>Good morning, Shawn.</h1><p>Three processes are working across your organization. One item needs your review.</p></div><button className="primary"><Plus size={17}/>Create process</button></section>
+        {active === "Work inbox" ? <WorkInbox items={approvals} session={session} onRefresh={refresh} onNotice={setNotice}/> : <>
+        <section className="hero"><div><div className="eyebrow"><Sparkles size={14}/> YOUR AI OPERATIONS</div><h1>Good morning, {session?.user.name.split(" ")[0] ?? "Shawn"}.</h1><p>{processes.length} processes are configured across your organization. {overview?.pendingApprovals ?? 1} item needs review.</p></div><button className="primary"><Plus size={17}/>Create process</button></section>
 
         <section className="metrics">
           <article><div><span className="metric-icon green"><Bot size={18}/></span><small>ACTIVE PROCESSES</small></div><strong>{overview?.activeProcesses ?? 3}</strong><p><b>{processes.length}</b> configured</p></article>
@@ -122,7 +126,7 @@ export function App() {
             <div className="panel approval-card"><div className="panel-head"><div><h2>Review queue</h2><p>Human control points</p></div><span className="count">{overview?.pendingApprovals ?? 1}</span></div>{pending ? <div className="approval"><div className="approval-top"><span className="company">AI</span><div><strong>{pending.action_name.replaceAll("_", " ")}</strong><small>Execution {pending.execution_id.slice(0, 8)}</small></div><span>New</span></div><p>An AI process is waiting for authorization before it performs this action.</p><div className="risk"><ShieldCheck size={15}/><span><strong>Human checkpoint</strong><small>Consequential action · audited</small></span></div><div className="approval-actions"><button disabled={busy === pending.id} onClick={() => void decide(pending.id, "rejected")}><X size={16}/>Decline</button><button disabled={busy === pending.id} className="approve" onClick={() => void decide(pending.id, "approved")}><Check size={16}/>Approve</button></div></div> : <div className="empty-approval"><ShieldCheck size={24}/><strong>No work waiting</strong><span>Human checkpoints will appear here.</span></div>}<button className="full-link">Open work inbox <ArrowUpRight size={15}/></button></div>
             <div className="panel health"><div className="panel-head"><div><h2>Platform health</h2><p>Dedicated Cloudflare environment</p></div><span className="healthy"><i/>Healthy</span></div><div className="health-row"><span><Activity size={16}/>Success rate</span><strong>99.4%</strong></div><div className="health-row"><span><Clock3 size={16}/>p95 response</span><strong>1.8s</strong></div><div className="health-row"><span><GitBranch size={16}/>Durable workflows</span><strong>8 running</strong></div><div className="health-row"><span><Database size={16}/>Data boundary</span><strong>Private</strong></div></div>
           </div>
-        </section>
+        </section></>}
       </div>
     </main>
 

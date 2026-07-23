@@ -8,6 +8,8 @@ export interface Env {
   PROCESS_QUEUE: Queue<QueueJob>;
   PROCESS_WORKFLOW: Workflow;
   ENVIRONMENT: string;
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
 }
 
 export interface BlueprintRow {

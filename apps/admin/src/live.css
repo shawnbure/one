@@ -22,3 +22,59 @@
   border-radius: 8px; background: #edf6f2; color: #315e4d; font-size: 10px; line-height: 1.5; white-space: pre-wrap;
 }
 .run-output svg { flex: none; margin-top: 1px; }
+.inbox-page { padding-bottom: 40px; }
+.page-title { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 25px; }
+.page-title h1 { margin: 7px 0 5px; font: 600 30px Manrope; letter-spacing: -.8px; }
+.page-title p { margin: 0; color: var(--muted); font-size: 12px; }
+.assignment-chip { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: white; color: #5d6b65; }
+.assignment-chip span, .assignment-chip small, .assignment-chip strong { display: block; }
+.assignment-chip small { color: #89938f; font-size: 7px; letter-spacing: .8px; }
+.assignment-chip strong { margin-top: 2px; font-size: 10px; }
+.inbox-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.inbox-tabs button { display: flex; align-items: center; gap: 7px; padding: 8px 12px; border: 0; border-radius: 7px; background: transparent; color: #77827d; text-transform: capitalize; font-size: 11px; cursor: pointer; }
+.inbox-tabs button.active { background: #e8f1ed; color: #28644e; font-weight: 600; }
+.inbox-tabs span { min-width: 17px; padding: 1px 5px; border-radius: 8px; background: #fff; font-size: 8px; text-align: center; }
+.work-list { overflow: hidden; }
+.work-row { width: 100%; display: grid; grid-template-columns: 40px 1fr 190px 20px; align-items: center; gap: 13px; padding: 17px 20px; border: 0; border-bottom: 1px solid #edf0ee; background: white; color: inherit; text-align: left; cursor: pointer; }
+.work-row:last-child { border-bottom: 0; }
+.work-row:hover { background: #f8faf8; }
+.work-impact { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; background: #fff1dc; color: #996a2d; }
+.work-impact.high { background: #fae9e5; color: #a14f3c; }
+.work-impact.low { background: #e4f2ec; color: #28775b; }
+.work-copy > span { display: flex; align-items: center; gap: 8px; }
+.work-copy strong { font-size: 12px; }
+.work-copy small { display: block; margin: 4px 0 7px; color: #6c7872; font-size: 10px; }
+.work-copy em { color: #8a9490; font-size: 8px; font-style: normal; text-transform: capitalize; }
+.work-meta { text-align: right; }
+.work-meta small { display: flex; align-items: center; justify-content: flex-end; gap: 5px; color: #8a9490; font-size: 9px; }
+.work-meta strong { display: block; margin-top: 6px; color: #59655f; font-size: 9px; font-weight: 500; }
+.status.approved { background: #e5f3ec; color: #35765d; }.status.rejected { background: #f8eae6; color: #9a5544; }
+.work-empty, .loading-card { display: grid; place-items: center; gap: 7px; padding: 70px 20px; color: #86a095; }
+.work-empty strong { color: #53675e; font-size: 12px; }.work-empty span { font-size: 10px; }
+.back-link { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; border: 0; background: transparent; color: #40735f; font-size: 10px; font-weight: 600; cursor: pointer; }
+.review-layout { display: grid; grid-template-columns: minmax(600px, 1.5fr) minmax(270px, .6fr); gap: 16px; align-items: start; }
+.review-main { padding: 28px; }.review-heading { display: flex; align-items: flex-start; gap: 14px; }
+.review-icon { width: 42px; height: 42px; display: grid; place-items: center; flex: none; border-radius: 10px; background: #e7f2ed; color: #286c52; }
+.review-heading h1 { margin: 9px 0 6px; font: 600 23px Manrope; text-transform: capitalize; }
+.review-heading p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.evidence-block { margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: #fafbfa; }
+.evidence-block.proposed { border-color: #cfe3d9; background: #f2f8f5; }
+.evidence-block label { color: #84908b; font-size: 8px; font-weight: 700; letter-spacing: 1px; }
+.evidence-block p { margin: 8px 0 0; color: #44514c; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+.decision-context { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+.decision-context > span { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; color: #60716a; }
+.decision-context strong, .decision-context small { display: block; font-size: 9px; }.decision-context small { margin-top: 2px; color: #919b97; }
+.decision-box { margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--line); }
+.decision-box label { color: #4d5b55; font-size: 10px; font-weight: 600; }.decision-box label em { color: #929b97; font-style: normal; font-weight: 400; }
+.decision-box textarea { width: 100%; min-height: 76px; margin-top: 8px; padding: 10px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; outline: none; background: #fafbfa; font-size: 10px; }
+.decision-box > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 9px; }
+.decision-box button { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 7px; background: white; color: #59655f; font-size: 10px; font-weight: 600; }
+.decision-box button.approve { border-color: #206d53; background: #206d53; color: white; }
+.review-side { position: sticky; top: 85px; padding: 20px; }
+.review-side h2 { margin: 0 0 13px; font: 600 14px Manrope; }.review-side h3 { margin: 22px 0 12px; font-size: 9px; letter-spacing: .8px; text-transform: uppercase; }
+.review-side dl { margin: 0; }.review-side dl div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #edf0ee; }
+.review-side dt { color: #89938f; font-size: 9px; }.review-side dd { margin: 0; color: #4c5954; font-size: 9px; text-align: right; text-transform: capitalize; }
+.audit-line { border-left: 1px solid #dbe4df; margin-left: 4px; }.audit-line span { position: relative; display: block; padding: 0 0 16px 14px; }
+.audit-line i { position: absolute; left: -4px; top: 2px; width: 7px; height: 7px; border-radius: 50%; background: #4d9577; border: 2px solid white; box-shadow: 0 0 0 1px #bcd5ca; }
+.audit-line strong, .audit-line small { display: block; font-size: 9px; text-transform: capitalize; }.audit-line small { margin-top: 3px; color: #909a96; font-size: 8px; }
+@media (max-width: 1200px) { .review-layout { grid-template-columns: 1fr; }.review-side { position: static; }.work-row { grid-template-columns: 40px 1fr 130px 20px; } }

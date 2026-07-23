@@ -1,0 +1,94 @@
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import type { Context, Next } from "hono";
+import type { Env } from "./types";
+
+export const roles = ["admin", "builder", "owner", "operator", "reviewer", "viewer", "consumer"] as const;
+export type Role = (typeof roles)[number];
+
+export interface AuthVariables {
+  tenantId: string;
+  actorId: string;
+  actorEmail: string;
+  actorName: string;
+  role: Role;
+}
+
+interface MemberRow {
+  id: string;
+  tenant_id: string;
+  email: string;
+  display_name: string;
+  role: Role;
+}
+
+type AppContext = Context<{ Bindings: Env; Variables: AuthVariables }>;
+
+export async function requireIdentity(c: AppContext, next: Next): Promise<Response | void> {
+  const identity = await resolveIdentity(c);
+  if (!identity) return c.json({ error: "Authenticated organization membership is required" }, 401);
+  c.set("tenantId", identity.tenant_id);
+  c.set("actorId", identity.id);
+  c.set("actorEmail", identity.email);
+  c.set("actorName", identity.display_name);
+  c.set("role", identity.role);
+  await c.env.DB.prepare("UPDATE tenant_members SET last_seen_at = ? WHERE id = ?")
+    .bind(new Date().toISOString(), identity.id).run();
+  await next();
+}
+
+async function resolveIdentity(c: AppContext): Promise<MemberRow | null> {
+  if (c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD) {
+    const token = c.req.header("cf-access-jwt-assertion");
+    if (!token) return null;
+    try {
+      const issuer = normalizeIssuer(c.env.ACCESS_TEAM_DOMAIN);
+      const { payload } = await jwtVerify(token, createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`)), {
+        issuer,
+        audience: c.env.ACCESS_AUD
+      });
+      if (typeof payload.email !== "string") return null;
+      return membershipByEmail(c.env, payload.email);
+    } catch (error) {
+      console.warn(JSON.stringify({ event: "access_token_rejected", error: error instanceof Error ? error.message : String(error) }));
+      return null;
+    }
+  }
+
+  if (c.env.ENVIRONMENT !== "development") return null;
+  const email = c.req.header("x-workrr-user") ?? "shawnbure@outlook.com";
+  const member = await membershipByEmail(c.env, email);
+  if (member) return member;
+
+  // Local-only compatibility for a newly bootstrapped developer database.
+  const tenantId = c.req.header("x-workrr-tenant") ?? "demo";
+  const requestedRole = c.req.header("x-workrr-role");
+  const role: Role = requestedRole && roles.includes(requestedRole as Role) ? requestedRole as Role : "admin";
+  return { id: "local-admin", tenant_id: tenantId, email, display_name: "Local Administrator", role };
+}
+
+async function membershipByEmail(env: Env, email: string): Promise<MemberRow | null> {
+  return env.DB.prepare(`SELECT id, tenant_id, email, display_name, role FROM tenant_members
+    WHERE email = ? COLLATE NOCASE AND status = 'active' ORDER BY created_at LIMIT 1`)
+    .bind(email).first<MemberRow>();
+}
+
+function normalizeIssuer(value: string): string {
+  return value.startsWith("https://") ? value.replace(/\/$/, "") : `https://${value.replace(/\/$/, "")}`;
+}
+
+export function requireRoles(...allowed: Role[]) {
+  return async (c: AppContext, next: Next): Promise<Response | void> => {
+    if (!allowed.includes(c.get("role"))) return c.json({ error: "You do not have permission to perform this action" }, 403);
+    await next();
+  };
+}
+
+export async function requireSameOrigin(c: AppContext, next: Next): Promise<Response | void> {
+  if (["GET", "HEAD", "OPTIONS"].includes(c.req.method)) return next();
+  const origin = c.req.header("origin");
+  if (!origin) return next();
+  const requestOrigin = new URL(c.req.url).origin;
+  const localDev = c.env.ENVIRONMENT === "development" && /^http:\/\/localhost:\d+$/.test(origin);
+  if (origin !== requestOrigin && !localDev) return c.json({ error: "Cross-origin mutation rejected" }, 403);
+  await next();
+}
