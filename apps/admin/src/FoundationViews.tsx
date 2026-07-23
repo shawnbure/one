@@ -385,7 +385,19 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
         title="Connections"
         text="Credentials, permissions, ownership, and health for every system an AI process can reach."
       />
-      <article className="microsoft-connect panel">
+      <nav className="connection-workspace-index panel" aria-label="Connection workspace sections">
+        <a href="#connection-providers"><Link2 size={15}/><span><strong>Providers</strong>
+          <small>{data.connections.length} configured</small></span></a>
+        <a href="#connection-tools"><Box size={15}/><span><strong>Native tools</strong>
+          <small>{tools.length} capabilities</small></span></a>
+        <a href="#connection-mcp"><Bot size={15}/><span><strong>MCP services</strong>
+          <small>{mcpCatalog.connectors.length} connected</small></span></a>
+        <a href="#connection-webhooks"><KeyRound size={15}/><span><strong>Webhooks</strong>
+          <small>{data.webhooks.length} endpoints</small></span></a>
+        <a href="#connection-email"><Mail size={15}/><span><strong>Email intake</strong>
+          <small>{data.emailRoutes.length} routes</small></span></a>
+      </nav>
+      <article id="connection-providers" className="microsoft-connect panel connection-anchor">
         <div className="microsoft-mark">M</div>
         <div><span className="eyebrow"><KeyRound size={14}/> DELEGATED OAUTH</span><h2>Microsoft 365</h2>
           <p>Connect one operating account with selectable least-privilege permissions. Tokens are encrypted before D1 persistence and never returned to the browser.</p>
@@ -495,7 +507,7 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
           </article>
         ))}
       </div>
-      <div className="tool-catalog panel">
+      <div id="connection-tools" className="tool-catalog panel connection-anchor">
         <div className="section-head"><div><span className="eyebrow"><Box size={14}/> GOVERNED CAPABILITIES</span>
           <h2>Typed tool catalog</h2><p>Define schemas, risk, ownership, limits, connection readiness, and process scope. Mock tools are safe extension points and do not perform external actions.</p></div></div>
         <div className="tool-layout">
@@ -585,7 +597,7 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
           </form>
         </div>
       </div>
-      <div className="mcp-catalog panel">
+      <div id="connection-mcp" className="mcp-catalog panel connection-anchor">
         <div className="section-head"><div><span className="eyebrow"><Bot size={14}/> PRIVATE CAPABILITY GATEWAY</span>
           <h2>MCP connector catalog</h2>
           <p>Connect an existing HTTPS MCP service once per tenant. Credentials stay in its durable connector actor; discovered tools start disabled and enter processes only through immutable releases.</p>
@@ -664,7 +676,7 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
           </article>)}
         </div>}
       </div>
-      <div className="webhook-section">
+      <div id="connection-webhooks" className="webhook-section connection-anchor">
         <div className="section-head">
           <div>
             <h2>Inbound webhooks</h2>
@@ -750,7 +762,7 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
         ))}
         {!data.webhooks.length && <p className="empty-copy">No inbound webhook endpoints are configured.</p>}
       </div>
-      <div className="webhook-section email-channel-section">
+      <div id="connection-email" className="webhook-section email-channel-section connection-anchor">
         <div className="section-head">
           <div>
             <h2>Inbound email</h2>

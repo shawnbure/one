@@ -893,6 +893,14 @@ a:focus-visible {
 }
 
 .mcp-catalog { margin-top: 18px; overflow: hidden; }
+.connection-workspace-index { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 1px; margin-bottom: 16px; overflow: hidden; background: #dfe7e3; }
+.connection-workspace-index a { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 13px 14px; background: #fff; color: #315646; text-decoration: none; }
+.connection-workspace-index a:hover, .connection-workspace-index a:focus-visible { background: #edf6f1; outline: 2px solid #4b8a6f; outline-offset: -2px; }
+.connection-workspace-index a > svg { flex: none; }
+.connection-workspace-index a span, .connection-workspace-index a strong, .connection-workspace-index a small { display: block; min-width: 0; }
+.connection-workspace-index a strong { color: #2b463a; font-size: 13px; }
+.connection-workspace-index a small { margin-top: 2px; overflow: hidden; color: #65766e; text-overflow: ellipsis; white-space: nowrap; }
+.connection-anchor { scroll-margin-top: 82px; }
 .mcp-catalog > .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px; }
 .mcp-policy-note { display: inline-flex; align-items: center; gap: 7px; max-width: 280px; color: #315f4c; font-weight: 750; }
 .mcp-create { display: grid; grid-template-columns: minmax(150px,.7fr) minmax(280px,1.5fr) minmax(160px,.55fr) auto; gap: 12px; align-items: end; padding: 18px 20px; border-top: 1px solid #e4ebe7; background: #f7faf8; }
@@ -918,11 +926,14 @@ a:focus-visible {
 .mcp-governance-fields label { display: grid; gap: 4px; color: #40534a; font-weight: 700; }
 .mcp-governance-fields input, .mcp-governance-fields select { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; background: white; }
 @media (max-width: 1000px) {
+  .connection-workspace-index { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .mcp-create { grid-template-columns: 1fr 1fr; }
   .mcp-connectors { grid-template-columns: 1fr; }
   .mcp-governance-fields { grid-template-columns: repeat(2,minmax(130px,1fr)); }
 }
 @media (max-width: 700px) {
+  .connection-workspace-index { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
+  .connection-workspace-index a { min-width: 145px; scroll-snap-align: start; }
   .mcp-catalog > .section-head, .mcp-create { grid-template-columns: 1fr; flex-direction: column; }
   .mcp-tools > article { grid-template-columns: auto 1fr; }
   .mcp-tools > article > .connection-state, .mcp-tools > article > button { grid-column: 2; justify-self: start; }

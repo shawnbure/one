@@ -68,4 +68,11 @@ describe("product readability contract", () => {
     expect(css).toContain(".mcp-connectors { grid-template-columns: 1fr; }");
     expect(css).toContain(".mcp-tools > article { grid-template-columns: auto 1fr; }");
   });
+
+  it("provides readable local navigation across the long Connections workspace", () => {
+    expect(css).toContain(".connection-workspace-index");
+    expect(css).toContain("grid-template-columns: repeat(5");
+    expect(css).toContain("overflow-x: auto");
+    expect(css).toContain(".connection-anchor { scroll-margin-top:");
+  });
 });
