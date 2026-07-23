@@ -5,7 +5,6 @@ import {
   Bot,
   Check,
   CircleDollarSign,
-  Clock3,
   FileSearch,
   ShieldCheck,
   Sparkles,

@@ -1,4 +1,4 @@
-export class WorkflowEntrypoint<Env = unknown, Params = unknown> {
+export class WorkflowEntrypoint<Env = unknown, _Params = unknown> {
   env!: Env;
 }
 export interface WorkflowEvent<T> { payload: T; instanceId: string }

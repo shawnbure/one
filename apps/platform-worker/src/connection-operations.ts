@@ -20,7 +20,6 @@ export async function updateConnectionLifecycle(env: Env, tenantId: string, acto
     if (!member) throw new Error("Rotation owner must be an active administrator, builder, owner, or operator");
     rotationOwner = member.email;
   }
-  const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare(`UPDATE connections SET credential_expires_at=?, rotation_owner=?, last_rotated_at=?,
       expiry_alerted_at=NULL WHERE id=? AND tenant_id=?`)

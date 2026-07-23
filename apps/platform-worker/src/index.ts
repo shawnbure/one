@@ -481,7 +481,7 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
       error: "Reconnect Microsoft 365 with Send notifications (Mail.Send) permission before enabling email delivery",
     }, 409);
   }
-  let ownerId = body.ownerId === undefined ? policy.owner_id : body.ownerId || null;
+  const ownerId = body.ownerId === undefined ? policy.owner_id : body.ownerId || null;
   const acknowledgementRequired = body.acknowledgementRequired === undefined
     ? Boolean(policy.acknowledgement_required) : body.acknowledgementRequired;
   const escalationMinutes = body.escalationMinutes === undefined

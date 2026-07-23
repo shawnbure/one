@@ -18,7 +18,7 @@ const option = (name) => {
   return index >= 0 ? args[index + 1] : undefined;
 };
 const environment = option("--env") ?? "dev";
-const selected = environmentConfig(config, environment);
+environmentConfig(config, environment);
 const manifest = resourceManifest(config, environment);
 const name = option("--name") ?? `Workrr live verification ${environment}`;
 const duration = option("--duration") ?? "2160h";
@@ -26,7 +26,7 @@ const tenantId = option("--tenant");
 const credentialPath = option("--credential-file");
 const apply = args.includes("--apply");
 const smoke = args.includes("--smoke");
-const validated = validateBootstrapInput({
+validateBootstrapInput({
   environment, tenantId, name, duration, accountId: manifest.accountId,
   domain: manifest.appDomain, audience: manifest.accessAudience,
   databaseName: manifest.databaseName,

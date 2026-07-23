@@ -5,9 +5,8 @@ function environment(options?: { noEvidence?: boolean }) {
   const bindings: unknown[][] = [];
   const DB = {
     prepare(sql: string) {
-      let values: unknown[] = [];
       const statement = {
-        bind(...input: unknown[]) { values = input; bindings.push(input); return statement; },
+        bind(...input: unknown[]) { bindings.push(input); return statement; },
         async first() {
           if (sql.includes("agent_blueprints")) return { count: 4 };
           if (sql.includes("approvals WHERE")) return { count: 2 };

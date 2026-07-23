@@ -33,7 +33,7 @@ function environment(scopes = ["User.Read", "Mail.ReadBasic", "Calendars.ReadBas
 describe("Microsoft provider acceptance", () => {
   it("proves selected fixed read capabilities without storing provider content", async () => {
     const fixture = environment();
-    const fetcher = vi.fn(async (url: string | URL | Request) =>
+    const fetcher = vi.fn(async (_url: string | URL | Request) =>
       new Response(JSON.stringify({ value: [{ id: "provider-content-must-not-persist" }] }), {
         status: 200, headers: { "content-type": "application/json" }
       }));

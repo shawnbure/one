@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bot,
   Box,
-  Check,
   CheckCircle2,
   Database,
   Download,

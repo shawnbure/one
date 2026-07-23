@@ -290,7 +290,7 @@ async function normalize(env: Env, input: OpportunityInput): Promise<Opportunity
       !["low", "some", "high"].includes(input.humanJudgment)) throw new Error("Opportunity control values are invalid");
   const list = (value: unknown) => Array.isArray(value)
     ? value.map((item) => String(item).trim()).filter(Boolean).slice(0, 20).map((item) => item.slice(0, 160)) : [];
-  let recommendedTemplateId = input.recommendedTemplateId || null;
+  const recommendedTemplateId = input.recommendedTemplateId || null;
   if (recommendedTemplateId) {
     const template = await env.DB.prepare("SELECT id FROM process_templates WHERE id=?").bind(recommendedTemplateId).first();
     if (!template) throw new Error("Recommended template was not found");

@@ -3,16 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "npm run dev -w @workrr/admin",
     "dev:worker": "npm run dev -w @workrr/platform-worker",
     "build": "npm run build --workspaces --if-present",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present && node --test scripts/*.test.mjs",
     "validate:repository": "node scripts/validate-repository.mjs",
     "audit:production": "npm audit --omit=dev --audit-level=high",
-    "verify": "npm run validate:repository && npm run audit:production && npm run typecheck && npm run test && npm run build",
+    "verify": "npm run validate:repository && npm run audit:production && npm run lint && npm run typecheck && npm run test && npm run build",
     "provision:plan": "node scripts/provision-cloudflare.mjs",
     "customer:deploy": "node scripts/deploy-customer.mjs",
     "customer:config": "node scripts/generate-customer-config.mjs",
@@ -23,5 +27,15 @@
     "smoke:live": "node scripts/smoke-live.mjs",
     "promote:production": "node scripts/promote-production.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "typescript-eslint": "^8.65.0"
+  }
 }
