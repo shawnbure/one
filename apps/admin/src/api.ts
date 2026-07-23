@@ -61,6 +61,23 @@ export interface SessionData {
   accentColor: string;
 }
 
+export interface LaunchpadThread {
+  id: string;
+  blueprint_id: string;
+  process_name: string;
+  title: string;
+  status: "active" | "archived";
+  last_execution_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LaunchpadMessage {
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
 export interface HelpCenterData {
   roleGuide: { title: string; firstAction: string; escalation: string };
   progress: { completed: number; total: number };
@@ -925,6 +942,34 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  launchpadThreads: (blueprintId?: string) =>
+    request<{ data: LaunchpadThread[] }>(
+      `/api/launchpad/threads${blueprintId ? `?blueprintId=${encodeURIComponent(blueprintId)}` : ""}`,
+    ),
+  createLaunchpadThread: (blueprintId: string, title: string) =>
+    request<{ data: { id: string; blueprintId: string; processName: string; title: string; status: "active" } }>(
+      `/api/launchpad/processes/${encodeURIComponent(blueprintId)}/threads`,
+      { method: "POST", body: JSON.stringify({ title }) },
+    ),
+  launchpadConversation: (threadId: string) =>
+    request<{ data: { thread: LaunchpadThread; messages: LaunchpadMessage[] } }>(
+      `/api/launchpad/threads/${encodeURIComponent(threadId)}`,
+    ),
+  sendLaunchpadMessage: (threadId: string, input: string) =>
+    request<{ data: ExecutionResult }>(
+      `/api/launchpad/threads/${encodeURIComponent(threadId)}/messages`,
+      { method: "POST", body: JSON.stringify({ input }) },
+    ),
+  runLaunchpadProcess: (blueprintId: string, input: string) =>
+    request<{ data: ExecutionResult }>(
+      `/api/launchpad/processes/${encodeURIComponent(blueprintId)}/run`,
+      { method: "POST", body: JSON.stringify({ input }) },
+    ),
+  archiveLaunchpadThread: (threadId: string, archived: boolean) =>
+    request<{ data: { id: string; status: "active" | "archived" } }>(
+      `/api/launchpad/threads/${encodeURIComponent(threadId)}`,
+      { method: "PATCH", body: JSON.stringify({ archived }) },
+    ),
   decideApproval: (
     id: string,
     decision: "approved" | "rejected",

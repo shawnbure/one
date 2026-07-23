@@ -61,6 +61,9 @@ import { getDeploymentVerification } from "./deployment-verification";
 import { applyConfigurationRestore, ConfigurationRestoreConflict, exportConfigurationPackage,
   previewConfigurationRestore } from "./configuration-packages";
 import { createActorReleaseRollout, listActorReleaseRollouts } from "./actor-release-rollouts";
+import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
+  getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
+  setLaunchpadThreadArchived } from "./launchpad";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -642,7 +645,28 @@ app.delete("/api/smoke-fixtures/:id", requireRoles("admin", "owner", "operator")
   return c.json({ deleted: result.meta.changes === 1 });
 });
 
-app.get("/api/processes", async (c) => c.json({ data: await listBlueprints(c.env, c.get("tenantId")) }));
+app.get("/api/processes", async (c) => {
+  const processes = await listBlueprints(c.env, c.get("tenantId"));
+  if (c.get("role") !== "consumer") return c.json({ data: processes });
+  return c.json({ data: processes
+    .filter((process) => process.status === "active" && process.activeReleaseId)
+    .map((process) => ({
+      id: process.id,
+      name: process.name,
+      description: process.description,
+      executionProfile: process.executionProfile,
+      modelProfile: process.modelProfile,
+      promptReleaseId: null,
+      autonomy: process.autonomy,
+      status: process.status,
+      operatingMode: process.operatingMode,
+      activeReleaseId: process.activeReleaseId,
+      inputSchemaJson: process.inputSchemaJson,
+      outputSchemaJson: process.outputSchemaJson,
+      tools: process.tools,
+      updatedAt: process.updatedAt
+    })) });
+});
 
 app.get("/api/process-schedules", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await listSchedules(c.env, c.get("tenantId"), c.req.query("process")) }));
@@ -1099,10 +1123,101 @@ app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", 
   return c.json(result, 202);
 });
 
+app.get("/api/launchpad/threads", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
+  const blueprintId = c.req.query("blueprintId")?.trim();
+  return c.json({ data: await listLaunchpadThreads(
+    c.env, c.get("tenantId"), c.get("actorId"), blueprintId || undefined
+  ) });
+});
+
+app.post("/api/launchpad/processes/:blueprintId/threads",
+  requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
+    try {
+      const blueprintId = c.req.param("blueprintId") ?? "";
+      const body = await c.req.json<{ title?: string }>();
+      const data = await createLaunchpadThread(
+        c.env, c.get("tenantId"), c.get("actorId"), blueprintId, body.title
+      );
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "launchpad.thread.created",
+        "process_thread", data.id, { blueprintId });
+      return c.json({ data }, 201);
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Conversation could not be created" }, 400);
+    }
+  });
+
+app.get("/api/launchpad/threads/:threadId",
+  requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
+    try {
+      c.header("cache-control", "no-store");
+      return c.json({ data: await getLaunchpadConversation(
+        c.env, c.get("tenantId"), c.get("actorId"), c.req.param("threadId") ?? ""
+      ) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Conversation could not be loaded";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
+
+app.post("/api/launchpad/threads/:threadId/messages",
+  requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
+    try {
+      const body = await c.req.json<{ input?: string }>();
+      const threadId = c.req.param("threadId") ?? "";
+      const data = await executeLaunchpadThread(
+        c.env, c.get("tenantId"), c.get("actorId"), threadId, body.input ?? ""
+      );
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "launchpad.thread.executed",
+        "process_thread", threadId, { executionId: data.executionId, status: data.status });
+      return c.json({ data }, 202);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Conversation could not be executed";
+      return c.json({ error: message }, isDlpBlocked(error) || isContractViolation(error) ? 422 :
+        message.includes("not found") ? 404 : 400);
+    }
+  });
+
+app.post("/api/launchpad/processes/:blueprintId/run",
+  requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
+    try {
+      const body = await c.req.json<{ input?: string }>();
+      const blueprintId = c.req.param("blueprintId") ?? "";
+      const data = await executeLaunchpadProcess(
+        c.env, c.get("tenantId"), c.get("actorId"), blueprintId, body.input ?? ""
+      );
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "launchpad.process.executed",
+        "execution", data.executionId, { blueprintId, status: data.status });
+      return c.json({ data }, 202);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Process could not be executed";
+      return c.json({ error: message }, isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
+    }
+  });
+
+app.patch("/api/launchpad/threads/:threadId",
+  requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
+    try {
+      const body = await c.req.json<{ archived?: boolean }>();
+      if (typeof body.archived !== "boolean") return c.json({ error: "Archived state is required" }, 400);
+      const data = await setLaunchpadThreadArchived(
+        c.env, c.get("tenantId"), c.get("actorId"), c.req.param("threadId") ?? "", body.archived
+      );
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), `launchpad.thread.${data.status}`,
+        "process_thread", data.id, {});
+      return c.json({ data });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Conversation could not be updated";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
+
 app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
-  const request = await c.req.json<ExecutionRequest>();
+  let request = await c.req.json<ExecutionRequest>();
   if (!request.blueprintId || !request.input) return c.json({ error: "blueprintId and input are required" }, 400);
   try {
+    if (c.get("role") === "consumer") {
+      request = await governConsumerExecutionRequest(c.env, c.get("tenantId"), c.get("actorId"), request);
+    }
     return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Execution failed" },
@@ -1111,9 +1226,12 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
 });
 
 app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
-  const request = await c.req.json<ExecutionRequest>();
+  let request = await c.req.json<ExecutionRequest>();
   if (!request.blueprintId || !request.input) return c.json({ error: "blueprintId and input are required" }, 400);
   try {
+    if (c.get("role") === "consumer") {
+      request = await governConsumerExecutionRequest(c.env, c.get("tenantId"), c.get("actorId"), request);
+    }
     const admission = await assertAsyncExecutionAdmission(c.env, c.get("tenantId"), request.blueprintId);
     if (admission.deferred) return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
   } catch (error) {

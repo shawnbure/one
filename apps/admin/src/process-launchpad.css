@@ -1,0 +1,110 @@
+.launchpad-page { padding-bottom: 30px; }
+.launchpad-title { margin-bottom: 22px; }
+.launchpad-title > span { display: flex; align-items: center; gap: 7px; color: #39755c; font-size: 12px;
+  font-weight: 850; letter-spacing: .09em; }
+.launchpad-title h1 { margin: 8px 0 4px; color: #20332a; font-size: clamp(28px, 4vw, 42px); line-height: 1.1; }
+.launchpad-title p { margin: 0; color: #596d63; font-size: 15px; line-height: 1.55; }
+.launchpad-layout { display: grid; grid-template-columns: minmax(240px, 310px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.launchpad-processes { overflow: hidden; }
+.launchpad-processes .panel-head { padding: 18px; }
+.launchpad-processes > button { width: 100%; display: flex; align-items: flex-start; gap: 11px; padding: 14px 18px;
+  border: 0; border-top: 1px solid #e6ece9; background: #fff; color: #2b4036; text-align: left; }
+.launchpad-processes > button:hover,
+.launchpad-processes > button.selected { background: #f2f8f5; }
+.launchpad-processes > button.selected { box-shadow: inset 3px 0 #39755c; }
+.launchpad-processes > button > span:nth-child(2) { min-width: 0; }
+.launchpad-processes strong,
+.launchpad-processes small,
+.launchpad-processes em { display: block; }
+.launchpad-processes strong { font-size: 14px; }
+.launchpad-processes small { margin-top: 3px; color: #63766c; font-size: 12px; line-height: 1.45;
+  display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.launchpad-processes em { margin-top: 7px; color: #39755c; font-size: 11px; font-style: normal; font-weight: 800; }
+.launchpad-process-icon { display: grid; width: 34px; height: 34px; flex: none; place-items: center;
+  border-radius: 9px; background: #e7f2ec; color: #39755c; }
+.launchpad-process-icon.instant { background: #eaf0f8; color: #456a94; }
+.launchpad-workspace { min-height: 600px; overflow: hidden; }
+.launchpad-workspace > header { display: flex; justify-content: space-between; gap: 20px; padding: 22px;
+  border-bottom: 1px solid #e3ebe7; background: linear-gradient(135deg, #f8fbf9, #fff); }
+.launchpad-workspace > header span { color: #39755c; font-size: 11px; font-weight: 850; letter-spacing: .06em;
+  text-transform: uppercase; }
+.launchpad-workspace > header h2 { margin: 5px 0 3px; color: #253b31; font-size: 22px; }
+.launchpad-workspace > header p { max-width: 650px; margin: 0; color: #60736a; font-size: 13px; line-height: 1.5; }
+.launchpad-trust { align-self: flex-start; min-width: 110px; padding: 9px 12px; border: 1px solid #cfe0d8;
+  border-radius: 9px; background: #fff; text-align: right; }
+.launchpad-trust strong,
+.launchpad-trust small { display: block; }
+.launchpad-trust strong { color: #39755c; font-size: 13px; text-transform: capitalize; }
+.launchpad-trust small { margin-top: 2px; color: #718278; font-size: 11px; }
+.conversation-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 360px;
+  border-bottom: 1px solid #e3ebe7; }
+.thread-list { border-right: 1px solid #e3ebe7; background: #fafcfb; }
+.thread-list form { padding: 14px; border-bottom: 1px solid #e3ebe7; }
+.thread-list form label { display: block; margin-bottom: 6px; color: #40584d; font-size: 12px; font-weight: 800; }
+.thread-list form div { display: flex; }
+.thread-list input { min-width: 0; width: 100%; height: 36px; padding: 7px 9px; border: 1px solid #ccd9d3;
+  border-radius: 7px 0 0 7px; color: #2b4036; font-size: 13px; }
+.thread-list form button { width: 38px; border: 1px solid #39755c; border-radius: 0 7px 7px 0;
+  background: #39755c; color: #fff; }
+.thread-list > button { display: flex; width: 100%; align-items: flex-start; gap: 8px; padding: 11px 14px;
+  border: 0; border-bottom: 1px solid #edf1ef; background: transparent; color: #3e554a; text-align: left; }
+.thread-list > button.selected { background: #edf6f1; color: #2f6c53; }
+.thread-list > button span { min-width: 0; }
+.thread-list > button strong,
+.thread-list > button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-list > button strong { font-size: 12px; }
+.thread-list > button small { margin-top: 3px; color: #728178; font-size: 11px; text-transform: capitalize; }
+.conversation-panel { display: flex; min-width: 0; flex-direction: column; }
+.conversation-head { display: flex; min-height: 60px; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid #e5ebe8; }
+.conversation-head strong,
+.conversation-head small { display: block; }
+.conversation-head strong { color: #2c4237; font-size: 14px; }
+.conversation-head small { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: #6b7c73; font-size: 11px; }
+.conversation-head button { display: flex; align-items: center; gap: 5px; padding: 7px 9px; border: 1px solid #ccd9d3;
+  border-radius: 7px; background: #fff; color: #4e655a; font-size: 12px; font-weight: 750; }
+.message-list { display: flex; min-height: 298px; max-height: 480px; flex-direction: column; gap: 12px;
+  overflow: auto; padding: 18px; background: #fbfcfc; }
+.message-list article { max-width: min(82%, 650px); padding: 10px 13px; border: 1px solid #dce5e0;
+  border-radius: 10px 10px 10px 2px; background: #fff; }
+.message-list article.user { align-self: flex-end; border-color: #c8ded2; border-radius: 10px 10px 2px 10px;
+  background: #edf7f2; }
+.message-list article small { color: #587066; font-size: 11px; font-weight: 850; }
+.message-list article p { margin: 4px 0 0; color: #2d4137; font-size: 14px; line-height: 1.58; white-space: pre-wrap; }
+.conversation-empty,
+.launchpad-empty { display: grid; min-height: 180px; place-items: center; align-content: center; padding: 24px;
+  color: #547064; text-align: center; }
+.conversation-empty strong,
+.launchpad-empty strong { margin-top: 8px; color: #31483d; font-size: 14px; }
+.conversation-empty p,
+.launchpad-empty p { max-width: 420px; margin: 5px 0 0; color: #6a7c73; font-size: 13px; line-height: 1.5; }
+.instant-context { display: flex; align-items: flex-start; gap: 10px; margin: 20px 22px 0; padding: 13px;
+  border: 1px solid #d8e3de; border-radius: 9px; background: #f7faf9; color: #3e735c; }
+.instant-context strong,
+.instant-context small { display: block; }
+.instant-context strong { color: #304a3d; font-size: 13px; }
+.instant-context small { margin-top: 3px; color: #61756a; font-size: 12px; line-height: 1.45; }
+.launchpad-result { display: flex; align-items: flex-start; gap: 9px; margin: 18px 22px 0; padding: 14px;
+  border: 1px solid #cfe0d8; border-radius: 9px; background: #f2f8f5; color: #39755c; }
+.launchpad-result p { margin: 0; color: #2e463a; font-size: 14px; line-height: 1.58; white-space: pre-wrap; }
+.launchpad-composer { padding: 18px 22px 22px; }
+.launchpad-composer > label { display: block; margin-bottom: 6px; color: #354e42; font-size: 13px; font-weight: 800; }
+.launchpad-composer textarea { width: 100%; min-height: 96px; padding: 11px 12px; border: 1px solid #cbd8d2;
+  border-radius: 9px; color: #273b31; font: inherit; font-size: 14px; line-height: 1.55; resize: vertical; }
+.launchpad-composer footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 10px; }
+.launchpad-composer footer small { color: #687a71; font-size: 11px; line-height: 1.45; }
+.launchpad-composer footer button { display: flex; flex: none; align-items: center; gap: 6px; }
+@media (max-width: 980px) {
+  .launchpad-layout { grid-template-columns: 1fr; }
+  .launchpad-processes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .launchpad-processes .panel-head { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .launchpad-processes,
+  .conversation-layout { grid-template-columns: 1fr; }
+  .thread-list { max-height: 230px; overflow: auto; border-right: 0; border-bottom: 1px solid #e3ebe7; }
+  .launchpad-workspace > header,
+  .launchpad-composer footer { align-items: flex-start; flex-direction: column; }
+  .launchpad-trust { text-align: left; }
+  .message-list article { max-width: 94%; }
+}

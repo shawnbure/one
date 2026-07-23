@@ -113,6 +113,11 @@ const HelpCenterView = lazy(() =>
     default: HelpCenterView,
   })),
 );
+const ProcessLaunchpadView = lazy(() =>
+  import("./ProcessLaunchpadView").then(({ ProcessLaunchpadView }) => ({
+    default: ProcessLaunchpadView,
+  })),
+);
 
 function FeatureLoading({ label }: { label: string }) {
   return (
@@ -209,6 +214,7 @@ const previewProcesses: AgentBlueprint[] = [
 
 const nav = [
   ["Overview", CircleGauge],
+  ["Launchpad", Sparkles],
   ["Processes", Workflow],
   ["Opportunities", Lightbulb],
   ["Work inbox", Inbox],
@@ -258,22 +264,28 @@ export function App() {
     [processes, search],
   );
   const pending = approvals.find((item) => item.status === "pending");
+  const consumerView = session?.user.role === "consumer";
+  const visibleNav = consumerView
+    ? nav.filter(([label]) => label === "Overview" || label === "Launchpad")
+    : nav;
 
   async function refresh() {
     try {
-      const [sessionResult, processResult, overviewResult, approvalResult, valueResult] =
+      const sessionResult = await api.session();
+      const restrictedConsumer = sessionResult.user.role === "consumer";
+      const [processResult, overviewResult, approvalResult, valueResult] =
         await Promise.all([
-          api.session(),
           api.processes(),
-          api.overview(),
-          api.approvals(),
-          api.value(),
+          restrictedConsumer ? Promise.resolve(null) : api.overview(),
+          restrictedConsumer ? Promise.resolve({ data: [] as Approval[] }) : api.approvals(),
+          restrictedConsumer ? Promise.resolve({ data: null }) : api.value(),
         ]);
       setSession(sessionResult);
       setProcesses(processResult.data);
       setOverview(overviewResult);
       setApprovals(approvalResult.data);
       setValue(valueResult.data);
+      if (restrictedConsumer) setActive((current) => current === "Overview" ? "Launchpad" : current);
       setPreviewMode(false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401)
@@ -371,7 +383,7 @@ export function App() {
           <ChevronDown size={15} />
         </div>
         <nav>
-          {nav.map(([label, Icon]) => (
+          {visibleNav.map(([label, Icon]) => (
             <button
               key={label}
               className={active === label ? "active" : ""}
@@ -397,18 +409,20 @@ export function App() {
               <small>Cloudflare dedicated</small>
             </div>
           </div>
-          <button onClick={() => setActive("Governance")}>
-            <Settings2 size={17} />
-            Settings
-          </button>
-          <button onClick={() => setActive("Customer setup")}>
-            <Settings2 size={17} />
-            Customer setup
-          </button>
-          <button onClick={() => setActive("Team & roles")}>
-            <Users size={17} />
-            Team & roles
-          </button>
+          {!consumerView && <>
+            <button onClick={() => setActive("Governance")}>
+              <Settings2 size={17} />
+              Settings
+            </button>
+            <button onClick={() => setActive("Customer setup")}>
+              <Settings2 size={17} />
+              Customer setup
+            </button>
+            <button onClick={() => setActive("Team & roles")}>
+              <Users size={17} />
+              Team & roles
+            </button>
+          </>}
           <button onClick={() => setActive("Help Center")}>
             <BookOpen size={17} />
             Help Center
@@ -426,13 +440,13 @@ export function App() {
               <Search size={17} />
               Search <kbd>⌘ K</kbd>
             </button>
-            <button
+            {!consumerView && <button
               className="icon-button"
               onClick={() => setActive("Work inbox")}
             >
               <Inbox size={17} />
               {(overview?.pendingApprovals ?? 0) > 0 && <i />}
-            </button>
+            </button>}
             <div className="user">
               {session?.user.name
                 .split(/\s+/)
@@ -461,7 +475,9 @@ export function App() {
           )}
           <FeatureBoundary key={active}>
             <Suspense fallback={<FeatureLoading label={active} />}>
-          {active === "Usage & budgets" ? (
+          {active === "Launchpad" ? (
+            <ProcessLaunchpadView processes={processes} session={session} onNotice={setNotice} />
+          ) : active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
           ) : active === "Notifications" ? (
             <NotificationsView session={session} onNotice={setNotice} />
