@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "../src/notification-response";
+
+type Write = { sql: string; bindings: unknown[] };
+
+function environment(options?: { event?: Record<string, unknown> | null; due?: Array<Record<string, unknown>>;
+  claimChanges?: number }) {
+  const writes: Write[] = [];
+  const DB = {
+    prepare(sql: string) {
+      let bindings: unknown[] = [];
+      const statement = {
+        bind(...values: unknown[]) { bindings = values; return statement; },
+        async first() { return options?.event === undefined
+          ? { id: "event-1", acknowledged_at: null, channel: "in_app", acknowledgement_required: 1 }
+          : options.event; },
+        async all() { return { results: options?.due ?? [] }; },
+        async run() {
+          writes.push({ sql, bindings });
+          const changes = sql.includes("SET escalated_at") ? (options?.claimChanges ?? 1) : 1;
+          return { meta: { changes } };
+        }
+      };
+      return statement;
+    },
+    async batch(statements: Array<{ run(): Promise<unknown> }>) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    }
+  };
+  return { env: { DB } as never, writes };
+}
+
+describe("notification human response", () => {
+  it("acknowledges only in-app response tasks with attributable evidence", async () => {
+    const { env, writes } = environment();
+    const result = await acknowledgeNotification(env, "tenant-1", "operator-1", "event-1", "Recovery owner engaged.");
+    expect(result).toMatchObject({ acknowledged: true, duplicate: false });
+    expect(writes.some(({ sql, bindings }) => sql.includes("acknowledged_at") &&
+      bindings.includes("operator-1") && bindings.includes("Recovery owner engaged."))).toBe(true);
+    expect(JSON.stringify(writes)).toContain("notification.acknowledged");
+
+    const external = environment({ event: {
+      id: "event-2", acknowledged_at: null, channel: "webhook", acknowledgement_required: 0
+    } });
+    await expect(acknowledgeNotification(external.env, "tenant-1", "operator-1", "event-2"))
+      .rejects.toThrow("not an acknowledgement task");
+    expect(external.writes).toHaveLength(0);
+  });
+
+  it("claims overdue alerts once before emitting escalation evidence", async () => {
+    const due = [{
+      id: "event-1", tenant_id: "tenant-1", event_type: "execution.failed", title: "Execution failed",
+      detail: "Failure", target_type: "execution", target_id: "run-1", owner_id: "owner-1",
+      escalation_minutes: 60
+    }];
+    const claimed = environment({ due });
+    await expect(escalateUnacknowledgedNotifications(claimed.env, new Date("2026-07-23T12:00:00Z")))
+      .resolves.toEqual({ escalated: 1 });
+    expect(claimed.writes.some(({ sql }) => sql.includes("INSERT INTO notification_events"))).toBe(true);
+    expect(JSON.stringify(claimed.writes)).toContain("notification.escalated");
+
+    const duplicate = environment({ due, claimChanges: 0 });
+    await expect(escalateUnacknowledgedNotifications(duplicate.env, new Date("2026-07-23T12:00:00Z")))
+      .resolves.toEqual({ escalated: 0 });
+    expect(duplicate.writes.filter(({ sql }) => sql.includes("INSERT INTO notification_events"))).toHaveLength(0);
+  });
+});

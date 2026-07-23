@@ -33,6 +33,7 @@ import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSucc
 import { convertOpportunity, createOpportunity, getOpportunityReadiness, listOpportunities, listOpportunityRevisions,
   OpportunityRevisionConflict, qualifyOpportunity, updateOpportunity, updateOpportunityReadiness } from "./opportunities";
 import { getOpportunityImplementationBrief, renderOpportunityBriefHtml } from "./opportunity-brief";
+import { acknowledgeNotification, escalateUnacknowledgedNotifications } from "./notification-response";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -141,15 +142,23 @@ app.post("/api/oauth/microsoft/disconnect", requireRoles("admin", "owner"), asyn
 app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {
   const [policies, events, credentials, microsoftEmail] = await Promise.all([
     c.env.DB.prepare(`SELECT p.*, r.name credential_name, r.secret_binding,
+      m.email owner_email, m.display_name owner_name,
       CASE WHEN p.channel = 'email' THEN EXISTS (
         SELECT 1 FROM oauth_connections o WHERE o.tenant_id=p.tenant_id AND o.provider='microsoft'
         AND o.status='connected' AND LOWER(o.scopes_json) LIKE '%mail.send%'
       ) WHEN r.secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END credential_configured
       FROM notification_policies p LEFT JOIN integration_credential_refs r
       ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
+      LEFT JOIN tenant_members m ON m.id=p.owner_id AND m.tenant_id=p.tenant_id
       WHERE p.tenant_id = ? ORDER BY p.event_type, p.channel`)
       .bind(c.env.NOTIFICATION_WEBHOOK_SECRET ? 1 : 0, c.get("tenantId")).all(),
-    c.env.DB.prepare("SELECT * FROM notification_events WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 100").bind(c.get("tenantId")).all(),
+    c.env.DB.prepare(`SELECT e.*, p.channel, p.acknowledgement_required, p.escalation_minutes,
+      m.display_name owner_name, a.display_name acknowledged_by_name
+      FROM notification_events e
+      LEFT JOIN notification_policies p ON p.id=e.policy_id AND p.tenant_id=e.tenant_id
+      LEFT JOIN tenant_members m ON m.id=p.owner_id AND m.tenant_id=p.tenant_id
+      LEFT JOIN tenant_members a ON a.id=e.acknowledged_by AND a.tenant_id=e.tenant_id
+      WHERE e.tenant_id=? ORDER BY e.created_at DESC LIMIT 100`).bind(c.get("tenantId")).all(),
     c.env.DB.prepare(`SELECT id, name, provider, secret_binding, purpose, status, last_validated_at,
       CASE WHEN secret_binding = 'NOTIFICATION_WEBHOOK_SECRET' THEN ? ELSE 0 END configured
       FROM integration_credential_refs WHERE tenant_id = ? ORDER BY name`)
@@ -164,11 +173,14 @@ app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer
 app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), async (c) => {
   const policyId = c.req.param("id");
   if (!policyId) return c.json({ error: "Notification policy ID is required" }, 400);
-  const body = await c.req.json<{ enabled?: boolean; destination?: string | null }>();
-  const policy = await c.env.DB.prepare(`SELECT p.channel, p.destination, r.secret_binding
+  const body = await c.req.json<{ enabled?: boolean; destination?: string | null; ownerId?: string | null;
+    acknowledgementRequired?: boolean; escalationMinutes?: number }>();
+  const policy = await c.env.DB.prepare(`SELECT p.channel, p.destination, p.owner_id,
+    p.acknowledgement_required, p.escalation_minutes, r.secret_binding
     FROM notification_policies p LEFT JOIN integration_credential_refs r ON r.id = p.credential_ref_id AND r.tenant_id = p.tenant_id
     WHERE p.id = ? AND p.tenant_id = ?`).bind(policyId, c.get("tenantId"))
-    .first<{ channel: string; destination: string | null; secret_binding: string | null }>();
+    .first<{ channel: string; destination: string | null; owner_id: string | null;
+      acknowledgement_required: number; escalation_minutes: number; secret_binding: string | null }>();
   if (!policy) return c.json({ error: "Notification policy not found" }, 404);
   const destination = body.destination === undefined ? policy.destination : body.destination?.trim() || null;
   if (policy.channel === "webhook" && destination) {
@@ -194,15 +206,57 @@ app.patch("/api/notifications/policies/:id", requireRoles("admin", "owner"), asy
       error: "Reconnect Microsoft 365 with Send notifications (Mail.Send) permission before enabling email delivery",
     }, 409);
   }
+  let ownerId = body.ownerId === undefined ? policy.owner_id : body.ownerId || null;
+  const acknowledgementRequired = body.acknowledgementRequired === undefined
+    ? Boolean(policy.acknowledgement_required) : body.acknowledgementRequired;
+  const escalationMinutes = body.escalationMinutes === undefined
+    ? Number(policy.escalation_minutes) : Number(body.escalationMinutes);
+  if (!Number.isInteger(escalationMinutes) || escalationMinutes < 0 || escalationMinutes > 10080) {
+    return c.json({ error: "Escalation timing must be 0–10,080 minutes" }, 400);
+  }
+  if (policy.channel !== "in_app" && (body.ownerId !== undefined || body.acknowledgementRequired !== undefined ||
+      body.escalationMinutes !== undefined)) {
+    return c.json({ error: "Human response controls apply only to in-app notification tasks" }, 400);
+  }
+  if (ownerId) {
+    const owner = await c.env.DB.prepare(`SELECT id FROM tenant_members WHERE id=? AND tenant_id=?
+      AND status='active' AND role IN ('admin','owner','operator')`).bind(ownerId, c.get("tenantId")).first();
+    if (!owner) return c.json({ error: "Notification owner must be an active administrator, owner, or operator" }, 400);
+  }
+  if (policy.channel === "in_app" && acknowledgementRequired && (!ownerId || escalationMinutes < 1)) {
+    return c.json({ error: "Acknowledged in-app alerts require an owner and escalation timing" }, 400);
+  }
   const result = await c.env.DB.prepare(`UPDATE notification_policies SET enabled = COALESCE(?, enabled),
     destination = CASE WHEN ? = 1 THEN ? ELSE destination END,
+    owner_id = CASE WHEN ? = 1 THEN ? ELSE owner_id END,
+    acknowledgement_required = CASE WHEN ? = 1 THEN ? ELSE acknowledgement_required END,
+    escalation_minutes = CASE WHEN ? = 1 THEN ? ELSE escalation_minutes END,
     updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
     .bind(typeof body.enabled === "boolean" ? Number(body.enabled) : null, Number(body.destination !== undefined),
-      destination, policyId, c.get("tenantId")).run();
+      destination, Number(body.ownerId !== undefined), ownerId,
+      Number(body.acknowledgementRequired !== undefined), Number(acknowledgementRequired),
+      Number(body.escalationMinutes !== undefined), escalationMinutes,
+      policyId, c.get("tenantId")).run();
   if (result.meta.changes) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "notification_policy.updated",
-    "notification_policy", policyId, { enabled: body.enabled, destinationConfigured: Boolean(destination) });
+    "notification_policy", policyId, { enabled: body.enabled, destinationConfigured: Boolean(destination),
+      ownerId, acknowledgementRequired, escalationMinutes });
   return c.json({ updated: result.meta.changes === 1 });
 });
+
+app.post("/api/notifications/events/:id/acknowledge",
+  requireRoles("admin", "owner", "operator"), async (c) => {
+    const eventId = c.req.param("id");
+    if (!eventId) return c.json({ error: "Notification event ID is required" }, 400);
+    const body: { note?: string } = await c.req.json<{ note?: string }>().catch(() => ({}));
+    try {
+      return c.json({ data: await acknowledgeNotification(
+        c.env, c.get("tenantId"), c.get("actorId"), eventId, body.note
+      ) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Notification could not be acknowledged";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
 
 app.post("/api/notifications/policies/:id/test", requireRoles("admin", "owner"), async (c) => {
   const policyId = c.req.param("id");
@@ -1442,7 +1496,8 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       dispatchDueSchedules(env, now),
       enqueueRecoverableToolActions(env),
       expireKnowledgeSources(env, now),
-      emitConnectionExpiryAlerts(env, now)
+      emitConnectionExpiryAlerts(env, now),
+      escalateUnacknowledgedNotifications(env, now)
     ]));
   }
 };

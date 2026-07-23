@@ -82,6 +82,16 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("UPDATE notification_policies"))).toBe(false);
   });
 
+  it("prevents viewers from acknowledging operational alerts", async () => {
+    const viewer = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/notifications/events/event-1/acknowledge", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" }, body: JSON.stringify({ note: "Unauthorized" })
+    }), viewer.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("acknowledged_at"))).toBe(false);
+  });
+
   it("keeps approval evidence out of consumer sessions and collaboration mutations away from viewers", async () => {
     const consumer = environment("consumer");
     const listResponse = await app.fetch(new Request("http://localhost/api/approvals", {

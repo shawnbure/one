@@ -348,7 +348,7 @@ export function App() {
           {active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
           ) : active === "Notifications" ? (
-            <NotificationsView onNotice={setNotice} />
+            <NotificationsView session={session} onNotice={setNotice} />
           ) : active === "Customer setup" ? (
             <CustomerSetupView session={session} onNotice={setNotice} />
           ) : active === "Team & roles" ? (
