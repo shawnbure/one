@@ -6,6 +6,7 @@ import { applyDlp, DlpBlockedError, loadDlpRules, scanSensitiveText, type DlpRul
 
 type RubricDimension = "groundedness" | "completeness" | "safety" | "clarity" | "format";
 type AssertionMetadata = { dimension?: RubricDimension; weight?: number };
+export type RubricCriterion = { criterion: string; dimension: RubricDimension; weight: number };
 type Assertion = (
   | { type: "contains_all" | "contains_any" | "not_contains_any"; value: string[] }
   | { type: "max_chars"; value: number }
@@ -63,6 +64,17 @@ export interface EvaluationCaseResult {
   evidence: Array<{ assertion: Assertion["type"]; dimension: RubricDimension; weight: number; passed: boolean; score: number; detail: string }>;
   error: string | null;
   weight: number;
+}
+
+export interface RubricTemplate {
+  id: string;
+  name: string;
+  description: string;
+  criteria_json: string;
+  enabled: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export async function prepareEvaluationRun(env: Env, tenantId: string, scenarioId: string, requestedReleaseId?: string,
@@ -341,7 +353,7 @@ export async function runEvaluation(env: Env, tenantId: string, actorId: string,
 }
 
 export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId: string) {
-  const [scenario, cases, runs] = await Promise.all([
+  const [scenario, cases, runs, rubricTemplates] = await Promise.all([
     env.DB.prepare(`SELECT e.*, b.name process_name, b.active_release_id FROM evaluation_scenarios e
       JOIN agent_blueprints b ON b.id = e.blueprint_id AND b.tenant_id = e.tenant_id
       WHERE e.id = ? AND e.tenant_id = ?`).bind(scenarioId, tenantId).first(),
@@ -350,7 +362,8 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
     env.DB.prepare(`SELECT r.id, r.release_id, r.model_profile, r.status, r.score, r.passed_assertions, r.assertion_count, r.case_count,
       r.input_tokens, r.output_tokens, r.total_tokens, r.estimated_cost_usd, r.triggered_by, r.created_at,
       r.evidence_json, pr.version release_version FROM evaluation_runs r LEFT JOIN process_releases pr ON pr.id = r.release_id
-      WHERE r.tenant_id = ? AND r.scenario_id = ? ORDER BY r.created_at DESC LIMIT 12`).bind(tenantId, scenarioId).all()
+      WHERE r.tenant_id = ? AND r.scenario_id = ? ORDER BY r.created_at DESC LIMIT 12`).bind(tenantId, scenarioId).all(),
+    listRubricTemplates(env, tenantId)
   ]);
   if (!scenario) return null;
   const runIds = runs.results.map((row) => String((row as Record<string, unknown>).id));
@@ -373,15 +386,23 @@ export async function getEvaluationDetail(env: Env, tenantId: string, scenarioId
   ]);
   return { scenario, cases: cases.results, runs: runs.results, caseResults: results.results,
     suites: suites.results, humanReviews: reviews.results, modelTrials: modelTrials.results,
+    rubricTemplates,
     modelProfiles: Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile })) };
 }
 
 export async function createEvaluationCase(env: Env, tenantId: string, scenarioId: string, input: {
   name?: string; input?: string; expectedPhrases?: string[]; prohibitedPhrases?: string[]; format?: "text" | "json";
   maxChars?: number; dimension?: RubricDimension; assertionWeight?: number; caseWeight?: number; rubricCriterion?: string;
+  rubricTemplateId?: string;
 }, source = "curated") {
-  const scenario = await env.DB.prepare("SELECT id FROM evaluation_scenarios WHERE id = ? AND tenant_id = ?")
-    .bind(scenarioId, tenantId).first();
+  const scenario = await env.DB.prepare(`SELECT e.id, e.assertion_count,
+      (SELECT COUNT(*) FROM evaluation_cases c WHERE c.tenant_id = e.tenant_id AND c.scenario_id = e.id) case_count,
+      (SELECT COUNT(*) FROM evaluation_cases c WHERE c.tenant_id = e.tenant_id AND c.scenario_id = e.id
+        AND c.assertions_json LIKE '%"model_rubric"%') model_graded_count
+    FROM evaluation_scenarios e WHERE e.id = ? AND e.tenant_id = ?`)
+    .bind(scenarioId, tenantId).first<{
+      id: string; assertion_count: number; case_count: number; model_graded_count: number;
+    }>();
   if (!scenario) throw new Error("Evaluation scenario not found");
   if (!input.name?.trim() || !input.input?.trim()) throw new Error("Case name and anonymized input are required");
   const assertions: Assertion[] = [];
@@ -398,28 +419,89 @@ export async function createEvaluationCase(env: Env, tenantId: string, scenarioI
   }
   const rubricCriterion = input.rubricCriterion?.trim().slice(0, 500);
   if (rubricCriterion) assertions.push({ type: "model_rubric", value: rubricCriterion, ...metadata });
+  if (input.rubricTemplateId?.trim()) {
+    const template = await env.DB.prepare(`SELECT criteria_json FROM evaluation_rubric_templates
+      WHERE id = ? AND tenant_id = ? AND enabled = 1`).bind(input.rubricTemplateId.trim(), tenantId)
+      .first<{ criteria_json: string }>();
+    if (!template) throw new Error("Rubric template not found or inactive");
+    for (const criterion of parseRubricCriteria(template.criteria_json)) {
+      assertions.push({ type: "model_rubric", value: criterion.criterion,
+        dimension: criterion.dimension, weight: criterion.weight });
+    }
+  }
+  const modelRubricCount = assertions.filter((assertion) => assertion.type === "model_rubric").length;
+  if (modelRubricCount > 3) throw new Error("A case may contain at most three model-graded criteria");
   if (!assertions.length) throw new Error("At least one deterministic assertion or model rubric criterion is required");
-  const count = await env.DB.prepare("SELECT COUNT(*) count FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ?")
-    .bind(tenantId, scenarioId).first<{ count: number }>();
-  if (Number(count?.count) >= 100) throw new Error("Evaluation scenarios support up to 100 curated cases per durable suite");
-  if (rubricCriterion) {
-    const judged = await env.DB.prepare(`SELECT COUNT(*) count FROM evaluation_cases
-      WHERE tenant_id = ? AND scenario_id = ? AND assertions_json LIKE '%"model_rubric"%'`)
-      .bind(tenantId, scenarioId).first<{ count: number }>();
-    if (Number(judged?.count) >= 25) throw new Error("Evaluation scenarios support model grading on at most 25 cases");
+  if (Number(scenario.case_count) >= 100) throw new Error("Evaluation scenarios support up to 100 curated cases per durable suite");
+  if (modelRubricCount && Number(scenario.model_graded_count) >= 25) {
+    throw new Error("Evaluation scenarios support model grading on at most 25 cases");
   }
   const id = crypto.randomUUID();
   const redacted = scanSensitiveText(input.input.trim().slice(0, 20_000));
-  await env.DB.prepare(`INSERT INTO evaluation_cases
-    (id, tenant_id, scenario_id, name, input_text, assertions_json, weight, source, redaction_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, tenantId, scenarioId, input.name.trim(), redacted.text, JSON.stringify(assertions),
-      boundedWeight(input.caseWeight), source, JSON.stringify({ count: redacted.count, types: redacted.types })).run();
-  const rows = await env.DB.prepare("SELECT assertions_json FROM evaluation_cases WHERE tenant_id = ? AND scenario_id = ? AND enabled = 1")
-    .bind(tenantId, scenarioId).all<{ assertions_json: string }>();
-  const assertionCount = 5 + rows.results.reduce((sum, row) => sum + parseAssertions(row.assertions_json).length, 0);
-  await env.DB.prepare("UPDATE evaluation_scenarios SET assertion_count = ?, status = 'not_run' WHERE id = ? AND tenant_id = ?")
-    .bind(assertionCount, scenarioId, tenantId).run();
+  const assertionCount = Number(scenario.assertion_count) + assertions.length;
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO evaluation_cases
+      (id, tenant_id, scenario_id, name, input_text, assertions_json, weight, source, redaction_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, tenantId, scenarioId, input.name.trim(), redacted.text, JSON.stringify(assertions),
+        boundedWeight(input.caseWeight), source, JSON.stringify({ count: redacted.count, types: redacted.types })),
+    env.DB.prepare("UPDATE evaluation_scenarios SET assertion_count = ?, status = 'not_run' WHERE id = ? AND tenant_id = ?")
+      .bind(assertionCount, scenarioId, tenantId)
+  ]);
   return { id, assertionCount, assertions, redaction: { count: redacted.count, types: redacted.types } };
+}
+
+export async function listRubricTemplates(env: Env, tenantId: string, enabledOnly = false) {
+  const { results } = await env.DB.prepare(`SELECT id, name, description, criteria_json, enabled, created_by, created_at, updated_at
+    FROM evaluation_rubric_templates WHERE tenant_id = ? ${enabledOnly ? "AND enabled = 1" : ""}
+    ORDER BY enabled DESC, name`).bind(tenantId).all<RubricTemplate>();
+  return results;
+}
+
+export async function createRubricTemplate(env: Env, tenantId: string, actorId: string, input: {
+  name?: unknown; description?: unknown; criteria?: unknown;
+}) {
+  const name = cleanTemplateName(input.name);
+  const description = typeof input.description === "string" ? input.description.trim().slice(0, 500) : "";
+  const criteria = normalizeRubricCriteria(input.criteria);
+  assertRubricTemplateSafe(name, description, criteria);
+  const count = await env.DB.prepare("SELECT COUNT(*) count FROM evaluation_rubric_templates WHERE tenant_id = ?")
+    .bind(tenantId).first<{ count: number }>();
+  if (Number(count?.count) >= 20) throw new Error("Organizations support up to 20 rubric templates");
+  const id = crypto.randomUUID();
+  try {
+    await env.DB.prepare(`INSERT INTO evaluation_rubric_templates
+      (id, tenant_id, name, description, criteria_json, created_by) VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(id, tenantId, name, description, JSON.stringify(criteria), actorId).run();
+  } catch (error) {
+    if (String(error).toLocaleLowerCase().includes("unique")) throw new Error("A rubric template with this name already exists");
+    throw error;
+  }
+  return { id, name, description, criteria, enabled: 1 };
+}
+
+export async function updateRubricTemplate(env: Env, tenantId: string, templateId: string, input: {
+  name?: unknown; description?: unknown; criteria?: unknown; enabled?: unknown;
+}) {
+  const current = await env.DB.prepare(`SELECT id, name, description, criteria_json, enabled
+    FROM evaluation_rubric_templates WHERE id = ? AND tenant_id = ?`).bind(templateId, tenantId)
+    .first<{ id: string; name: string; description: string; criteria_json: string; enabled: number }>();
+  if (!current) throw new Error("Rubric template not found");
+  const name = input.name === undefined ? current.name : cleanTemplateName(input.name);
+  const description = input.description === undefined ? current.description :
+    (typeof input.description === "string" ? input.description.trim().slice(0, 500) : "");
+  const criteria = input.criteria === undefined ? parseRubricCriteria(current.criteria_json) : normalizeRubricCriteria(input.criteria);
+  const enabled = input.enabled === undefined ? Number(current.enabled) : input.enabled === true || input.enabled === 1 ? 1 : 0;
+  assertRubricTemplateSafe(name, description, criteria);
+  try {
+    await env.DB.prepare(`UPDATE evaluation_rubric_templates SET name = ?, description = ?, criteria_json = ?,
+      enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`)
+      .bind(name, description, JSON.stringify(criteria), enabled, templateId, tenantId).run();
+  } catch (error) {
+    if (String(error).toLocaleLowerCase().includes("unique")) throw new Error("A rubric template with this name already exists");
+    throw error;
+  }
+  return { id: templateId, name, description, criteria, enabled };
 }
 
 export async function exportEvaluationDataset(env: Env, tenantId: string, scenarioId: string) {
@@ -717,6 +799,35 @@ function boundedWeight(value: unknown) {
 function cleanPhrases(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string")
     .map((item) => item.trim()).filter(Boolean).slice(0, 20).map((item) => item.slice(0, 200)) : [];
+}
+
+function cleanTemplateName(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) throw new Error("Rubric template name is required");
+  return value.trim().slice(0, 120);
+}
+
+function normalizeRubricCriteria(value: unknown): RubricCriterion[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 3) {
+    throw new Error("Rubric templates require one to three criteria");
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== "object") throw new Error("Every rubric criterion must be an object");
+    const row = item as { criterion?: unknown; dimension?: unknown; weight?: unknown };
+    const criterion = typeof row.criterion === "string" ? row.criterion.trim().slice(0, 500) : "";
+    if (!criterion) throw new Error("Every rubric criterion requires evaluation guidance");
+    if (!validDimension(row.dimension)) throw new Error("Every rubric criterion requires a valid quality dimension");
+    return { criterion, dimension: row.dimension, weight: boundedWeight(row.weight) };
+  });
+}
+
+function parseRubricCriteria(value: string): RubricCriterion[] {
+  try { return normalizeRubricCriteria(JSON.parse(value)); }
+  catch { return []; }
+}
+
+function assertRubricTemplateSafe(name: string, description: string, criteria: RubricCriterion[]) {
+  const sensitive = scanSensitiveText([name, description, ...criteria.map((item) => item.criterion)].join("\n"));
+  if (sensitive.count) throw new Error("Rubric templates cannot contain sensitive values");
 }
 
 function parseList(value: string): string[] {

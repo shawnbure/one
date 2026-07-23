@@ -23,7 +23,11 @@ const goldenCase = {
   weight: 1
 };
 
-function evaluationEnvironment(options: { release?: typeof release | null; cases?: typeof goldenCase[] } = {}) {
+function evaluationEnvironment(options: {
+  release?: typeof release | null;
+  cases?: typeof goldenCase[];
+  rubricTemplate?: Array<{ criterion: string; dimension: string; weight: number }> | null;
+} = {}) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const selectedRelease = options.release === undefined ? release : options.release;
   const selectedCases = options.cases ?? [goldenCase];
@@ -33,9 +37,15 @@ function evaluationEnvironment(options: { release?: typeof release | null; cases
       const statement = {
         bind(...next: unknown[]) { values = next; return statement; },
         async first() {
-          if (sql.includes("FROM evaluation_scenarios")) return scenario;
+          if (sql.includes("FROM evaluation_scenarios")) return {
+            ...scenario, case_count: selectedCases.length,
+            model_graded_count: selectedCases.filter((item) => item.assertions_json.includes('"model_rubric"')).length
+          };
           if (sql.includes("FROM process_releases")) return selectedRelease;
           if (sql.includes("FROM model_catalog")) return { input_usd_per_million: 0.03, output_usd_per_million: 0.05 };
+          if (sql.includes("FROM evaluation_rubric_templates")) return options.rubricTemplate === null ? null : {
+            criteria_json: JSON.stringify(options.rubricTemplate ?? [])
+          };
           return null;
         },
         async all() {
@@ -125,6 +135,25 @@ describe("release-specific evaluation evidence", () => {
       expect.objectContaining({ type: "max_chars", dimension: "clarity", weight: 2.5 })
     ]));
     expect(writes.some(({ sql, values }) => sql.includes("INSERT INTO evaluation_cases") && values.includes(3))).toBe(true);
+  });
+
+  it("copies a tenant rubric template into the case so evaluation runs need no template lookup", async () => {
+    const { env, writes } = evaluationEnvironment({ cases: [], rubricTemplate: [
+      { criterion: "Identifies the operational risk", dimension: "groundedness", weight: 1 },
+      { criterion: "Provides a practical next action", dimension: "completeness", weight: 2 }
+    ] });
+    const result = await createEvaluationCase(env, "tenant-1", "scenario-1", {
+      name: "Reusable operations rubric",
+      input: "Assess this incomplete request",
+      rubricTemplateId: "template-1"
+    });
+    expect(result.assertions).toEqual([
+      { type: "model_rubric", value: "Identifies the operational risk", dimension: "groundedness", weight: 1 },
+      { type: "model_rubric", value: "Provides a practical next action", dimension: "completeness", weight: 2 }
+    ]);
+    const insert = writes.find(({ sql }) => sql.includes("INSERT INTO evaluation_cases"));
+    expect(insert?.values.some((value) => typeof value === "string" &&
+      value.includes("Identifies the operational risk") && value.includes("Provides a practical next action"))).toBe(true);
   });
 
   it("uses one bounded Cloudflare judge call and records compact model-rubric evidence", async () => {

@@ -142,4 +142,27 @@ describe("control-plane security boundary", () => {
     expect(response.status).toBe(403);
     expect(queries.some((sql) => sql.includes("INSERT OR IGNORE INTO evaluation_cases"))).toBe(false);
   });
+
+  it("allows viewers to read but not change organization rubric templates", async () => {
+    for (const request of [
+      new Request("http://localhost/api/evaluation-rubrics", {
+        method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ name: "Unauthorized", criteria: [
+          { criterion: "Be useful", dimension: "completeness", weight: 1 }
+        ] })
+      }),
+      new Request("http://localhost/api/evaluation-rubrics/rubric-1", {
+        method: "PATCH", headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ enabled: false })
+      })
+    ]) {
+      const { env, queries } = environment("viewer");
+      const response = await app.fetch(request, env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(queries.some((sql) => sql.includes("INSERT INTO evaluation_rubric_templates") ||
+        sql.includes("UPDATE evaluation_rubric_templates"))).toBe(false);
+    }
+  });
 });

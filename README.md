@@ -20,6 +20,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Parallel, independently retriable Workflow evaluation steps for up to 100 curated cases, with customer-weighted groundedness, completeness, safety, clarity, and format evidence.
 - Portable `workrr-evaluation/v1` packages for audited, tenant-scoped rubric and anonymized dataset export/import, with idempotent merge and DLP enforcement before persistence.
 - Optional Cloudflare Workers AI rubric judging with one compact secondary call per eligible case, a 25-case ceiling, DLP on judge traffic, scored evidence without hidden reasoning, and full token/cost accounting.
+- Tenant-scoped organization rubric templates with seeded operational, safety, and handoff standards; applying a template copies its bounded criteria into the case so durable runs avoid repeated configuration reads.
 - Isolated baseline-versus-candidate Cloudflare model trials with quality/cost recommendations and automatic masking of common sensitive patterns before case persistence.
 - Tenant-wide and per-process incident containment with drain/emergency-stop admission gates, deferred paused work, evidence timelines, guarded recovery, and critical notifications.
 - Cloudflare Access JWT verification, server-derived tenant membership, role-based authorization, and same-origin browser mutations.

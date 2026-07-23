@@ -256,10 +256,15 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
   const [candidateProfile, setCandidateProfile] = useState("fast");
   const [trialRunning, setTrialRunning] = useState(false);
   const [datasetBusy, setDatasetBusy] = useState<"export" | "import" | null>(null);
+  const [templateBusy, setTemplateBusy] = useState<string | null>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: "", description: "",
+    criteria: [{ criterion: "", dimension: "completeness" as "groundedness" | "completeness" | "safety" | "clarity" | "format", weight: 1 }]
+  });
   const [caseForm, setCaseForm] = useState({ name: "", input: "", expected: "", prohibited: "",
     format: "text" as "text" | "json", maxChars: 2000,
     dimension: "groundedness" as "groundedness" | "completeness" | "safety" | "clarity" | "format",
-    assertionWeight: 1, caseWeight: 1, rubricCriterion: "" });
+    assertionWeight: 1, caseWeight: 1, rubricCriterion: "", rubricTemplateId: "" });
   const passing = data.evaluations.filter(
     (item) => item.status === "passing",
   ).length;
@@ -295,10 +300,10 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
         expectedPhrases: phrases(caseForm.expected), prohibitedPhrases: phrases(caseForm.prohibited),
         format: caseForm.format, maxChars: caseForm.maxChars, dimension: caseForm.dimension,
         assertionWeight: caseForm.assertionWeight, caseWeight: caseForm.caseWeight,
-        rubricCriterion: caseForm.rubricCriterion
+        rubricCriterion: caseForm.rubricCriterion, rubricTemplateId: caseForm.rubricTemplateId
       });
       setCaseForm({ name: "", input: "", expected: "", prohibited: "", format: "text", maxChars: 2000,
-        dimension: "groundedness", assertionWeight: 1, caseWeight: 1, rubricCriterion: "" });
+        dimension: "groundedness", assertionWeight: 1, caseWeight: 1, rubricCriterion: "", rubricTemplateId: "" });
       await inspect(selected);
       await onReload();
       onNotice("Golden case added; the scenario must be rerun before release promotion.");
@@ -360,6 +365,32 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
       onNotice(`Exported ${result.data.scenario.cases.length} anonymized evaluation cases.`);
     } catch (error) { onNotice(error instanceof Error ? error.message : "Evaluation package could not be exported"); }
     finally { setDatasetBusy(null); }
+  }
+  async function createTemplate() {
+    if (!selected) return;
+    setTemplateBusy("create");
+    try {
+      await api.createRubricTemplate({
+        name: templateForm.name,
+        description: templateForm.description,
+        criteria: templateForm.criteria
+      });
+      setTemplateForm({ name: "", description: "",
+        criteria: [{ criterion: "", dimension: "completeness", weight: 1 }] });
+      await inspect(selected);
+      onNotice("Organization rubric template created and ready for new evaluation cases.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Rubric template could not be created"); }
+    finally { setTemplateBusy(null); }
+  }
+  async function toggleTemplate(id: string, enabled: boolean) {
+    if (!selected) return;
+    setTemplateBusy(id);
+    try {
+      await api.updateRubricTemplate(id, { enabled });
+      await inspect(selected);
+      onNotice(enabled ? "Rubric template restored." : "Rubric template archived; existing cases are unchanged.");
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Rubric template could not be updated"); }
+    finally { setTemplateBusy(null); }
   }
   async function importDataset(file: File | undefined) {
     if (!selected || !file) return;
@@ -449,6 +480,27 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <strong>{(item.score * 100).toFixed(0)}%</strong><span>{item.weight.toFixed(1)} weight</span></article>)
               : <p className="empty-copy">Run the suite to populate dimension-level evidence.</p>}
           </div>
+          <div className="rubric-library">
+            <div className="section-head"><div><h3>Organization rubric templates</h3><p>Reusable standards are copied into each case, keeping durable runs independent from later template edits.</p></div><span>{detail.rubricTemplates.length}/20 templates</span></div>
+            <div className="rubric-template-grid">
+              <div className="rubric-template-list">
+                {detail.rubricTemplates.map((template) => {
+                  const criteria = rubricCriteria(template.criteria_json);
+                  return <article key={template.id}><span><strong>{template.name}</strong><small>{template.description || "No description"}</small></span><span className="rubric-template-criteria">{criteria.map((criterion, index) => <small key={`${template.id}-${index}`}>{criterion.dimension} · {criterion.weight.toFixed(1)} — {criterion.criterion}</small>)}</span><button disabled={templateBusy === template.id} onClick={() => void toggleTemplate(template.id, !Boolean(template.enabled))}>{template.enabled ? "Archive" : "Restore"}</button></article>;
+                })}
+              </div>
+              <div className="rubric-template-builder">
+                <strong>Create reusable template</strong>
+                <label>Name<input maxLength={120} value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })}/></label>
+                <label>Description<textarea maxLength={500} value={templateForm.description} onChange={(event) => setTemplateForm({ ...templateForm, description: event.target.value })}/></label>
+                {templateForm.criteria.map((criterion, index) => <div className="rubric-criterion-row" key={index}>
+                  <label>Criterion {index + 1}<textarea maxLength={500} value={criterion.criterion} onChange={(event) => setTemplateForm({ ...templateForm, criteria: templateForm.criteria.map((item, itemIndex) => itemIndex === index ? { ...item, criterion: event.target.value } : item) })}/></label>
+                  <div className="case-fields"><label>Dimension<select value={criterion.dimension} onChange={(event) => setTemplateForm({ ...templateForm, criteria: templateForm.criteria.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value as typeof item.dimension } : item) })}><option value="groundedness">Groundedness</option><option value="completeness">Completeness</option><option value="safety">Safety</option><option value="clarity">Clarity</option><option value="format">Format</option></select></label><label>Weight<input type="number" min="0.1" max="10" step="0.1" value={criterion.weight} onChange={(event) => setTemplateForm({ ...templateForm, criteria: templateForm.criteria.map((item, itemIndex) => itemIndex === index ? { ...item, weight: Number(event.target.value) } : item) })}/></label></div>
+                </div>)}
+                <span className="rubric-template-actions"><button disabled={templateForm.criteria.length >= 3} onClick={() => setTemplateForm({ ...templateForm, criteria: [...templateForm.criteria, { criterion: "", dimension: "completeness", weight: 1 }] })}>Add criterion</button>{templateForm.criteria.length > 1 && <button onClick={() => setTemplateForm({ ...templateForm, criteria: templateForm.criteria.slice(0, -1) })}>Remove last</button>}<button className="primary" disabled={templateBusy === "create"} onClick={() => void createTemplate()}>{templateBusy === "create" ? "Saving…" : "Save template"}</button></span>
+              </div>
+            </div>
+          </div>
           <div className="model-trials">
             <div className="section-head"><div><h3>Cloudflare model shadow comparison</h3><p>Run identical release prompts and cases without changing the live process model.</p></div><span className="trial-controls"><select value={candidateProfile} onChange={(event) => setCandidateProfile(event.target.value)}>{detail.modelProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label} · {profile.use}</option>)}</select><button disabled={trialRunning} onClick={() => void compareModels()}><GitCompare size={15}/>{trialRunning ? "Queueing…" : "Compare model"}</button></span></div>
             {detail.modelTrials.length ? detail.modelTrials.slice(0, 4).map((trial) => <article key={trial.id}><span><strong>{trial.baseline_profile} baseline</strong><small>{trial.baseline_score === null ? "Waiting" : `${(Number(trial.baseline_score) * 100).toFixed(0)}% · ${money(Number(trial.baseline_cost_usd))} · ${number(Number(trial.baseline_tokens))} tokens`}</small></span><GitCompare size={17}/><span><strong>{trial.candidate_profile} candidate</strong><small>{trial.candidate_score === null ? "Waiting" : `${(Number(trial.candidate_score) * 100).toFixed(0)}% · ${money(Number(trial.candidate_cost_usd))} · ${number(Number(trial.candidate_tokens))} tokens`}</small></span><span className={`connection-state ${trial.status}`}><i/>{trial.status}</span><p>{trial.recommendation ?? trial.error ?? "Workflow trial is running"}</p></article>) : <p className="empty-copy">No model trials yet. The release baseline remains unchanged until you create and publish a new release.</p>}
@@ -466,6 +518,7 @@ function Evaluations({ data, onReload, onNotice }: { data: GovernanceData; onRel
               <label>Anonymized input<textarea value={caseForm.input} onChange={(event) => setCaseForm({ ...caseForm, input: event.target.value })}/></label>
               <label>Required phrases <small>comma separated</small><input value={caseForm.expected} onChange={(event) => setCaseForm({ ...caseForm, expected: event.target.value })}/></label>
               <label>Prohibited phrases <small>comma separated</small><input value={caseForm.prohibited} onChange={(event) => setCaseForm({ ...caseForm, prohibited: event.target.value })}/></label>
+              <label>Organization rubric <small>optional · copied into this case</small><select value={caseForm.rubricTemplateId} onChange={(event) => setCaseForm({ ...caseForm, rubricTemplateId: event.target.value })}><option value="">No reusable template</option>{detail.rubricTemplates.filter((template) => Boolean(template.enabled)).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>
               <label>AI judge criterion <small>optional · one bounded Cloudflare AI grading call</small><textarea className="rubric-criterion" maxLength={500} placeholder="Example: The response identifies the operational risk and recommends a practical next action." value={caseForm.rubricCriterion} onChange={(event) => setCaseForm({ ...caseForm, rubricCriterion: event.target.value })}/></label>
               <div className="case-fields"><label>Quality dimension<select value={caseForm.dimension} onChange={(event) => setCaseForm({ ...caseForm, dimension: event.target.value as typeof caseForm.dimension })}><option value="groundedness">Groundedness</option><option value="completeness">Completeness</option><option value="safety">Safety</option><option value="clarity">Clarity</option><option value="format">Format</option></select></label><label>Case weight<input type="number" min="0.1" max="10" step="0.1" value={caseForm.caseWeight} onChange={(event) => setCaseForm({ ...caseForm, caseWeight: Number(event.target.value) })}/></label></div>
               <div className="case-fields"><label>Format<select value={caseForm.format} onChange={(event) => setCaseForm({ ...caseForm, format: event.target.value as "text" | "json" })}><option value="text">Text</option><option value="json">Valid JSON</option></select></label><label>Assertion weight<input type="number" min="0.1" max="10" step="0.1" value={caseForm.assertionWeight} onChange={(event) => setCaseForm({ ...caseForm, assertionWeight: Number(event.target.value) })}/></label></div>
@@ -494,6 +547,13 @@ function rubricDimensions(value: string) {
     const evidence = JSON.parse(value) as { dimensions?: Array<{ dimension: string; score: number; weight: number }> };
     return Array.isArray(evidence.dimensions) ? evidence.dimensions.filter((item) =>
       typeof item.dimension === "string" && Number.isFinite(Number(item.score)) && Number.isFinite(Number(item.weight))) : [];
+  } catch { return []; }
+}
+function rubricCriteria(value: string) {
+  try {
+    const criteria = JSON.parse(value) as Array<{ criterion: string; dimension: string; weight: number }>;
+    return Array.isArray(criteria) ? criteria.filter((item) => typeof item.criterion === "string" &&
+      typeof item.dimension === "string" && Number.isFinite(Number(item.weight))) : [];
   } catch { return []; }
 }
 function money(value: number) { return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value || 0); }

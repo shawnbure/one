@@ -227,7 +227,23 @@ export interface EvaluationDetail {
     baseline_score: number | null; candidate_score: number | null; baseline_cost_usd: number | null; candidate_cost_usd: number | null;
     baseline_tokens: number | null; candidate_tokens: number | null; recommendation: string | null; error: string | null;
     completed_at: string | null; created_at: string }>;
+  rubricTemplates: RubricTemplate[];
   modelProfiles: Array<{ id: string; label: string; model: string; use: string }>;
+}
+export interface RubricCriterion {
+  criterion: string;
+  dimension: "groundedness" | "completeness" | "safety" | "clarity" | "format";
+  weight: number;
+}
+export interface RubricTemplate {
+  id: string;
+  name: string;
+  description: string;
+  criteria_json: string;
+  enabled: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 export interface EvaluationDataset {
   schema: "workrr-evaluation/v1";
@@ -385,9 +401,15 @@ export const api = {
   createEvaluationCase: (id: string, body: { name: string; input: string; expectedPhrases: string[];
     prohibitedPhrases: string[]; format: "text" | "json"; maxChars: number;
     dimension: "groundedness" | "completeness" | "safety" | "clarity" | "format";
-    assertionWeight: number; caseWeight: number; rubricCriterion: string }) =>
+    assertionWeight: number; caseWeight: number; rubricCriterion: string; rubricTemplateId: string }) =>
     request<{ data: { id: string; assertionCount: number } }>(`/api/evaluations/${encodeURIComponent(id)}/cases`,
       { method: "POST", body: JSON.stringify(body) }),
+  createRubricTemplate: (body: { name: string; description: string; criteria: RubricCriterion[] }) =>
+    request<{ data: { id: string; name: string; description: string; criteria: RubricCriterion[]; enabled: number } }>(
+      "/api/evaluation-rubrics", { method: "POST", body: JSON.stringify(body) }),
+  updateRubricTemplate: (id: string, body: { enabled?: boolean }) =>
+    request<{ data: { id: string; name: string; description: string; criteria: RubricCriterion[]; enabled: number } }>(
+      `/api/evaluation-rubrics/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   exportEvaluationDataset: (id: string) =>
     request<{ data: EvaluationDataset }>(`/api/evaluations/${encodeURIComponent(id)}/dataset`),
   importEvaluationDataset: (id: string, body: EvaluationDataset) =>

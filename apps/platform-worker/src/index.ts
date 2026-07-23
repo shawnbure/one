@@ -11,7 +11,7 @@ import { createProcessFromTemplate, getValueDashboard } from "./discovery";
 import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
-import { createEvaluationCase, exportEvaluationDataset, getEvaluationDetail, importEvaluationDataset, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
+import { createEvaluationCase, createRubricTemplate, exportEvaluationDataset, getEvaluationDetail, importEvaluationDataset, listRubricTemplates, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation, updateRubricTemplate } from "./evaluation";
 import { getUsageLedger } from "./usage";
 import { createIncident, getIncidentDetail, getIncidentOperations, setProcessOperatingMode, setTenantOperatingMode, transitionIncident } from "./incidents";
 import { checkMicrosoftConnection, completeMicrosoftOAuth, disconnectMicrosoft, startMicrosoftOAuth } from "./oauth";
@@ -470,6 +470,33 @@ app.get("/api/evaluations/:id", requireRoles("admin", "builder", "owner", "opera
   if (!scenarioId) return c.json({ error: "Evaluation scenario ID is required" }, 400);
   const detail = await getEvaluationDetail(c.env, c.get("tenantId"), scenarioId);
   return detail ? c.json({ data: detail }) : c.json({ error: "Evaluation scenario not found" }, 404);
+});
+
+app.get("/api/evaluation-rubrics", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
+  c.json({ data: await listRubricTemplates(c.env, c.get("tenantId")) }));
+
+app.post("/api/evaluation-rubrics", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const result = await createRubricTemplate(c.env, c.get("tenantId"), c.get("actorId"), await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_rubric.created",
+      "evaluation_rubric", result.id, { name: result.name, criteria: result.criteria.length });
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Rubric template could not be created" }, 400);
+  }
+});
+
+app.patch("/api/evaluation-rubrics/:id", requireRoles("admin", "builder", "owner"), async (c) => {
+  const templateId = c.req.param("id");
+  if (!templateId) return c.json({ error: "Rubric template ID is required" }, 400);
+  try {
+    const result = await updateRubricTemplate(c.env, c.get("tenantId"), templateId, await c.req.json());
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "evaluation_rubric.updated",
+      "evaluation_rubric", result.id, { name: result.name, criteria: result.criteria.length, enabled: result.enabled });
+    return c.json({ data: result });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Rubric template could not be updated" }, 400);
+  }
 });
 
 app.post("/api/evaluations/:id/cases", requireRoles("admin", "builder", "owner"), async (c) => {
