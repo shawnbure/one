@@ -153,12 +153,11 @@ Production inputs are never sampled automatically. An authorized user may explic
 
 The foundation is usable, but these are the highest-value next slices:
 
-1. Automate the Cloudflare Access allow-policy handoff for customer members after the in-product idempotent baseline launch; D1 membership, branding, controls, first process, baseline, evaluation, and draft release provisioning are implemented.
-2. Add the first provider-specific OAuth lifecycle on top of the implemented Cloudflare secret-reference and generic signed-webhook connector foundation.
-3. Add richer multi-dimension rubrics, customer-configurable DLP policies, and Workflow fan-out for large datasets. Automatic common-pattern masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
-4. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
-5. Add authenticated email delivery; Queue-backed signed webhook delivery is implemented.
-6. Production Access bootstrap and a scripted, reviewable environment promotion command.
-7. Expand the current identity, tenant, role, package, durable-stickiness, Workflow accounting, and webhook-deduplication tests into live-environment smoke tests with disposable customer fixtures.
+1. Add the first provider-specific OAuth lifecycle on top of the implemented Cloudflare secret-reference and generic signed-webhook connector foundation.
+2. Add richer multi-dimension rubrics, customer-configurable DLP policies, and Workflow fan-out for large datasets. Automatic common-pattern masking, isolated model-to-model shadow comparison, durable suites, bounded human scorecards, explicit truncated production-sample promotion, curated assertions, scoring, exact-release publish gates, and release comparison are implemented.
+3. Reconcile Workrr estimates with Cloudflare billing exports when a supported account billing API/export is selected. The in-product priced ledger is implemented.
+4. Add authenticated email delivery; Queue-backed signed webhook delivery is implemented.
+5. Add a scripted, reviewable environment promotion command. Cloudflare Access member handoff is now implemented as a secret-free, environment-bound export plus an explicit dry-run/apply FDE command.
+6. Expand the current identity, tenant, role, package, durable-stickiness, Workflow accounting, webhook-deduplication, and Access-handoff tests into live-environment smoke tests with disposable customer fixtures.
 
 Each slice should preserve the core boundary: D1 controls configuration and reporting, durable actors own sticky conversational state, Workflows own long-running orchestration, and Queues own burst absorption.

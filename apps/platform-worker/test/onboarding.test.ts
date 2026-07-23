@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bootstrapCustomer, BootstrapConflict, type CustomerBootstrapManifest } from "../src/onboarding";
+import { bootstrapCustomer, BootstrapConflict, exportAccessHandoff, type CustomerBootstrapManifest } from "../src/onboarding";
 
 const template = {
   id: "template-customer-ops",
@@ -124,5 +124,52 @@ describe("customer launch bootstrap", () => {
     await expect(bootstrapCustomer(env as never, "tenant-1", "member-admin", {
       ...manifest, firstProcess: { ...manifest.firstProcess, name: "Different Process" }
     })).rejects.toBeInstanceOf(BootstrapConflict);
+  });
+});
+
+describe("Cloudflare Access handoff", () => {
+  it("exports active members and binds the handoff to the deployed application identity", async () => {
+    const env = {
+      ENVIRONMENT: "development",
+      APP_DOMAIN: "one-dev.workrr.ai",
+      ACCESS_AUD: "27ae84d632232f993e89fb6d9b0489ed6683758137d99fabee869f4a3840656b",
+      ACCESS_TEAM_DOMAIN: "https://workrr-one.cloudflareaccess.com",
+      DB: {
+        prepare(sql: string) {
+          let bindings: unknown[] = [];
+          return {
+            bind(...values: unknown[]) { bindings = values; return this; },
+            async first() {
+              expect(bindings[0]).toBe("tenant-1");
+              return sql.includes("FROM tenants") ? { name: "Northstar Components" } : null;
+            },
+            async all() {
+              expect(sql).toContain("status = 'active'");
+              expect(bindings[0]).toBe("tenant-1");
+              return { results: [
+                { email: "ADMIN@northstar.example", display_name: "Admin", role: "admin" },
+                { email: "operator@northstar.example", display_name: "Operator", role: "operator" }
+              ] };
+            }
+          };
+        }
+      }
+    };
+    const handoff = await exportAccessHandoff(env as never, "tenant-1");
+    expect(handoff).toMatchObject({
+      schemaVersion: 1,
+      environment: "development",
+      tenant: { id: "tenant-1", name: "Northstar Components" },
+      application: {
+        domain: "one-dev.workrr.ai",
+        audience: env.ACCESS_AUD,
+        teamDomain: "https://workrr-one.cloudflareaccess.com"
+      },
+      review: { memberCount: 2, secretsIncluded: false }
+    });
+    expect(handoff.policy.include).toEqual([
+      { email: { email: "admin@northstar.example" } },
+      { email: { email: "operator@northstar.example" } }
+    ]);
   });
 });

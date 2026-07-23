@@ -96,6 +96,19 @@ The development domain is protected by Cloudflare Access and the Worker verifies
 
 Production remains closed until its own Access application, audience, allow policy, and membership records are explicitly configured. Never reuse a development audience for production.
 
+### Cloudflare Access member handoff
+
+Customer Setup exports the active tenant member list as an environment-bound Access handoff with no API credentials. Apply it from a trusted FDE workstation using a narrowly scoped Cloudflare token:
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID="<customer-account-id>"
+export CLOUDFLARE_API_TOKEN="<access-policy-token>"
+npm run access:sync -- --manifest ./workrr-access-handoff-development.json
+npm run access:sync -- --manifest ./workrr-access-handoff-development.json --apply
+```
+
+The first command is a dry run. The apply command resolves the Access application by both custom domain and audience, then creates or updates only the named Workrr-managed allow policy. It does not delete or replace other customer Access policies.
+
 ## Verification
 
 ```bash

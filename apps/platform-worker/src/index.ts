@@ -8,7 +8,7 @@ import { createDraftRelease, getStudio, publishRelease } from "./studio";
 import { getGovernance } from "./governance";
 import { receiveWebhook } from "./webhook";
 import { createProcessFromTemplate, getValueDashboard } from "./discovery";
-import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportCustomerManifest, getOnboarding } from "./onboarding";
+import { applyOnboarding, bootstrapCustomer, BootstrapConflict, exportAccessHandoff, exportCustomerManifest, getOnboarding } from "./onboarding";
 import { deliverNotificationWebhook, emitNotification, failNotificationDelivery, safeWebhookDestination } from "./notifications";
 import { exportProcessPackage, importProcessPackage } from "./process-package";
 import { createEvaluationCase, getEvaluationDetail, promoteExecutionSample, queueEvaluationSuite, queueModelTrial, reviewEvaluationResult, runEvaluation } from "./evaluation";
@@ -75,6 +75,12 @@ app.get("/api/onboarding/export", requireRoles("admin", "owner"), async (c) => {
   c.header("content-disposition", `attachment; filename="workrr-customer-manifest-${c.get("tenantId")}.json"`);
   c.header("cache-control", "no-store");
   return c.json(await exportCustomerManifest(c.env, c.get("tenantId")));
+});
+
+app.get("/api/onboarding/access-handoff", requireRoles("admin", "owner"), async (c) => {
+  c.header("content-disposition", `attachment; filename="workrr-access-handoff-${c.env.ENVIRONMENT}.json"`);
+  c.header("cache-control", "no-store");
+  return c.json(await exportAccessHandoff(c.env, c.get("tenantId")));
 });
 
 app.get("/api/notifications", requireRoles("admin", "owner", "operator", "viewer"), async (c) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, Download, Rocket, Settings2, ShieldCheck, UserPlus } from "lucide-react";
+import { CheckCircle2, Circle, Download, KeyRound, Rocket, Settings2, ShieldCheck, UserPlus } from "lucide-react";
 import { api, type OnboardingData, type ProcessTemplate, type SessionData } from "./api";
 
 export function CustomerSetupView({ session, onNotice }: { session: SessionData | null; onNotice: (message: string) => void }) {
@@ -96,6 +96,11 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
           <button className="primary launch-button" disabled={launching || session?.user.role !== "admin"} onClick={() => void bootstrap()}><Rocket size={15}/>{launching ? "Launching…" : "Launch customer baseline"}</button>
         </div>
       </div>}
+    </article>
+    <article className="access-handoff panel">
+      <span className="access-handoff-icon"><KeyRound size={21}/></span>
+      <span><strong>Cloudflare Access member handoff</strong><small>Export the active Workrr member allowlist for review and idempotent application by an FDE. No API token or customer secret is included.</small></span>
+      <a className="export-button" href="/api/onboarding/access-handoff"><Download size={15}/>Download Access handoff</a>
     </article>
   </section>;
 }

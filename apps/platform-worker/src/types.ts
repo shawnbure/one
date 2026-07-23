@@ -9,6 +9,7 @@ export interface Env {
   PROCESS_WORKFLOW: Workflow;
   EVALUATION_WORKFLOW: Workflow;
   ENVIRONMENT: "development" | "production";
+  APP_DOMAIN: "one-dev.workrr.ai" | "one.workrr.ai";
   ACCESS_TEAM_DOMAIN: "https://workrr-one.cloudflareaccess.com";
   ACCESS_AUD: "27ae84d632232f993e89fb6d9b0489ed6683758137d99fabee869f4a3840656b" | "37177f7d83f8b4f4905fccf2f0f04785a17ee9e46809ef2bd2cbb09e15c44ee0";
   WEBHOOK_INBOX_SECRET?: string;

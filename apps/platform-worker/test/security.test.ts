@@ -90,6 +90,15 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("INSERT INTO tenant_bootstrap_runs"))).toBe(false);
   });
 
+  it("prevents viewers from exporting the Access member allowlist", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request("http://localhost/api/onboarding/access-handoff", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("status = 'active' ORDER BY email"))).toBe(false);
+  });
+
   it("prevents viewers from changing tenant containment mode", async () => {
     const { env, queries } = environment("viewer");
     const response = await app.fetch(new Request("http://localhost/api/tenant/mode", {

@@ -155,6 +155,41 @@ export async function exportCustomerManifest(env: Env, tenantId: string) {
     processes: processes.results, members: members.results, retention: retention.results, secrets: "excluded" };
 }
 
+export async function exportAccessHandoff(env: Env, tenantId: string) {
+  const [tenant, members] = await Promise.all([
+    env.DB.prepare("SELECT name FROM tenants WHERE id = ?").bind(tenantId).first<{ name: string }>(),
+    env.DB.prepare(`SELECT email, display_name, role FROM tenant_members
+      WHERE tenant_id = ? AND status = 'active' ORDER BY email`).bind(tenantId).all<{
+        email: string; display_name: string; role: string;
+      }>()
+  ]);
+  const allowEmails = members.results.map((member) => member.email.trim().toLowerCase())
+    .filter((email, index, values) => email.includes("@") && values.indexOf(email) === index);
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    tenant: { id: tenantId, name: tenant?.name ?? tenantId },
+    environment: env.ENVIRONMENT,
+    application: {
+      domain: env.APP_DOMAIN,
+      audience: env.ACCESS_AUD,
+      teamDomain: env.ACCESS_TEAM_DOMAIN
+    },
+    policy: {
+      name: `Workrr managed members · ${tenant?.name ?? tenantId}`,
+      decision: "allow",
+      precedence: 20,
+      include: allowEmails.map((email) => ({ email: { email } }))
+    },
+    members: members.results,
+    review: {
+      memberCount: allowEmails.length,
+      applyCommand: "npm run access:sync -- --manifest ./workrr-access-handoff.json --apply",
+      secretsIncluded: false
+    }
+  };
+}
+
 function validateBootstrap(input: CustomerBootstrapManifest) {
   if (!input.idempotencyKey?.trim() || input.idempotencyKey.length > 120) throw new Error("A valid launch idempotency key is required");
   if (!input.firstProcess?.templateId || !input.firstProcess.name?.trim() || !input.firstProcess.purpose?.trim()) {
