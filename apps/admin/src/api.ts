@@ -712,6 +712,10 @@ export interface EmailRoute {
   created_at: string;
   updated_at: string;
   last_received_at: string | null;
+  cloudflare_rule_id: string | null;
+  routing_verified_at: string | null;
+  routing_evidence_reference: string | null;
+  routing_revision: number;
 }
 
 export interface EmailReceipt {
@@ -1442,6 +1446,12 @@ export const api = {
     request<{ data: { id: string; status: string } }>(
       `/api/email-routes/${encodeURIComponent(id)}/status`,
       { method: "PATCH", body: JSON.stringify({ status }) }),
+  verifyEmailRouting: (id: string, body: {
+    cloudflareRuleId: string; evidenceReference: string;
+    addressConfirmation: string; expectedRevision: number;
+  }) => request<{ data: { id: string; cloudflareRuleId: string; routingVerified: boolean } }>(
+    `/api/email-routes/${encodeURIComponent(id)}/routing-verification`,
+    { method: "POST", body: JSON.stringify(body) }),
   emailReceipts: (id: string) =>
     request<{ data: EmailReceipt[] }>(`/api/email-routes/${encodeURIComponent(id)}/receipts`),
   processTemplates: () =>

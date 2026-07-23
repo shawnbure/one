@@ -28,6 +28,7 @@ export function resourceManifest(config, environment) {
     databaseName: String(database?.database_name ?? ""),
     databaseId: String(database?.database_id ?? ""),
     appDomain: String(selected.vars?.APP_DOMAIN ?? ""),
+    workerName: String(selected.name ?? config.name ?? ""),
     accessAudience: String(selected.vars?.ACCESS_AUD ?? ""),
     resources: resources.map((resource) => ({ kind: resource.kind, name: String(resource.name) }))
   };

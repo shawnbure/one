@@ -646,6 +646,13 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
             <span><strong>{route.name}</strong><small>{route.address} → {route.process_name}</small></span>
             <span><small>IDENTITY</small><strong>{route.execution_profile.replaceAll("_", " ")}</strong></span>
             <span><small>ALLOWLIST</small><strong>{parseArray(route.allowed_sender_domains_json).join(", ")}</strong></span>
+            <span className={`routing-proof ${route.routing_verified_at ? "verified" : "required"}`}>
+              {route.routing_verified_at ? <CheckCircle2 size={15}/> : <AlertTriangle size={15}/>}
+              <span><small>CLOUDFLARE DELIVERY</small>
+                <strong>{route.routing_verified_at ? "Rule verified" : "Setup required"}</strong>
+                {route.routing_verified_at && <em>{formatDate(route.routing_verified_at)}</em>}
+              </span>
+            </span>
             <span className={`connection-state ${route.status === "active" ? "healthy" : "attention"}`}>
               <i/>{route.status}
             </span>
@@ -654,12 +661,20 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
                 {emailReceipts[route.id] ? "Hide receipts" : "Receipts"}
               </button>
               {canManageWebhooks && <button disabled={emailBusy === route.id}
+                title={!route.routing_verified_at && route.status === "disabled" ?
+                  "Run the FDE routing setup command before activation" : undefined}
                 onClick={() => void toggleEmailRoute(route.id, route.status === "active" ? "disabled" : "active")}>
                 {route.status === "active" ? "Disable" : "Activate"}
               </button>}
               {canManageWebhooks && route.status === "disabled" &&
                 <button disabled={emailBusy === route.id} onClick={() => editEmailRoute(route)}>Edit</button>}
             </span>
+            {!route.routing_verified_at && route.status === "disabled" && <div className="email-routing-setup">
+              <strong>Finish Cloudflare delivery setup</strong>
+              <p>Run this from the Workrr repository with a short-lived Cloudflare API token and the
+                environment’s Access service credentials. The command is dry-run unless you add <code>--apply</code>.</p>
+              <code>npm run email:route -- --env {session?.environment === "production" ? "production" : "dev"} --tenant {session?.tenantId || "TENANT_ID"} --route {route.id}</code>
+            </div>}
             {emailReceipts[route.id] && <div className="webhook-receipts">
               <div><strong>Recent receipts</strong>
                 <small>Latest 50 · sender, subject, message ID, raw body, and attachments are never displayed</small></div>

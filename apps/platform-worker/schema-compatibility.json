@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 83,
-  "requiredMigrationName": "0083_inbound_email_channels.sql"
+  "requiredMigrationId": 84,
+  "requiredMigrationName": "0084_email_routing_verification.sql"
 }

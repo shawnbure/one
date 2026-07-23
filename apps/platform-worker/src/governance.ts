@@ -31,7 +31,8 @@ export async function getGovernance(env: Env, tenantId: string) {
       FROM webhook_endpoints WHERE tenant_id = ? ORDER BY name`).bind(env.WEBHOOK_INBOX_SECRET ? 1 : 0, tenantId).all(),
     env.DB.prepare(`SELECT r.id, r.name, r.address, r.blueprint_id, b.name process_name,
       b.execution_profile, r.allowed_sender_domains_json, r.status, r.created_at,
-      r.updated_at, r.last_received_at
+      r.updated_at, r.last_received_at, r.cloudflare_rule_id, r.routing_verified_at,
+      r.routing_evidence_reference, r.routing_revision
       FROM inbound_email_routes r JOIN agent_blueprints b
         ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
       WHERE r.tenant_id=? ORDER BY r.name`).bind(tenantId).all(),

@@ -1269,9 +1269,24 @@ nav button em,
   min-height: 40px;
 }
 .email-route-row {
-  grid-template-columns: 40px minmax(210px, 1.25fr) minmax(120px, .65fr) minmax(180px, 1fr) .45fr auto;
+  grid-template-columns: 40px minmax(210px, 1.2fr) minmax(110px, .55fr) minmax(160px, .8fr) minmax(150px, .7fr) .4fr auto;
 }
 .email-route-row > span:nth-child(4) strong { overflow-wrap: anywhere; }
+.routing-proof { display: flex; align-items: center; gap: 8px; color: #6b5141; }
+.routing-proof.verified { color: #246548; }
+.routing-proof span { display: grid; gap: 2px; }
+.routing-proof small { color: inherit; font-size: 10px; font-weight: 750; letter-spacing: .08em; }
+.routing-proof strong { font-size: 13px; }
+.routing-proof em { color: #68776f; font-size: 11px; font-style: normal; }
+.email-routing-setup {
+  grid-column: 2 / -1; display: grid; gap: 7px; padding: 13px 15px;
+  border: 1px solid #e0cbb8; border-radius: 10px; background: #fffaf4;
+}
+.email-routing-setup p { margin: 0; color: #5e6c65; font-size: 13px; line-height: 1.55; }
+.email-routing-setup code {
+  display: block; overflow-x: auto; padding: 9px 11px; border-radius: 7px;
+  background: #17231e; color: #eff8f3; font-size: 12px; line-height: 1.5;
+}
 @media (max-width: 1180px) {
   .webhook-create { grid-template-columns: 1fr 1fr; }
   .webhook-create > div { grid-column: 1 / -1; }

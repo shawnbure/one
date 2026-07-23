@@ -22,6 +22,13 @@ interface EmailRouteInput {
   allowedSenderDomains?: string[];
 }
 
+interface RoutingVerificationInput {
+  cloudflareRuleId?: string;
+  evidenceReference?: string;
+  addressConfirmation?: string;
+  expectedRevision?: number;
+}
+
 const MAX_MESSAGE_BYTES = 1_048_576;
 const MAX_INPUT_CHARS = 48_000;
 
@@ -106,7 +113,8 @@ export async function receiveProcessEmail(message: ForwardableEmailMessage, env:
 export async function listEmailRoutes(env: Env, tenantId: string) {
   const { results } = await env.DB.prepare(`SELECT r.id, r.name, r.address, r.blueprint_id,
     b.name process_name, b.execution_profile, r.allowed_sender_domains_json, r.status,
-    r.created_at, r.updated_at, r.last_received_at
+    r.created_at, r.updated_at, r.last_received_at, r.cloudflare_rule_id,
+    r.routing_verified_at, r.routing_evidence_reference, r.routing_revision
     FROM inbound_email_routes r JOIN agent_blueprints b
       ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
     WHERE r.tenant_id=? ORDER BY r.name`).bind(tenantId).all();
@@ -139,7 +147,9 @@ export async function updateEmailRoute(
   const config = await validateRouteInput(env, tenantId, input);
   await env.DB.batch([
     env.DB.prepare(`UPDATE inbound_email_routes SET name=?, address=?, blueprint_id=?,
-      allowed_sender_domains_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`)
+      allowed_sender_domains_json=?, cloudflare_rule_id=NULL, routing_verified_at=NULL,
+      routing_verified_by=NULL, routing_evidence_reference=NULL,
+      routing_revision=routing_revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`)
       .bind(config.name, config.address, config.blueprintId,
         JSON.stringify(config.allowedSenderDomains), routeId, tenantId),
     audit(env, tenantId, actorId, "email_route.updated", routeId, {
@@ -150,10 +160,51 @@ export async function updateEmailRoute(
   return { id: routeId, ...config, status: "disabled" };
 }
 
+export async function verifyEmailRouting(
+  env: Env, tenantId: string, actorId: string, routeId: string, input: RoutingVerificationInput
+) {
+  const route = await env.DB.prepare(`SELECT id, address, status, routing_revision
+    FROM inbound_email_routes WHERE id=? AND tenant_id=?`).bind(routeId, tenantId)
+    .first<{ id: string; address: string; status: string; routing_revision: number }>();
+  if (!route) throw new Error("Email route was not found");
+  if (route.status !== "disabled") throw new Error("Disable the email route before changing routing evidence");
+  if (normalizeAddress(input.addressConfirmation || "") !== normalizeAddress(route.address)) {
+    throw new Error("Address confirmation does not match this email route");
+  }
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision !== route.routing_revision) {
+    throw new Error("Email route changed; refresh the route and verify Cloudflare routing again");
+  }
+  const cloudflareRuleId = cleanText(input.cloudflareRuleId || "", 32);
+  if (!/^[a-f0-9]{32}$/i.test(cloudflareRuleId)) {
+    throw new Error("Cloudflare routing rule ID must be a 32-character identifier");
+  }
+  const evidenceReference = cleanText(input.evidenceReference || "", 160);
+  if (!/^cloudflare-email-routing-rule:[a-f0-9]{32}$/i.test(evidenceReference) ||
+    !evidenceReference.endsWith(cloudflareRuleId)) {
+    throw new Error("Routing evidence must reference the verified Cloudflare rule");
+  }
+  const result = await env.DB.prepare(`UPDATE inbound_email_routes SET cloudflare_rule_id=?,
+    routing_verified_at=CURRENT_TIMESTAMP, routing_verified_by=?, routing_evidence_reference=?,
+    updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=? AND status='disabled'
+      AND routing_revision=?`).bind(cloudflareRuleId, actorId, evidenceReference, routeId,
+      tenantId, route.routing_revision).run();
+  if (result.meta.changes !== 1) {
+    throw new Error("Email route changed; refresh the route and verify Cloudflare routing again");
+  }
+  await audit(env, tenantId, actorId, "email_route.routing_verified", routeId, {
+    cloudflareRuleId, routingRevision: route.routing_revision
+  }).run();
+  return {
+    id: routeId, cloudflareRuleId, routingVerified: true,
+    routingRevision: route.routing_revision
+  };
+}
+
 export async function setEmailRouteStatus(
   env: Env, tenantId: string, actorId: string, routeId: string, status: "active" | "disabled"
 ) {
   const route = await env.DB.prepare(`SELECT r.id, r.blueprint_id, r.allowed_sender_domains_json,
+    r.cloudflare_rule_id, r.routing_verified_at,
     b.execution_profile, b.status process_status
     FROM inbound_email_routes r JOIN agent_blueprints b
       ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
@@ -167,6 +218,9 @@ export async function setEmailRouteStatus(
     }
     if (!parseDomains(route.allowed_sender_domains_json || "[]").length) {
       throw new Error("At least one authorized sender domain is required");
+    }
+    if (!route.cloudflare_rule_id || !route.routing_verified_at) {
+      throw new Error("Verify the Cloudflare Email Routing rule before enabling email intake");
     }
   }
   await env.DB.batch([

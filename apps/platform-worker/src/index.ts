@@ -81,7 +81,7 @@ import { emitBudgetThresholdAlerts } from "./budget-alerts";
 import { emitGovernanceReviewAlerts } from "./governance-review-alerts";
 import { cancelActorLocalWork, listActorLocalWork, queueActorLocalWork, scheduleActorLocalWork } from "./actor-local-work";
 import { createEmailRoute, listEmailReceipts, listEmailRoutes, receiveProcessEmail,
-  setEmailRouteStatus, updateEmailRoute } from "./email-channel";
+  setEmailRouteStatus, updateEmailRoute, verifyEmailRouting } from "./email-channel";
 
 export { ProcessAgent } from "./agent";
 export { ProcessWorkflow } from "./workflow";
@@ -2126,6 +2126,20 @@ app.patch("/api/email-routes/:id/status", requireRoles("admin", "builder", "owne
     return c.json({ error: message }, message.includes("not found") ? 404 : 409);
   }
 });
+
+app.post("/api/email-routes/:id/routing-verification",
+  requireRoles("admin", "builder", "owner", "operator"), async (c) => {
+    try {
+      const routeId = c.req.param("id");
+      if (!routeId) return c.json({ error: "Email route ID is required" }, 400);
+      return c.json({ data: await verifyEmailRouting(
+        c.env, c.get("tenantId"), c.get("actorId"), routeId, await c.req.json()
+      ) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Email routing could not be verified";
+      return c.json({ error: message }, message.includes("not found") ? 404 : message.includes("changed") ? 409 : 400);
+    }
+  });
 
 app.get("/api/email-routes/:id/receipts",
   requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) => {

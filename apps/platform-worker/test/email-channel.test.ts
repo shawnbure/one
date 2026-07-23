@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createEmailRoute, emailExecutionRequest, listEmailReceipts,
-  setEmailRouteStatus } from "../src/email-channel";
+  setEmailRouteStatus, verifyEmailRouting } from "../src/email-channel";
 
 type Write = { sql: string; bindings: unknown[] };
 
-function environment(options?: { profile?: string; processStatus?: string; route?: boolean }) {
+function environment(options?: {
+  profile?: string; processStatus?: string; route?: boolean; routingVerified?: boolean
+}) {
   const writes: Write[] = [];
   const DB = {
     prepare(sql: string) {
@@ -20,7 +22,15 @@ function environment(options?: { profile?: string; processStatus?: string; route
               id: "route-1", blueprint_id: "process-1",
               allowed_sender_domains_json: '["customer.com"]',
               execution_profile: options?.profile || "conversation",
-              process_status: options?.processStatus || "active"
+              process_status: options?.processStatus || "active",
+              cloudflare_rule_id: options?.routingVerified ? "a".repeat(32) : null,
+              routing_verified_at: options?.routingVerified ? "2026-07-23T00:00:00Z" : null
+            };
+          }
+          if (sql.includes("SELECT id, address, status, routing_revision")) {
+            return options?.route === false ? null : {
+              id: "route-1", address: "requests@customer.example",
+              status: "disabled", routing_revision: 2
             };
           }
           if (sql.includes("SELECT id FROM inbound_email_routes")) {
@@ -67,6 +77,39 @@ describe("inbound email process channel", () => {
     await expect(setEmailRouteStatus(
       environment({ processStatus: "paused" }).env, "tenant-1", "owner-1", "route-1", "active"
     )).rejects.toThrow("activate the process");
+  });
+
+  it("fails closed until exact Cloudflare delivery evidence is recorded", async () => {
+    await expect(setEmailRouteStatus(
+      environment().env, "tenant-1", "owner-1", "route-1", "active"
+    )).rejects.toThrow("Verify the Cloudflare Email Routing rule");
+    const state = environment();
+    const result = await verifyEmailRouting(state.env, "tenant-1", "operator-1", "route-1", {
+      cloudflareRuleId: "a".repeat(32),
+      evidenceReference: `cloudflare-email-routing-rule:${"a".repeat(32)}`,
+      addressConfirmation: "requests@customer.example",
+      expectedRevision: 2
+    });
+    expect(result.routingVerified).toBe(true);
+    expect(state.writes.some((write) => write.sql.includes("routing_verified_at=CURRENT_TIMESTAMP"))).toBe(true);
+    await expect(setEmailRouteStatus(
+      environment({ routingVerified: true }).env, "tenant-1", "owner-1", "route-1", "active"
+    )).resolves.toMatchObject({ status: "active" });
+  });
+
+  it("rejects stale or mismatched routing evidence", async () => {
+    await expect(verifyEmailRouting(environment().env, "tenant-1", "operator-1", "route-1", {
+      cloudflareRuleId: "a".repeat(32),
+      evidenceReference: `cloudflare-email-routing-rule:${"a".repeat(32)}`,
+      addressConfirmation: "other@customer.example",
+      expectedRevision: 2
+    })).rejects.toThrow("Address confirmation");
+    await expect(verifyEmailRouting(environment().env, "tenant-1", "operator-1", "route-1", {
+      cloudflareRuleId: "a".repeat(32),
+      evidenceReference: `cloudflare-email-routing-rule:${"a".repeat(32)}`,
+      addressConfirmation: "requests@customer.example",
+      expectedRevision: 1
+    })).rejects.toThrow("changed");
   });
 
   it("derives sticky identities from trusted envelope/thread evidence without exposing sender addresses", async () => {
