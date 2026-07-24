@@ -499,14 +499,15 @@ function Studio({
         </div></div>
       </div>
       {packProvenance ? (
-        <aside className={`solution-pack-provenance panel${packUpdateAvailable ? " update" : ""}`}>
+        <section className={`solution-pack-provenance panel${packUpdateAvailable ? " update" : ""}`}
+          aria-label="Solution pack provenance">
           <span><Boxes size={17}/></span>
           <div>
             <strong>{currentPack?.name ?? packProvenance.pack_id}</strong>
             <small>Installed from reviewed solution pack v{packProvenance.pack_version} · customer changes remain independent</small>
           </div>
           <em>{packUpdateAvailable ? `v${currentPack?.version} available` : "Current catalog version"}</em>
-        </aside>
+        </section>
       ) : null}
       <nav className="studio-tabs">
         {(["design", "behavior", "schedules", "releases", "retirement"] as const).map((value) => (
