@@ -121,7 +121,7 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
   } catch (error) { onNotice(error instanceof Error ? error.message : "Could not review emergency session"); } }
 
   return <section className="team-page">
-    <div className="page-title"><div><span className="eyebrow"><Users size={14}/> ORGANIZATION ACCESS</span><h1>Team & roles</h1>
+    <div className="page-title"><div><span className="eyebrow"><Users size={14}/> ORGANIZATION ACCESS</span><h1>Team & Roles</h1>
       <p>Cloudflare Access verifies identity. Workrr membership controls tenant scope and application capabilities.</p></div>
       {session?.user.role === "admin" && <button className="primary" onClick={() => { setName(""); setModal("member"); }}><Plus size={15}/>Add member</button>}</div>
     <div className="identity-boundary panel"><LockKeyhole size={20}/><span><strong>Two-layer identity boundary</strong>

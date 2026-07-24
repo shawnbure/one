@@ -157,7 +157,7 @@ export function ProcessLaunchpadView({
       <header className="launchpad-title">
         <div>
           <span><Sparkles size={16} /> EMPLOYEE AI WORKSPACE</span>
-          <h1>Process launchpad</h1>
+          <h1>Process Launchpad</h1>
           <p>Use approved AI processes without needing to understand models, prompts, or infrastructure.</p>
         </div>
         <div className="launchpad-link-actions">

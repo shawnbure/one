@@ -147,7 +147,7 @@ export function OpportunitiesView({ session, onNotice, onProcessCreated }: {
   }
   return <section className="opportunity-page">
     <div className="page-title"><div><span className="eyebrow"><Sparkles size={14}/> AI PROCESS DISCOVERY</span>
-      <h1>Opportunity backlog</h1><p>Qualify manual work before committing engineering effort or giving an agent authority.</p></div>
+      <h1>Opportunity Backlog</h1><p>Qualify manual work before committing engineering effort or giving an agent authority.</p></div>
       <span className="opportunity-page-actions"><button onClick={() => void load()}><RefreshCw size={15}/>Refresh</button>
         {canCapture && <button className="primary" onClick={() => setShowCapture(!showCapture)}><Plus size={15}/>Capture opportunity</button>}</span></div>
     <div className="opportunity-summary">

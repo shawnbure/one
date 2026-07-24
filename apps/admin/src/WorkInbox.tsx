@@ -298,7 +298,7 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
   </section>;
 
   return <section className="inbox-page">
-    <div className="page-title"><div><span className="eyebrow"><Inbox size={14}/> HUMAN CONTROL</span><h1>Work inbox</h1><p>Review consequential actions with the evidence and context needed to decide safely.</p></div><div className="assignment-chip"><UserRound size={15}/><span><small>VIEWING AS</small><strong>{session?.user.name ?? "Authorized reviewer"}</strong></span></div></div>
+    <div className="page-title"><div><span className="eyebrow"><Inbox size={14}/> HUMAN CONTROL</span><h1>Work Inbox</h1><p>Review consequential actions with the evidence and context needed to decide safely.</p></div><div className="assignment-chip"><UserRound size={15}/><span><small>VIEWING AS</small><strong>{session?.user.name ?? "Authorized reviewer"}</strong></span></div></div>
     <div className="inbox-tabs">{(["pending", "resolved", "all"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => {
       setFilter(value); if (value !== "pending") setSelectedApprovals([]);
     }}>{value}<span>{value === "pending" ? items.filter((item) => item.status === "pending").length : value === "resolved" ? items.filter((item) => item.status !== "pending").length : items.length}</span></button>)}</div>

@@ -48,7 +48,7 @@ export function ValuePortfolioView({ session, onNotice, onOpenProcess }: {
   }, {});
   return <section className="value-page">
     <div className="page-title"><div><span className="eyebrow"><TrendingUp size={14}/> EXECUTIVE VALUE PORTFOLIO</span>
-      <h1>Value & decisions</h1><p>Measured business impact and transparent recommendations for where to expand, correct, observe, or retire.</p></div>
+      <h1>Value & Decisions</h1><p>Measured business impact and transparent recommendations for where to expand, correct, observe, or retire.</p></div>
       <div className="value-title-actions">{canRecord && <button className="primary" onClick={() => setCaptureOpen((open) => !open)}>
         {captureOpen ? <X size={15}/> : <Plus size={15}/>}{captureOpen ? "Close capture" : "Record outcome"}</button>}
         <button className="refresh-button" onClick={() => void load()}><RefreshCw size={15}/>Refresh evidence</button></div></div>

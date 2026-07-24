@@ -35,7 +35,7 @@ export function ApiLogsView({ onNotice }: { onNotice: (message: string) => void 
 
   return <section className="api-logs-page">
     <div className="page-title"><div><span className="eyebrow"><Code2 size={14}/> INTEGRATION OBSERVABILITY</span>
-      <h1>API logs</h1><p>Tenant-scoped request evidence without sensitive request or response bodies.</p></div>
+      <h1>API Logs</h1><p>Tenant-scoped request evidence without sensitive request or response bodies.</p></div>
       <button className="refresh-button" disabled={busy} onClick={() => void load(true)}>
         <RefreshCw size={15}/>{busy ? "Loading…" : "Refresh"}
       </button>

@@ -17,19 +17,19 @@ const settingsModules = [
   {
     workspace: "Customer setup",
     icon: SlidersHorizontal,
-    title: "Customer environment",
+    title: "Customer Environment",
     description: "Organization defaults, lifecycle ownership, deployment readiness, backup, and handoff.",
   },
   {
     workspace: "Team & roles",
     icon: Users,
-    title: "Identity and access",
+    title: "Identity and Access",
     description: "Members, roles, service principals, active sessions, and emergency access evidence.",
   },
   {
     workspace: "Governance",
     icon: ShieldCheck,
-    title: "Privacy and governance",
+    title: "Privacy and Governance",
     description: "DLP, retention, memory, incidents, external AI boundaries, and privacy reporting.",
   },
   {
@@ -41,7 +41,7 @@ const settingsModules = [
   {
     workspace: "Usage & budgets",
     icon: CircleDollarSign,
-    title: "Usage and budgets",
+    title: "Usage and Budgets",
     description: "Model usage, captured cost, budget thresholds, and billing reconciliation.",
   },
 ] as const;

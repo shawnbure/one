@@ -1071,10 +1071,8 @@ a:focus-visible {
     background: #15231e;
     color: #dbe9e3;
   }
-  .shell > aside:not(.mobile-open) > .workspace,
   .shell > aside:not(.mobile-open) > nav,
   .shell > aside:not(.mobile-open) > .aside-bottom { display: none; }
-  .shell > aside.mobile-open .workspace { margin: 16px 0 12px; }
   .shell > aside.mobile-open nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .shell > aside.mobile-open nav { align-items: start; }
   .shell > aside.mobile-open nav .nav-group { min-width: 0; }
@@ -1098,12 +1096,13 @@ a:focus-visible {
     box-sizing: border-box;
     width: 100%;
     height: auto;
-    min-height: 108px;
+    min-height: 134px;
     align-content: center;
     flex-wrap: wrap;
     gap: 8px;
     padding: 10px 18px;
   }
+  .shell > main > header .tenant-header-title { width: 100%; }
   .shell > main > header .crumb { width: 100%; }
   .shell > main > header .header-actions { width: 100%; min-width: 0; }
   .shell > main > header .search { width: auto; min-width: 0; flex: 1 1 auto; }

@@ -150,7 +150,7 @@ export function CustomerSetupView({ session, onNotice }: { session: SessionData 
   if (!data) return <div className="loading-card">Loading customer setup…</div>;
   const ready = data.checklist.filter((item) => item.ready).length;
   return <section className="setup-page">
-    <div className="page-title"><div><span className="eyebrow"><Settings2 size={14}/> CUSTOMER ENVIRONMENT</span><h1>Customer setup</h1><p>One controlled manifest establishes the customer identity, operating defaults, and deployment handoff.</p></div>
+    <div className="page-title"><div><span className="eyebrow"><Settings2 size={14}/> CUSTOMER ENVIRONMENT</span><h1>Customer Setup</h1><p>One controlled manifest establishes the customer identity, operating defaults, and deployment handoff.</p></div>
       <a className="export-button" href="/api/onboarding/export"><Download size={15}/>Export portable manifest</a></div>
     <div className="setup-layout">
       <article className="setup-form panel">

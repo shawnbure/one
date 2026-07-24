@@ -16,7 +16,6 @@ import {
   Bell,
   Boxes,
   Check,
-  ChevronDown,
   CircleGauge,
   Clock3,
   Command,
@@ -25,7 +24,6 @@ import {
   GitBranch,
   Inbox,
   Layers3,
-  LockKeyhole,
   Play,
   Plus,
   Search,
@@ -258,6 +256,19 @@ const navGroups: ReadonlyArray<{ label: string; items: readonly NavItem[] }> = [
 ];
 const nav = navGroups.flatMap((group) => group.items);
 
+const workspaceDisplayLabels: Record<string, string> = {
+  "Work inbox": "Work Inbox",
+  "API logs": "API Logs",
+  "Value & decisions": "Value & Decisions",
+  "Usage & budgets": "Usage & Budgets",
+  "Customer setup": "Customer Setup",
+  "Team & roles": "Team & Roles",
+};
+
+function workspaceDisplayLabel(label: string) {
+  return workspaceDisplayLabels[label] ?? label;
+}
+
 const workspaceSearch: Record<string, { description: string; keywords: string[] }> = {
   Overview: { description: "Operational health, value, and work requiring attention", keywords: ["home", "health", "value"] },
   Launchpad: { description: "Run approved employee AI processes and private conversations", keywords: ["employee", "chat", "run"] },
@@ -332,7 +343,7 @@ export function App() {
     const workspaceLabels = authorizedWorkspaceLabels(consumerView);
     const workspaces = workspaceLabels.map((label) => ({
       id: `workspace:${label}`,
-      label,
+      label: workspaceDisplayLabel(label),
       description: workspaceSearch[label]?.description ?? "Open this Workrr workspace",
       keywords: workspaceSearch[label]?.keywords ?? [],
       kind: "workspace" as const,
@@ -509,25 +520,17 @@ export function App() {
       <aside className={mobileNavOpen ? "mobile-open" : ""} aria-label="Application navigation">
         <div className="brand">
           <span className="brandmark">
-            <Command size={18} />
+            <Command size={24} />
           </span>
-          <div>
+          <div className="brand-copy">
             <strong>workrr</strong>
-            <small>PRIVATE AI OPERATIONS</small>
+            <span className="brand-tagline">Private AI Operations</span>
           </div>
           <button className="mobile-nav-toggle" type="button"
             aria-expanded={mobileNavOpen} aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
             onClick={() => setMobileNavOpen((open) => !open)}>
             {mobileNavOpen ? <X size={20}/> : <Menu size={20}/>}
           </button>
-        </div>
-        <div className="workspace">
-          <span className="avatar">A</span>
-          <div>
-            <strong>{session?.tenantName ?? "Customer environment"}</strong>
-            <small>Dedicated environment</small>
-          </div>
-          <ChevronDown size={15} />
         </div>
         <nav aria-label="Primary">
           {navGroups.map((group) => {
@@ -545,7 +548,7 @@ export function App() {
                   }}
                 >
                   <Icon size={18} />
-                  {label}
+                  {workspaceDisplayLabel(label)}
                   {label === "Work inbox" &&
                     (overview?.pendingApprovals ?? 0) > 0 && (
                       <em>{overview?.pendingApprovals}</em>
@@ -556,13 +559,6 @@ export function App() {
           })}
         </nav>
         <div className="aside-bottom">
-          <div className="private">
-            <LockKeyhole size={16} />
-            <div>
-              <strong>Private by design</strong>
-              <small>Cloudflare dedicated</small>
-            </div>
-          </div>
           {!consumerView && <>
             <span className="nav-group-label administration-label">Administration</span>
             <button className={active === "Settings" ? "active" : ""}
@@ -573,12 +569,12 @@ export function App() {
             <button className={active === "Customer setup" ? "active" : ""}
               onClick={() => { setActive("Customer setup"); setMobileNavOpen(false); }}>
               <Layers3 size={17} />
-              Customer setup
+              Customer Setup
             </button>
             <button className={active === "Team & roles" ? "active" : ""}
               onClick={() => { setActive("Team & roles"); setMobileNavOpen(false); }}>
               <Users size={17} />
-              Team & roles
+              Team & Roles
             </button>
           </>}
           <button className={active === "Help Center" ? "active" : ""}
@@ -592,7 +588,10 @@ export function App() {
       <main ref={mainRef} id="main-content" tabIndex={-1}>
         <header>
           <div className="crumb">
-            OPERATIONS <span>/</span> {active.toUpperCase()}
+            Operations <span>/</span> {workspaceDisplayLabel(active)}
+          </div>
+          <div className="tenant-header-title">
+            {session?.tenantName ?? "Customer Environment"}
           </div>
           <div className="header-actions">
             <button className="search" aria-haspopup="dialog" onClick={() => setCommandOpen(true)}>
@@ -613,7 +612,7 @@ export function App() {
         <div className="content">
           {previewMode && (
             <div className="environment-banner">
-              <LockKeyhole size={15} />
+              <ShieldCheck size={15} />
               <span>
                 <strong>Secure preview</strong> Live operations unlock after
                 identity is connected.
