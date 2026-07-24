@@ -108,7 +108,12 @@ function ProcessPortfolio({
             human controls.
           </p>
         </div>
-        <div className="portfolio-actions"><label className="secondary import-package"><Upload size={16}/>{importing ? "Importing…" : "Import package"}<input type="file" accept="application/json,.json" disabled={importing} onChange={(event) => { void importFile(event.target.files?.[0]); event.target.value = ""; }}/></label><button className="primary" onClick={onCreate}><Plus size={16} />Create process</button></div>
+        <div className="portfolio-actions"><label className="secondary import-package"
+          title="Import a Workrr process.json from a portable process or solution pack">
+          <Upload size={16}/>{importing ? "Importing…" : "Import process / solution"}
+          <input type="file" accept="application/json,.json" disabled={importing}
+            onChange={(event) => { void importFile(event.target.files?.[0]); event.target.value = ""; }}/></label>
+          <button className="primary" onClick={onCreate}><Plus size={16} />Create process</button></div>
       </div>
       <div className="portfolio-grid">
         {processes.map((process) => (

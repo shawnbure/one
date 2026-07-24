@@ -984,6 +984,18 @@ Deliverables:
 
 Exit criteria: an FDE can configure a new customer without modifying framework core.
 
+Implemented solution-pack boundary: `solution-packs/customer-operations` and
+`solution-packs/scheduled-reconciliation` each contain a versioned
+`workrr-solution-pack/v1` manifest and one directly importable portable process.
+The manifest records audience, minimum connection scopes, accountable owner, and
+handoff checks. The process carries typed disconnected tools, exact Workers AI
+model, classification, bounded topology, input/output contracts, and portable
+acceptance cases. Import creates a paused draft and never imports credentials,
+destinations, enabled schedules, or publication authority. Repository validation
+requires at least two complete packs, follows only local artifact references,
+rejects credential-bearing fields, and ensures every tool and acceptance case is
+complete.
+
 ### Phase 3 — Scale and governance
 
 Deliverables:

@@ -41,6 +41,7 @@ The product is deliberately process-first. Agents are an execution primitive, no
 | Deployment identity | Exact Worker version metadata, environment/domain identity, and fail-visible D1 schema compatibility evidence |
 | Notifications | Owned in-app response tasks with acknowledgement SLAs and Cron escalation, plus quiet-hour-aware webhook delivery and true hourly/daily Microsoft 365 email digests with persisted provider evidence |
 | Process portability | Versioned, validated JSON package export/import with secrets excluded and imports paused by default |
+| Solution packs | Versioned customer-operations and scheduled-reconciliation references with typed connection seams, portable acceptance cases, and repository-enforced secret exclusion |
 | Process retirement | Immediate execution/ingestion shutdown, legal hold, independent approval, cooling period, Cron/Queue disposal, durable-actor erasure, selected content redaction, and retained audit evidence |
 | Usage & budgets | Monthly token/cost ledger, model price snapshot, process attribution, warning policy, optional hard limit, and Cloudflare billing-evidence reconciliation |
 | Incident response | Tenant and process emergency stops, drain/defer admission behavior, incident ownership/lifecycle, evidence timeline, recovery gates, audit, and critical notifications |

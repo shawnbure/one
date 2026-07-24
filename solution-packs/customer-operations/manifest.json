@@ -1,0 +1,25 @@
+{
+  "schema": "workrr-solution-pack/v1",
+  "id": "customer-operations",
+  "version": "1.0.0",
+  "name": "Customer Operations",
+  "summary": "Prepare grounded customer-request responses with governed context lookup and mandatory human approval.",
+  "audience": "Mid-market service, account, and operations teams",
+  "processArtifact": "process.json",
+  "requiredConnections": [
+    {
+      "tool": "customer_record_lookup",
+      "access": "read",
+      "minimumScope": "Read only the customer identity, case, and service fields required by the process",
+      "owner": "Customer Operations"
+    }
+  ],
+  "handoffChecks": [
+    "Confirm the authoritative customer identifier and escalation categories.",
+    "Connect customer_record_lookup to a fixed, read-only provider adapter.",
+    "Replace example evaluation facts with customer-approved cases.",
+    "Run the release gate and begin in shadow or approval mode.",
+    "Record a 30-day value target before publication."
+  ],
+  "secrets": "excluded"
+}
