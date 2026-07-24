@@ -16,12 +16,19 @@ describe("product readability contract", () => {
   });
 
   it("covers semantic metadata, body copy, and every form control", () => {
-    for (const selector of ["small", "label", "time", "code", "dt", "dd"]) {
+    for (const selector of ["small", "label", "time", "code", "dt", "dd", "strong", "em"]) {
       expect(contract).toContain(selector);
     }
     for (const selector of ["button", "input", "textarea", "select", "p", "li", "td", "th"]) {
       expect(contract).toContain(selector);
     }
+    for (const selector of [".eyebrow", ".crumb", ".tags i", ".health-row",
+      ".member-row > span:first-child > i", ".mcp-policy-note"]) {
+      expect(contract).toContain(selector);
+    }
+    expect(contract).toContain(".scope-row span");
+    expect(contract).toContain(".session-kind");
+    expect(contract).toContain(".tool-access");
   });
 
   it("keeps interactive controls comfortably tappable on small screens", () => {

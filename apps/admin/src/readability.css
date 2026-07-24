@@ -1808,7 +1808,9 @@ nav button em,
   dt,
   dd,
   legend,
-  figcaption
+  figcaption,
+  strong,
+  em
 ) {
   font-size: 13px !important;
   line-height: 1.5 !important;
@@ -1830,6 +1832,21 @@ nav button em,
 }
 
 :where(
+  .eyebrow,
+  .crumb,
+  .tags i,
+  .process-stat,
+  .health-row,
+  .member-row > span:first-child > i,
+  .routing-proof,
+  .mcp-policy-note,
+  .template-kit header em
+) {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+:where(
   .status,
   .healthy,
   .connection-state,
@@ -1837,6 +1854,9 @@ nav button em,
   .severity,
   .risk,
   .badge,
+  .scope-row span,
+  .session-kind,
+  .tool-access,
   [class$="-badge"],
   [class$="-status"],
   [class$="-state"],
@@ -1844,6 +1864,7 @@ nav button em,
 ) {
   font-size: 12px !important;
   line-height: 1.4 !important;
+  letter-spacing: .02em !important;
 }
 
 :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select, button) {
