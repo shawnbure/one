@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { renderPrivacyArchitectureHtml, type PrivacyArchitectureReport } from "../src/privacy-report";
+import {
+  getPrivacyArchitectureReport,
+  renderPrivacyArchitectureHtml,
+  type PrivacyArchitectureReport
+} from "../src/privacy-report";
 
 const report: PrivacyArchitectureReport = {
   schema: "workrr-privacy-architecture/v1",
@@ -31,6 +35,31 @@ const report: PrivacyArchitectureReport = {
 };
 
 describe("privacy and architecture report", () => {
+  it("qualifies joined inbound-email columns so D1 can assemble the report", async () => {
+    const queries: string[] = [];
+    const statement = {
+      bind() { return statement; },
+      async first() { return { id: "tenant-1", name: "Example Operations" }; },
+      async all() { return { results: [] }; }
+    };
+    const env = {
+      DB: {
+        prepare(sql: string) {
+          queries.push(sql);
+          return statement;
+        }
+      },
+      ENVIRONMENT: "development",
+      ACCESS_TEAM_DOMAIN: "https://workrr-one.cloudflareaccess.com"
+    };
+
+    await getPrivacyArchitectureReport(env as never, "tenant-1", "auditor@example.com", []);
+
+    const emailQuery = queries.find((sql) => sql.includes("FROM inbound_email_routes r"));
+    expect(emailQuery).toContain("SELECT r.name, r.address, r.status, r.blueprint_id, b.execution_profile");
+    expect(emailQuery).toContain("r.allowed_sender_domains_json, r.last_received_at");
+  });
+
   it("renders every required customer handoff section as printable, escaped HTML", () => {
     const html = renderPrivacyArchitectureHtml(report);
     for (const heading of [

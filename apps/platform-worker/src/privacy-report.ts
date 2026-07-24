@@ -44,8 +44,8 @@ export async function getPrivacyArchitectureReport(env: Env, tenantId: string, g
       env.DB.prepare(`SELECT name, status, accepted_events_json, blueprint_id, last_received_at,
         CASE WHEN secret_binding IS NOT NULL THEN 1 ELSE 0 END signature_required
         FROM webhook_endpoints WHERE tenant_id=? ORDER BY name`).bind(tenantId).all<Row>(),
-      env.DB.prepare(`SELECT name, address, status, blueprint_id, execution_profile,
-        allowed_sender_domains_json, last_received_at
+      env.DB.prepare(`SELECT r.name, r.address, r.status, r.blueprint_id, b.execution_profile,
+        r.allowed_sender_domains_json, r.last_received_at
         FROM inbound_email_routes r JOIN agent_blueprints b
           ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
         WHERE r.tenant_id=? ORDER BY r.name`).bind(tenantId).all<Row>(),
