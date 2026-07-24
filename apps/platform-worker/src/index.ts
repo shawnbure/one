@@ -53,6 +53,7 @@ import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markTo
   processToolAction, retryToolAction } from "./tool-actions";
 import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
 import { addApprovalMessage, assignApproval, bulkAssignApprovals, type ApprovalMessageKind } from "./approval-collaboration";
+import { listApprovalWorkload } from "./approval-workload";
 import { escalateOverdueApprovals } from "./approval-sla";
 import { ApprovalProposalConflict, reviseApprovalProposal } from "./approval-proposals";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
@@ -1878,10 +1879,7 @@ app.patch("/api/approvals/:id/proposal", requireRoles("admin", "owner", "reviewe
 });
 
 app.get("/api/approval-assignees", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
-  const { results } = await c.env.DB.prepare(`SELECT id, email, display_name, role FROM tenant_members
-    WHERE tenant_id=? AND status='active' AND role IN ('admin','owner','operator','reviewer')
-    ORDER BY display_name`).bind(c.get("tenantId")).all();
-  return c.json({ data: results });
+  return c.json({ data: await listApprovalWorkload(c.env, c.get("tenantId")) });
 });
 
 app.post("/api/approvals/:id/messages",

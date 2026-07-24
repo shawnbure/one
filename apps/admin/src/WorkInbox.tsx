@@ -31,6 +31,12 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
   const [bulkReason, setBulkReason] = useState("");
   const [busy, setBusy] = useState(false);
   const filtered = useMemo(() => items.filter((item) => filter === "all" || (filter === "pending" ? item.status === "pending" : item.status !== "pending")), [items, filter]);
+  const leastLoaded = useMemo(() => [...assignees].sort((a, b) =>
+    a.overdue_count - b.overdue_count ||
+    a.pending_count - b.pending_count ||
+    a.due_soon_count - b.due_soon_count ||
+    a.delegated - b.delegated ||
+    a.effective_display_name.localeCompare(b.effective_display_name))[0] ?? null, [assignees]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -223,11 +229,11 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
         </div>}
         {detail.status === "pending" && canAssign(session) && <div className="assignment-control">
           <label htmlFor="approval-assignee">Responsible reviewer</label>
-          <select id="approval-assignee" disabled={busy} value={detail.assigned_to ?? ""}
+          <select id="approval-assignee" disabled={busy} value={assignmentValue(detail.assigned_to, assignees)}
             onChange={(event) => void assign(event.target.value)}>
             <option value="">Choose an active reviewer…</option>
             {assignees.map((member) => <option key={member.id} value={member.email}>
-              {member.display_name} · {member.role}
+              {assigneeLabel(member)}
             </option>)}
           </select>
           {session && detail.assigned_to !== session.user.email &&
@@ -294,19 +300,35 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
             <button disabled={!items.some((item) => item.status === "pending" && item.overdue)}
               onClick={selectOverdue}>Select overdue</button>
             {selectedApprovals.length > 0 && <button onClick={() => setSelectedApprovals([])}>Clear</button>}</span></header>
+        {assignees.length > 0 && <div className="reviewer-capacity" aria-label="Reviewer workload">
+          <div><strong>Reviewer capacity</strong><small>Pending load is calculated only when this inbox opens.</small></div>
+          <div>{assignees.slice(0, 8).map((member) => <button key={member.id}
+            className={bulkAssignee === member.email ? "selected" : ""}
+            onClick={() => setBulkAssignee(member.email)}>
+            <span><strong>{member.effective_display_name}</strong>
+              <small>{member.delegated ? `Covering for ${member.display_name}` : member.effective_role}</small></span>
+            <span><b>{member.pending_count}</b> pending
+              {member.overdue_count > 0 && <em>{member.overdue_count} overdue</em>}
+              {member.due_soon_count > 0 && <small>{member.due_soon_count} due soon</small>}</span>
+          </button>)}</div>
+        </div>}
         {selectedApprovals.length > 0 && <div className="bulk-approval-form">
           <label>Responsible reviewer<select disabled={busy} value={bulkAssignee}
             onChange={(event) => setBulkAssignee(event.target.value)}>
             <option value="">Choose an active reviewer…</option>
             {assignees.map((member) => <option key={member.id} value={member.email}>
-              {member.display_name} · {member.role}
+              {assigneeLabel(member)}
             </option>)}
           </select></label>
           <label>Operational reason<textarea maxLength={500} value={bulkReason}
             placeholder="Why should these waiting reviews move together?"
             onChange={(event) => setBulkReason(event.target.value)}/></label>
-          <button disabled={busy || !bulkAssignee || bulkReason.trim().length < 10}
-            onClick={() => void bulkAssign()}>{busy ? "Assigning…" : `Assign ${selectedApprovals.length} review${selectedApprovals.length === 1 ? "" : "s"}`}</button>
+          <div className="bulk-approval-actions">
+            {leastLoaded && bulkAssignee !== leastLoaded.email && <button disabled={busy}
+              onClick={() => setBulkAssignee(leastLoaded.email)}>Use lowest load</button>}
+            <button disabled={busy || !bulkAssignee || bulkReason.trim().length < 10}
+              onClick={() => void bulkAssign()}>{busy ? "Assigning…" : `Assign ${selectedApprovals.length} review${selectedApprovals.length === 1 ? "" : "s"}`}</button>
+          </div>
         </div>}
       </section>}
     <div className="work-list panel">{filtered.length ? filtered.map((item) => <article key={item.id}
@@ -377,4 +399,21 @@ function formatAge(minutes = 0): string {
   if (minutes < 60) return `${minutes}m`;
   if (minutes < 1440) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   return `${Math.floor(minutes / 1440)}d ${Math.floor((minutes % 1440) / 60)}h`;
+}
+
+function assigneeLabel(member: ApprovalAssignee): string {
+  const load = `${member.pending_count} pending${member.overdue_count ? `, ${member.overdue_count} overdue` : ""}`;
+  return member.delegated
+    ? `${member.effective_display_name} covering for ${member.display_name} · ${load}`
+    : `${member.effective_display_name} · ${member.effective_role} · ${load}`;
+}
+
+function assignmentValue(assignedTo: string | null, assignees: ApprovalAssignee[]): string {
+  if (!assignedTo) return "";
+  const exact = assignees.find((member) => member.email.toLowerCase() === assignedTo.toLowerCase());
+  if (exact) return exact.email;
+  const effective = assignees.find((member) =>
+    !member.delegated && member.effective_email.toLowerCase() === assignedTo.toLowerCase())
+    ?? assignees.find((member) => member.effective_email.toLowerCase() === assignedTo.toLowerCase());
+  return effective?.email ?? "";
 }

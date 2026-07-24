@@ -163,6 +163,15 @@ export interface ApprovalAssignee {
   email: string;
   display_name: string;
   role: "admin" | "owner" | "operator" | "reviewer";
+  effective_id: string;
+  effective_email: string;
+  effective_display_name: string;
+  effective_role: "admin" | "owner" | "operator" | "reviewer";
+  delegated: number;
+  pending_count: number;
+  overdue_count: number;
+  due_soon_count: number;
+  oldest_minutes: number;
 }
 export interface ApprovalDelegation {
   tenant_id: string;

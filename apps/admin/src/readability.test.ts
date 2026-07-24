@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./readability.css", import.meta.url), "utf8");
 const wizardCss = readFileSync(new URL("./wizard-readability.css", import.meta.url), "utf8");
 const actorHealthCss = readFileSync(new URL("./actor-health.css", import.meta.url), "utf8");
+const bulkApprovalCss = readFileSync(new URL("./bulk-approvals.css", import.meta.url), "utf8");
 const contractStart = css.indexOf("Product-wide legibility contract");
 const contract = css.slice(contractStart);
 
@@ -57,6 +58,14 @@ describe("product readability contract", () => {
     expect(actorHealthCss).toContain("@media(max-width:800px)");
     expect(actorHealthCss).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
     expect(actorHealthCss).toContain(".actor-health>header>button{width:100%");
+  });
+
+  it("keeps reviewer capacity readable and stacked on mobile", () => {
+    expect(bulkApprovalCss).toContain(".reviewer-capacity");
+    expect(bulkApprovalCss).toContain("font-size:13px");
+    expect(bulkApprovalCss).toContain("@media(max-width:760px)");
+    expect(bulkApprovalCss).toContain(".reviewer-capacity>div:last-child{grid-template-columns:1fr}");
+    expect(bulkApprovalCss).toContain(".reviewer-capacity>div>button{min-height:52px}");
   });
 
   it("provides a compact mobile navigation state", () => {
