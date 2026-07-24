@@ -84,6 +84,8 @@ describe("product readability contract", () => {
     expect(visualPolishCss).toContain("--focus-ring:");
     expect(visualPolishCss).toContain(".shell > aside nav button");
     expect(visualPolishCss).toContain(".shell > main > header");
+    expect(visualPolishCss).toContain(".foundation-grid");
+    expect(visualPolishCss).toContain("grid-template-columns: minmax(0, 1fr)");
   });
 
   it("keeps the six-template creation wizard readable and scroll-safe", () => {

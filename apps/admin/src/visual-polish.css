@@ -392,4 +392,18 @@ button:focus-visible,
     grid-template-columns: 40px minmax(0, 1fr) 58px 18px;
     gap: 10px;
   }
+
+  /* Connection cards contain long provider labels and native selects. One
+     readable column prevents intrinsic control widths from clipping a card. */
+  .foundation-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .foundation-card,
+  .foundation-card input,
+  .foundation-card select,
+  .foundation-card textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
