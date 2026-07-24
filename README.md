@@ -38,7 +38,7 @@ Workrr is a Cloudflare-native private AI operations framework for mid-market org
 - Governed knowledge ingestion through R2 and tenant-namespaced Vectorize, including Cloudflare Workers AI conversion for PDF, Word, PowerPoint, Excel, HTML, and OpenDocument files. Only DLP-protected extracted text is retained; raw binary uploads are not stored.
 - D1 control-plane schema for tenants, memberships, blueprints, opportunity baselines, prompt releases, executions, approvals, webhooks, API logs, and audit events.
 - Cloudflare Queues with retries and a DLQ, Workflows with retryable durable steps, and bounded Cron dispatch for tenant-configured recurring processes.
-- Tenant-scoped Queue operations evidence with attempt counts, retry/dead-letter states, bounded retention, and audited safe replay from redacted execution input.
+- Tenant-scoped Queue operations evidence with attempt counts, retry/dead-letter states, bounded retention, recovery owner/SLA visibility, and audited safe replay from redacted execution input. A failed initial Queue handoff atomically fails the execution so it cannot remain invisibly queued and immediately enters accountable recovery.
 - Signed, idempotent webhook ingestion with a bounded request body and queue handoff.
 - HMAC-signed outbound webhook and delegated Microsoft 365 email notifications with destination validation, Queue retries, delivery testing, and persisted attempt evidence.
 - Tenant-scoped credential references whose values remain in Cloudflare secrets rather than D1, exports, logs, or browser bundles.

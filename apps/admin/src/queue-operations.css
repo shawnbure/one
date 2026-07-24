@@ -21,3 +21,28 @@
 .shadow-result small { color: var(--muted); }
 .shadow-result strong { line-height: 1.55; font-weight: 550; }
 .shadow-result footer, .shadow-readonly { color: var(--muted); font-size: .8rem; }
+
+.queue-recovery {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 24px minmax(180px, .7fr) minmax(260px, 1.3fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid #ead9b9;
+  border-radius: 8px;
+  background: #fff9ed;
+  color: #7d5d25;
+}
+.queue-recovery strong,
+.queue-recovery small { display: block; }
+.queue-recovery strong { color: #4b4435; font-size: 13px; }
+.queue-recovery small { margin-top: 2px; color: #735e39; font-size: 12px; }
+.queue-recovery p { margin: 0; color: #625844; font-size: 13px; line-height: 1.45; }
+
+@media (max-width: 620px) {
+  .queue-recovery { grid-template-columns: 24px minmax(0, 1fr); }
+  .queue-recovery p,
+  .queue-recovery > button { grid-column: 1 / -1; }
+  .queue-recovery > button { justify-self: stretch; justify-content: center; }
+}

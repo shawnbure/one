@@ -1,24 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { enqueueProcessJob, markQueueFailure, markQueueFinished, markQueueProcessing } from "../src/queue-operations";
+import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "../src/queue-operations";
 
 function environment(sendError?: Error) {
   const writes: Array<{ sql: string; bindings: unknown[] }> = [];
+  const queries: string[] = [];
   const sent: unknown[] = [];
   const DB = {
     prepare(sql: string) {
+      queries.push(sql);
       let bindings: unknown[] = [];
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; },
+        async all() { return { results: [] }; },
       };
       return statement;
     },
+    async batch(statements: Array<{ run(): Promise<unknown> }>) {
+      for (const statement of statements) await statement.run();
+      return [];
+    }
   };
   const PROCESS_QUEUE = { async send(job: unknown) {
     if (sendError) throw sendError;
     sent.push(job);
   } };
-  return { env: { DB, PROCESS_QUEUE } as never, writes, sent };
+  return { env: { DB, PROCESS_QUEUE } as never, writes, queries, sent };
 }
 
 const job = { blueprintId: "process-1", input: "safe input", executionId: "execution-1",
@@ -38,6 +45,9 @@ describe("Queue lifecycle evidence", () => {
     await expect(enqueueProcessJob(env, job, "api")).rejects.toThrow("Queue unavailable");
     expect(writes.some((write) => write.sql.includes("status = 'enqueue_failed'") &&
       write.bindings.includes("Queue unavailable"))).toBe(true);
+    expect(writes.some((write) => write.sql.includes("UPDATE executions SET status='failed'") &&
+      write.bindings.includes("Queue handoff failed before processing: Queue unavailable") &&
+      write.bindings.includes("tenant-1"))).toBe(true);
   });
 
   it("tracks processing, retry, terminal dead-letter, and completion states", async () => {
@@ -50,5 +60,13 @@ describe("Queue lifecycle evidence", () => {
     expect(writes.some((write) => write.bindings.includes("retrying"))).toBe(true);
     expect(writes.some((write) => write.bindings.includes("dead_lettered"))).toBe(true);
     expect(writes.some((write) => write.bindings.includes("completed"))).toBe(true);
+  });
+
+  it("keeps recovery ownership joins tenant scoped", async () => {
+    const { env, queries } = environment();
+    await getQueueOperations(env, "tenant-1");
+    const jobsQuery = queries.find((query) => query.includes("FROM process_queue_jobs q"));
+    expect(jobsQuery).toContain("rt.execution_id=q.execution_id AND rt.tenant_id=q.tenant_id");
+    expect(jobsQuery).toContain("rm.id=rt.assigned_to AND rm.tenant_id=rt.tenant_id");
   });
 });

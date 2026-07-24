@@ -507,6 +507,14 @@ export function ActivityView({ processes, session, onNotice }: Props) {
           <span>{["dead_lettered", "enqueue_failed"].includes(job.status) && Boolean(job.replayable) &&
             <button disabled={busy} onClick={() => void replayQueueJob(job.id)}><RefreshCw size={13}/>Replay safely</button>}</span>
           {job.last_error && <small className="queue-error">{job.last_error}</small>}
+          {["dead_lettered", "enqueue_failed"].includes(job.status) && <div className="queue-recovery">
+            <UserRoundCheck size={17}/><span><strong>{job.recovery_owner_name ?? "Recovery owner unassigned"}</strong>
+              <small>{job.recovery_status
+                ? `${job.recovery_status.replaceAll("_", " ")} · due ${formatDate(job.recovery_due_at!)}`
+                : "Recovery task is being established"}</small></span>
+            <p>Correct the Queue handoff condition, replay safely, then close recovery with a completed same-process run.</p>
+            <button onClick={() => setSelectedId(job.execution_id)}>Open recovery run</button>
+          </div>}
         </div>)}
         {!queue.jobs.length && <div className="queue-empty">No asynchronous process work has been dispatched yet.</div>}
       </article>

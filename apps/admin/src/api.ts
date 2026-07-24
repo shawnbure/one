@@ -353,7 +353,7 @@ export interface QueueOperation {
   execution_id: string;
   blueprint_id: string;
   process_name: string | null;
-  source: "api" | "webhook" | "schedule" | "replay";
+  source: "api" | "webhook" | "email" | "schedule" | "replay";
   status: "queued" | "processing" | "retrying" | "completed" | "deferred" | "dead_lettered" | "enqueue_failed";
   attempt_count: number;
   replayed_from: string | null;
@@ -363,6 +363,11 @@ export interface QueueOperation {
   completed_at: string | null;
   updated_at: string;
   replayable: number;
+  recovery_task_id: string | null;
+  recovery_status: "open" | "investigating" | "resolved" | "accepted_risk" | null;
+  recovery_due_at: string | null;
+  recovery_assigned_to: string | null;
+  recovery_owner_name: string | null;
 }
 export interface QueueOperationsData {
   summary: Array<{ status: QueueOperation["status"]; count: number }>;
