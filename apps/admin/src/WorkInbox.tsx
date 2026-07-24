@@ -50,8 +50,12 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
 
   useEffect(() => {
     if (!canAssign(session)) { setAssignees([]); return; }
-    void api.approvalAssignees().then((result) => setAssignees(result.data))
+    let active = true;
+    void api.approvalAssignees().then((result) => {
+      if (active) setAssignees(result.data);
+    })
       .catch((error: Error) => onNotice(error.message));
+    return () => { active = false; };
   }, [session?.user.role]);
 
   useEffect(() => {
@@ -63,6 +67,12 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
     if (!detail) return;
     const result = await api.approval(detail.id);
     setDetail(result.data); setAudit(result.audit); setActions(result.actions); setMessages(result.messages);
+  }
+
+  async function refreshAssigneeLoad() {
+    if (!canAssign(session)) return;
+    const result = await api.approvalAssignees();
+    setAssignees(result.data);
   }
 
   async function decide(decision: "approved" | "rejected") {
@@ -103,7 +113,7 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
     try {
       const result = await api.assignApproval(detail.id, assignedTo);
       onNotice(`Review assigned to ${result.displayName}.`);
-      await refreshDetail(); await onRefresh();
+      await Promise.all([refreshDetail(), onRefresh(), refreshAssigneeLoad()]);
     } catch (error) { onNotice(error instanceof Error ? error.message : "Assignment failed"); }
     finally { setBusy(false); }
   }
@@ -135,7 +145,7 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
       const changed = new Set(result.updatedIds);
       setSelectedApprovals((current) => current.filter((id) => !changed.has(id)));
       setBulkReason("");
-      await onRefresh();
+      await Promise.all([onRefresh(), refreshAssigneeLoad()]);
       onNotice(result.conflicts
         ? `${result.updated} review(s) assigned to ${result.displayName}; ${result.conflicts} changed and remain selected for review.`
         : `${result.updated} review(s) assigned to ${result.displayName} with individual audit evidence.`);
