@@ -391,6 +391,16 @@ export interface ProcessRelease {
   topology_json: string | null;
   data_classification: "public" | "internal" | "confidential" | "restricted";
 }
+export interface ProcessReleaseDiff {
+  from: { id: string; version: number; status: string; checksum: string } | null;
+  to: { id: string; version: number; status: string; checksum: string };
+  summary: { changedSections: number; additions: number; removals: number; modifications: number };
+  sections: Array<{
+    key: string; label: string;
+    changes: Array<{ kind: "added" | "removed" | "changed"; label: string;
+      before: string | null; after: string | null }>;
+  }>;
+}
 export interface AutonomySafetyData {
   state: {
     enabled: boolean;
@@ -1377,6 +1387,10 @@ export const api = {
   studio: (id: string) =>
     request<{ data: StudioData }>(
       `/api/processes/${encodeURIComponent(id)}/studio`,
+    ),
+  processReleaseDiff: (processId: string, releaseId: string) =>
+    request<{ data: ProcessReleaseDiff }>(
+      `/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/diff`,
     ),
   updateAutonomySafety: (id: string, body: {
     enabled: boolean; minTerminalRuns: number; successThreshold: number;

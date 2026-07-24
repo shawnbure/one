@@ -815,6 +815,8 @@ Draft → Validate → Test → Publish → Observe → Roll back.
 
 Validation checks references, schemas, permissions, cycles, missing secrets, model capabilities, prompt token budgets, and knowledge bindings. Publishing creates immutable versions. Rollback activates a prior release without deleting later history.
 
+Before publication or rollback, the control plane can derive a human-readable comparison from the target and currently active immutable rows. The comparison is tenant- and process-scoped and covers the exact prompt bundle, model, autonomy, classification, contracts, snapshotted tool policies, and bounded workflow topology. It is loaded on demand in Process Studio rather than added to release listing or runtime admission, keeping the review useful to non-developer owners without adding D1 reads to agent turns.
+
 ## 10. Repository structure
 
 ```text

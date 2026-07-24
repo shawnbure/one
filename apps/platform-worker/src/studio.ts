@@ -30,6 +30,67 @@ export interface BusinessTopologyStep {
   label: string;
 }
 
+export interface ProcessReleaseDiff {
+  from: { id: string; version: number; status: string; checksum: string } | null;
+  to: { id: string; version: number; status: string; checksum: string };
+  summary: { changedSections: number; additions: number; removals: number; modifications: number };
+  sections: Array<{
+    key: string;
+    label: string;
+    changes: Array<{ kind: "added" | "removed" | "changed"; label: string;
+      before: string | null; after: string | null }>;
+  }>;
+}
+
+export async function compareProcessRelease(
+  env: Env, tenantId: string, blueprintId: string, releaseId: string
+): Promise<ProcessReleaseDiff> {
+  const { results } = await env.DB.prepare(`SELECT r.id, r.version, r.status, r.checksum, r.model_profile,
+      r.model_id, r.autonomy, r.input_schema_json, r.output_schema_json, r.tool_policy_json,
+      r.topology_json, r.data_classification, p.system_prompt, p.instructions_json, p.guardrails_json
+    FROM process_releases r
+    JOIN prompt_releases p ON p.id=r.prompt_release_id AND p.blueprint_id=r.blueprint_id
+    WHERE r.tenant_id=? AND r.blueprint_id=? AND
+      (r.id=? OR r.id=(SELECT active_release_id FROM agent_blueprints WHERE tenant_id=? AND id=?))`)
+    .bind(tenantId, blueprintId, releaseId, tenantId, blueprintId).all<Record<string, unknown>>();
+  const target = results.find((row) => String(row.id) === releaseId);
+  if (!target) throw new Error("Process release not found");
+  const baseline = results.find((row) => String(row.id) !== releaseId) ?? null;
+  const sections = [
+    diffScalarSection("behavior", "Prompt and behavior", baseline, target, [
+      ["system_prompt", "System prompt", formatText],
+      ["instructions_json", "Instructions", formatStringList],
+      ["guardrails_json", "Guardrails", formatStringList]
+    ]),
+    diffScalarSection("model", "Model and autonomy", baseline, target, [
+      ["model_profile", "Model profile", formatText],
+      ["model_id", "Exact model", formatText],
+      ["autonomy", "Autonomy", formatText],
+      ["data_classification", "Data classification", formatText]
+    ]),
+    diffScalarSection("contracts", "Input and output contracts", baseline, target, [
+      ["input_schema_json", "Input contract", formatJson],
+      ["output_schema_json", "Output contract", formatJson]
+    ]),
+    diffNamedCollectionSection("tools", "Tools and permissions", baseline?.tool_policy_json,
+      target.tool_policy_json, "name", "Tool"),
+    diffNamedCollectionSection("workflow", "Business workflow", baseline?.topology_json,
+      target.topology_json, "id", "Step", "businessSteps")
+  ].filter((section) => section.changes.length > 0);
+  const changes = sections.flatMap((section) => section.changes);
+  return {
+    from: baseline ? releaseIdentity(baseline) : null,
+    to: releaseIdentity(target),
+    summary: {
+      changedSections: sections.length,
+      additions: changes.filter((change) => change.kind === "added").length,
+      removals: changes.filter((change) => change.kind === "removed").length,
+      modifications: changes.filter((change) => change.kind === "changed").length
+    },
+    sections
+  };
+}
+
 export async function getStudio(env: Env, tenantId: string, blueprintId: string) {
   const actorCohortCte = `WITH latest_execution AS (
       SELECT id execution_id, instance_key, process_release_id, started_at,
@@ -439,6 +500,105 @@ function topologyFromRelease(value: unknown, profile: string, autonomy: string, 
     }
   }
   return topologyFor(profile, autonomy, tools);
+}
+
+type DiffFormatter = (value: unknown) => string | null;
+type DiffRow = { kind: "added" | "removed" | "changed"; label: string;
+  before: string | null; after: string | null };
+
+function diffScalarSection(key: string, label: string,
+  before: Record<string, unknown> | null, after: Record<string, unknown>,
+  fields: Array<[string, string, DiffFormatter]>) {
+  const changes = fields.flatMap(([field, fieldLabel, format]) => {
+    const previous = before ? format(before[field]) : null;
+    const next = format(after[field]);
+    return diffValue(fieldLabel, previous, next);
+  });
+  return { key, label, changes };
+}
+
+function diffNamedCollectionSection(key: string, label: string, beforeValue: unknown, afterValue: unknown,
+  identityKey: string, itemLabel: string, nestedKey?: string) {
+  const before = parseNamedCollection(beforeValue, identityKey, nestedKey);
+  const after = parseNamedCollection(afterValue, identityKey, nestedKey);
+  const identities = [...new Set([...before.keys(), ...after.keys()])];
+  const changes = identities.flatMap((identity) => diffValue(
+    `${itemLabel}: ${collectionItemLabel(after.get(identity) ?? before.get(identity), identity)}`,
+    before.has(identity) ? boundedDisplay(JSON.stringify(before.get(identity), null, 2)) : null,
+    after.has(identity) ? boundedDisplay(JSON.stringify(after.get(identity), null, 2)) : null
+  ));
+  return { key, label, changes };
+}
+
+function parseNamedCollection(value: unknown, identityKey: string, nestedKey?: string) {
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    const collection = nestedKey && parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)[nestedKey] : parsed;
+    if (!Array.isArray(collection)) return new Map<string, Record<string, unknown>>();
+    return new Map(collection.flatMap((item, index) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      const identity = String(row[identityKey] ?? "").trim();
+      return identity ? [[identity, normalizeCollectionItem({ order: index + 1, ...row })] as const] : [];
+    }));
+  } catch {
+    return new Map<string, Record<string, unknown>>();
+  }
+}
+
+function normalizeCollectionItem(item: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(item).flatMap(([key, value]) => {
+    if (key === "id" && typeof item.name === "string") return [];
+    if (key === "connectionReady") return [[key, Boolean(value)]];
+    if (key.endsWith("SchemaJson") && typeof value === "string") {
+      try { return [[key.replace(/Json$/, ""), JSON.parse(value)]]; } catch { return [[key, value]]; }
+    }
+    return [[key, value]];
+  }).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function collectionItemLabel(item: Record<string, unknown> | undefined, fallback: string) {
+  return String(item?.name ?? item?.label ?? fallback).replaceAll("_", " ");
+}
+
+function diffValue(label: string, before: string | null, after: string | null): DiffRow[] {
+  if (before === after) return [];
+  return [{
+    kind: before == null ? "added" : after == null ? "removed" : "changed",
+    label, before, after
+  }];
+}
+
+function formatText(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text ? boundedDisplay(text) : null;
+}
+
+function formatStringList(value: unknown) {
+  const items = parseStringList(value);
+  return items.length ? boundedDisplay(items.map((item) => `• ${item}`).join("\n")) : null;
+}
+
+function formatJson(value: unknown) {
+  if (value == null || value === "") return null;
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return boundedDisplay(JSON.stringify(parsed, null, 2));
+  } catch {
+    return boundedDisplay(String(value));
+  }
+}
+
+function boundedDisplay(value: string) {
+  const limit = 4000;
+  return value.length <= limit ? value : `${value.slice(0, limit)}\n… [truncated; ${value.length} characters total]`;
+}
+
+function releaseIdentity(row: Record<string, unknown>) {
+  return {
+    id: String(row.id), version: Number(row.version), status: String(row.status), checksum: String(row.checksum)
+  };
 }
 
 async function sha256(value: string): Promise<string> {

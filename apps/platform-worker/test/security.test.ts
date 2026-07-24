@@ -505,6 +505,24 @@ describe("control-plane security boundary", () => {
     }
   });
 
+  it("keeps immutable release comparison readable to audit roles but out of consumer sessions", async () => {
+    const viewer = environment("viewer");
+    const readable = await app.fetch(new Request(
+      "http://localhost/api/processes/process-1/releases/release-2/diff",
+      { headers: { "x-workrr-user": "operator@example.com" } }
+    ), viewer.env as never, executionCtx as never);
+    expect(readable.status).toBe(404);
+    expect(viewer.queries.some((sql) => sql.includes("FROM process_releases r"))).toBe(true);
+
+    const consumer = environment("consumer");
+    const denied = await app.fetch(new Request(
+      "http://localhost/api/processes/process-1/releases/release-2/diff",
+      { headers: { "x-workrr-user": "operator@example.com" } }
+    ), consumer.env as never, executionCtx as never);
+    expect(denied.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("FROM process_releases r"))).toBe(false);
+  });
+
   it("keeps deployment-verification evidence out of consumer sessions", async () => {
     const consumer = environment("consumer");
     const response = await app.fetch(new Request("http://localhost/api/deployment-verification", {

@@ -34,7 +34,7 @@ import {
   type AgentBlueprint,
   type SupportedInferenceModel,
 } from "@workrr/contracts";
-import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type SolutionPack, type StudioData } from "./api";
+import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessReleaseDiff, type ProcessRetirementData, type ScheduleData, type SessionData, type SolutionPack, type StudioData } from "./api";
 import "./schedule-studio.css";
 import "./autonomy-safety.css";
 import "./launch-readiness.css";
@@ -255,6 +255,9 @@ function Studio({
   const [rollbackTarget, setRollbackTarget] = useState<ProcessRelease | null>(null);
   const [rollbackReason, setRollbackReason] = useState("");
   const [rollbackVersion, setRollbackVersion] = useState("");
+  const [releaseDiff, setReleaseDiff] = useState<ProcessReleaseDiff | null>(null);
+  const [releaseDiffTarget, setReleaseDiffTarget] = useState<string | null>(null);
+  const [releaseDiffLoading, setReleaseDiffLoading] = useState(false);
   const [rolloutPercentage, setRolloutPercentage] = useState(25);
   const [rolloutReason, setRolloutReason] = useState("");
   const [safetyForm, setSafetyForm] = useState({
@@ -413,6 +416,26 @@ function Studio({
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Could not roll back release");
     } finally { setBusy(false); }
+  }
+
+  async function reviewReleaseChanges(release: ProcessRelease) {
+    if (releaseDiffTarget === release.id) {
+      setReleaseDiffTarget(null);
+      setReleaseDiff(null);
+      return;
+    }
+    setReleaseDiffTarget(release.id);
+    setReleaseDiff(null);
+    setReleaseDiffLoading(true);
+    try {
+      const result = await api.processReleaseDiff(processId, release.id);
+      setReleaseDiff(result.data);
+    } catch (error) {
+      setReleaseDiffTarget(null);
+      onNotice(error instanceof Error ? error.message : "Release comparison could not load");
+    } finally {
+      setReleaseDiffLoading(false);
+    }
   }
 
   async function startActorRollout() {
@@ -1117,24 +1140,32 @@ function Studio({
                   <ShieldCheck size={12}/> Evaluation {release.evaluation_status.replaceAll("_", " ")}
                 </span>
               </span>
-              {release.status !== "published" && canActivate &&
-                (release.status === "draft" || release.evaluation_status === "passing") ? (
-                <button disabled={busy || (release.status === "draft" && !data.launchReadiness.ready)}
-                  title={release.status === "draft" && !data.launchReadiness.ready
-                    ? data.launchReadiness.blockers.join("; ") : undefined}
-                  onClick={() => release.status === "draft"
-                  ? void publish(release) : (setRollbackTarget(release), setRollbackReason(""), setRollbackVersion(""))}>
-                  {release.status === "draft" ? <Rocket size={14} /> : <History size={14} />}{" "}
-                  {release.status === "draft" ? "Publish" : "Restore"}
-                </button>
-              ) : (
-                <span className={`active-label ${release.status}`}>
-                  <Check size={14} />
-                  {release.status === "published" ? "Active" :
-                    release.status === "retired" && release.evaluation_status !== "passing"
-                      ? "Evaluation required" : "History"}
-                </span>
-              )}
+              <div className="release-actions">
+                {release.status !== "published" && <button className="review-release"
+                  onClick={() => void reviewReleaseChanges(release)}>
+                  <GitBranch size={14}/>{releaseDiffTarget === release.id ? "Close review" : "Review changes"}
+                </button>}
+                {release.status !== "published" && canActivate &&
+                  (release.status === "draft" || release.evaluation_status === "passing") ? (
+                  <button disabled={busy || (release.status === "draft" && !data.launchReadiness.ready)}
+                    title={release.status === "draft" && !data.launchReadiness.ready
+                      ? data.launchReadiness.blockers.join("; ") : undefined}
+                    onClick={() => release.status === "draft"
+                    ? void publish(release) : (setRollbackTarget(release), setRollbackReason(""), setRollbackVersion(""))}>
+                    {release.status === "draft" ? <Rocket size={14} /> : <History size={14} />}{" "}
+                    {release.status === "draft" ? "Publish" : "Restore"}
+                  </button>
+                ) : (
+                  <span className={`active-label ${release.status}`}>
+                    <Check size={14} />
+                    {release.status === "published" ? "Active" :
+                      release.status === "retired" && release.evaluation_status !== "passing"
+                        ? "Evaluation required" : "History"}
+                  </span>
+                )}
+              </div>
+              {releaseDiffTarget === release.id && <ReleaseDiffPanel
+                loading={releaseDiffLoading} diff={releaseDiff}/>}
               {rollbackTarget?.id === release.id && <div className="rollback-editor">
                 <header><div><strong>Restore release v{release.version}</strong>
                   <small>This immediately retires v{activeRelease?.version} and restores this exact immutable bundle.</small>
@@ -1168,6 +1199,42 @@ function Studio({
         onReload={load} onNotice={onNotice}/>}
     </section>
   );
+}
+
+function ReleaseDiffPanel({ loading, diff }: { loading: boolean; diff: ProcessReleaseDiff | null }) {
+  if (loading) return <section className="release-diff-panel" aria-live="polite">
+    <p>Comparing the immutable release bundles…</p>
+  </section>;
+  if (!diff) return null;
+  return <section className="release-diff-panel" aria-label={`Release v${diff.to.version} change review`}>
+    <header>
+      <div>
+        <span className="eyebrow">EFFECTIVE RELEASE DIFF</span>
+        <h3>{diff.from ? `Active v${diff.from.version} → candidate v${diff.to.version}` :
+          `Initial candidate v${diff.to.version}`}</h3>
+        <p>Derived on the server from immutable prompt, model, contract, tool-policy, and workflow evidence.</p>
+      </div>
+      <strong>{diff.summary.changedSections} section{diff.summary.changedSections === 1 ? "" : "s"} changed</strong>
+    </header>
+    <div className="release-diff-summary">
+      <span><strong>{diff.summary.additions}</strong><small>Added</small></span>
+      <span><strong>{diff.summary.modifications}</strong><small>Changed</small></span>
+      <span><strong>{diff.summary.removals}</strong><small>Removed</small></span>
+    </div>
+    {diff.sections.length ? <div className="release-diff-sections">{diff.sections.map((section) =>
+      <details key={section.key} open>
+        <summary><strong>{section.label}</strong><span>{section.changes.length} change{section.changes.length === 1 ? "" : "s"}</span></summary>
+        {section.changes.map((change) => <article key={`${section.key}-${change.label}`}>
+          <header><strong>{change.label}</strong><em className={change.kind}>{change.kind}</em></header>
+          <div className="release-diff-values">
+            {change.before != null && <section><small>BEFORE</small><pre>{change.before}</pre></section>}
+            {change.after != null && <section><small>AFTER</small><pre>{change.after}</pre></section>}
+          </div>
+        </article>)}
+      </details>)}</div> :
+      <p className="release-diff-empty"><Check size={15}/> No effective configuration change was detected.</p>}
+    <footer>Checksums: {diff.from?.checksum.slice(0, 12) ?? "no active release"} → {diff.to.checksum.slice(0, 12)}</footer>
+  </section>;
 }
 
 function compareSemver(left: string, right: string) {

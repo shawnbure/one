@@ -5,7 +5,7 @@ import { requireIdentity, requireRoles, requireSameOrigin, type AuthVariables } 
 import { assertAsyncExecutionAdmission, executeRequest, sanitizeAsyncExecutionInput } from "./execution";
 import { listBlueprints } from "./repository";
 import type { Env } from "./types";
-import { createDraftRelease, getStudio, publishRelease, rollbackRelease } from "./studio";
+import { compareProcessRelease, createDraftRelease, getStudio, publishRelease, rollbackRelease } from "./studio";
 import { getOverviewData } from "./overview";
 import { listApiLogs } from "./api-logs";
 import { createWebhookEndpoint, listWebhookReceipts, setWebhookEndpointStatus,
@@ -1102,6 +1102,20 @@ app.get("/api/processes/:id/studio",
   const studio = await getStudio(c.env, c.get("tenantId"), processId);
   return studio ? c.json({ data: studio }) : c.json({ error: "Process not found" }, 404);
 });
+
+app.get("/api/processes/:id/releases/:releaseId/diff",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+    try {
+      const processId = c.req.param("id");
+      const releaseId = c.req.param("releaseId");
+      if (!processId || !releaseId) return c.json({ error: "Process and release IDs are required" }, 400);
+      c.header("cache-control", "private, no-store");
+      return c.json({ data: await compareProcessRelease(c.env, c.get("tenantId"), processId, releaseId) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Release comparison could not load";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
 
 app.get("/api/processes/:id/autonomy-safety",
   requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {

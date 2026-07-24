@@ -49,6 +49,8 @@ The product is deliberately process-first. Agents are an execution primitive, no
 
 Process release activation is governed separately from release authoring. Publishing is restricted to a draft whose current evaluation gate passes. Rollback can restore only an immutable retired release with prior passing evaluation evidence; an owner or administrator must enter the exact version and a bounded operational reason. Workrr atomically retires the current release, restores the target prompt/model/autonomy bundle, and records immutable from/to activation evidence plus a metadata-only audit event. Process Studio exposes the activation timeline so an operator can verify what changed without Wrangler.
 
+Release review is now a first-class owner workflow rather than a collection of opaque checksums. An authorized operating or audit role can request an on-demand, tenant/process/release-scoped comparison of any draft or rollback target against the active immutable release. The server joins the exact prompt bundle and derives additions, removals, and modifications across prompt behavior, exact model and autonomy, classification, input/output contracts, typed tool policies, and ordered business workflow steps. Process Studio presents readable before/after evidence with bounded long-text output and source checksums; it does not add a comparison query to ordinary Studio loads or any agent execution path.
+
 ## Execution architecture
 
 Every process declares one execution profile:
