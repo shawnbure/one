@@ -205,7 +205,7 @@ select,
 
 /* Dense operational surfaces need the same floor as forms and navigation.
    These selectors intentionally override legacy prototype declarations in live.css. */
-aside {
+.shell > aside {
   overflow-y: auto;
 }
 
@@ -1046,15 +1046,15 @@ a:focus-visible {
   .tool-layout { grid-template-columns: 1fr; }
   .typed-tool-list { border-right: 0; border-bottom: 1px solid var(--line); }
   .shell { grid-template-columns: 220px 1fr; }
-  aside { width: 220px; }
+  .shell > aside { width: 220px; }
 }
 
 @media (max-width: 760px) {
   html, body { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .shell { display: block; }
-  aside { position: relative; width: auto; min-height: auto; padding: 14px 18px; }
-  aside .brand { padding: 0; }
-  aside .brand > div { min-width: 0; }
+  .shell > aside { position: relative; width: auto; min-height: auto; padding: 14px 18px; }
+  .shell > aside .brand { padding: 0; }
+  .shell > aside .brand > div { min-width: 0; }
   .mobile-nav-toggle {
     display: grid;
     position: absolute;
@@ -1071,15 +1071,15 @@ a:focus-visible {
     background: #15231e;
     color: #dbe9e3;
   }
-  aside:not(.mobile-open) > .workspace,
-  aside:not(.mobile-open) > nav,
-  aside:not(.mobile-open) > .aside-bottom { display: none; }
-  aside.mobile-open .workspace { margin: 16px 0 12px; }
-  aside.mobile-open nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  aside.mobile-open nav button { min-width: 0; white-space: normal; }
+  .shell > aside:not(.mobile-open) > .workspace,
+  .shell > aside:not(.mobile-open) > nav,
+  .shell > aside:not(.mobile-open) > .aside-bottom { display: none; }
+  .shell > aside.mobile-open .workspace { margin: 16px 0 12px; }
+  .shell > aside.mobile-open nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .shell > aside.mobile-open nav button { min-width: 0; white-space: normal; }
   .aside-bottom { margin-top: 16px; }
-  main { grid-column: auto; }
-  main > header { padding: 0 18px; }
+  .shell > main { grid-column: auto; }
+  .shell > main > header { padding: 0 18px; }
   .content { width: 100%; padding: 18px; overflow: hidden; }
   .content > * { min-width: 0; max-width: 100%; }
   .hero { align-items: stretch; flex-direction: column; gap: 16px; }
@@ -1092,7 +1092,7 @@ a:focus-visible {
   .process-row { min-width: 0; }
   .process-row { grid-template-columns: 39px minmax(0, 1fr) 58px 18px; }
   .process-copy { min-width: 0; }
-  main > header {
+  .shell > main > header {
     box-sizing: border-box;
     width: 100%;
     height: auto;
@@ -1102,9 +1102,9 @@ a:focus-visible {
     gap: 8px;
     padding: 10px 18px;
   }
-  main > header .crumb { width: 100%; }
-  main > header .header-actions { width: 100%; min-width: 0; }
-  main > header .search { width: auto; min-width: 0; flex: 1 1 auto; }
+  .shell > main > header .crumb { width: 100%; }
+  .shell > main > header .header-actions { width: 100%; min-width: 0; }
+  .shell > main > header .search { width: auto; min-width: 0; flex: 1 1 auto; }
   .activity-metrics { grid-template-columns: 1fr; }
   .runs-head,
   .run-row { grid-template-columns: minmax(0, 1fr) auto; }

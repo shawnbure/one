@@ -1,0 +1,395 @@
+/*
+ * Shared visual finish for the product shell and operational workspaces.
+ * Shell selectors stay direct-child scoped because individual workspaces use
+ * semantic headers and asides that must remain normal document content.
+ */
+:root {
+  --font-body: Inter, "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: Manrope, Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --surface: #fff;
+  --surface-subtle: #f6f8f6;
+  --canvas: #f3f6f3;
+  --ink: #16211d;
+  --muted: #63706a;
+  --line: #dce4df;
+  --line-strong: #cbd6d0;
+  --green: #17694d;
+  --green-hover: #11563e;
+  --focus-ring: rgb(31 122 91 / 22%);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-panel: 0 1px 2px rgb(15 29 23 / 4%), 0 8px 28px rgb(15 29 23 / 3.5%);
+}
+
+html {
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+
+body {
+  background: var(--canvas);
+  line-height: 1.45;
+}
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+h1,
+h2,
+h3,
+h4,
+.brand strong,
+.metrics article > strong,
+.process-stat strong {
+  font-family: var(--font-display);
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  overflow-wrap: anywhere;
+}
+
+svg {
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.shell {
+  grid-template-columns: 248px minmax(0, 1fr);
+  background: var(--canvas);
+}
+
+.shell > aside {
+  width: 248px;
+  padding: 22px 16px 18px;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.shell > aside .brand {
+  min-height: 42px;
+  padding: 0 10px 20px;
+}
+
+.shell > aside .brandmark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.shell > aside .brand strong {
+  font-size: 19px;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.shell > aside .workspace {
+  min-height: 58px;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+.shell > aside nav {
+  gap: 4px;
+}
+
+.shell > aside nav button,
+.shell > aside .aside-bottom > button {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  gap: 11px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.shell > aside nav button svg,
+.shell > aside .aside-bottom > button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.shell > main {
+  width: 100%;
+  min-width: 0;
+}
+
+.shell > main > header {
+  min-height: 70px;
+  height: 70px;
+  padding: 0 clamp(22px, 2.5vw, 38px);
+  gap: 20px;
+  background: rgb(249 251 249 / 92%);
+  border-color: var(--line);
+}
+
+.crumb {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0.085em;
+}
+
+.header-actions {
+  min-width: 0;
+  gap: 9px;
+}
+
+.search,
+.icon-button,
+.user {
+  min-height: 40px;
+  height: 40px;
+}
+
+.search {
+  width: min(230px, 26vw);
+  border-radius: var(--radius-sm);
+}
+
+.icon-button,
+.user {
+  width: 40px;
+  min-width: 40px;
+}
+
+.content {
+  width: 100%;
+  max-width: 1540px;
+  padding: clamp(24px, 2.6vw, 40px);
+}
+
+.hero,
+.page-title {
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.hero {
+  margin-bottom: 26px;
+}
+
+.hero h1,
+.page-title h1 {
+  margin-top: 7px;
+  font-size: clamp(27px, 2.1vw, 34px);
+  line-height: 1.14;
+  letter-spacing: -0.035em;
+}
+
+.hero p,
+.page-title p,
+.panel-head p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.eyebrow {
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+}
+
+.panel,
+.metrics article {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-head {
+  min-height: 68px;
+  padding: 18px 20px 15px;
+  gap: 16px;
+}
+
+.panel-head h2 {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.metrics {
+  gap: 14px;
+}
+
+.metrics article {
+  min-height: 128px;
+  padding: 18px;
+}
+
+.metrics small {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.metrics article > strong {
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.primary,
+.secondary,
+.quiet,
+.full-link,
+.approval-actions button {
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  line-height: 1.25;
+}
+
+.primary {
+  justify-content: center;
+  padding: 10px 16px;
+  background: var(--green);
+}
+
+.primary:hover {
+  background: var(--green-hover);
+}
+
+input,
+select,
+textarea {
+  color: var(--ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #82908a;
+  opacity: 1;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.filter {
+  min-height: 40px;
+  height: 40px;
+  margin-inline: 18px;
+  border-color: var(--line);
+}
+
+.process-row {
+  min-height: 72px;
+  grid-template-columns: 42px minmax(0, 1fr) 76px 20px;
+  gap: 12px;
+  padding: 14px 10px;
+}
+
+.process-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.process-copy,
+.process-copy > span:first-child {
+  min-width: 0;
+}
+
+.process-copy strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.process-copy small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.status,
+.tags i,
+.healthy,
+.count {
+  line-height: 1.25;
+}
+
+.status {
+  min-height: 20px;
+  padding: 3px 8px;
+  font-size: 9px;
+}
+
+.tags {
+  flex-wrap: wrap;
+}
+
+.tags i {
+  padding: 3px 7px;
+  font-size: 9px;
+}
+
+@media (max-width: 1200px) {
+  .shell {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .shell > aside {
+    width: 224px;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    display: block;
+  }
+
+  .shell > aside {
+    width: 100%;
+    padding: 13px 18px;
+  }
+
+  .shell > main > header {
+    min-height: 106px;
+    height: auto;
+    padding: 11px 18px;
+  }
+
+  .content {
+    padding: 20px 16px 28px;
+  }
+
+  .hero,
+  .page-title {
+    gap: 15px;
+  }
+
+  .hero h1,
+  .page-title h1 {
+    font-size: 28px;
+  }
+
+  .process-row {
+    grid-template-columns: 40px minmax(0, 1fr) 58px 18px;
+    gap: 10px;
+  }
+}

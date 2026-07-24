@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./readability.css", import.meta.url), "utf8");
+const shellCss = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const visualPolishCss = readFileSync(new URL("./visual-polish.css", import.meta.url), "utf8");
 const wizardCss = readFileSync(new URL("./wizard-readability.css", import.meta.url), "utf8");
 const actorHealthCss = readFileSync(new URL("./actor-health.css", import.meta.url), "utf8");
 const bulkApprovalCss = readFileSync(new URL("./bulk-approvals.css", import.meta.url), "utf8");
@@ -69,8 +71,19 @@ describe("product readability contract", () => {
   });
 
   it("provides a compact mobile navigation state", () => {
-    expect(css).toContain("aside:not(.mobile-open) > nav");
+    expect(css).toContain(".shell > aside:not(.mobile-open) > nav");
     expect(css).toContain(".mobile-nav-toggle");
+  });
+
+  it("scopes app chrome and applies one shared visual system", () => {
+    expect(shellCss).toContain(".shell > aside {");
+    expect(shellCss).toContain(".shell > main > header {");
+    expect(shellCss).not.toMatch(/^aside\s*\{/m);
+    expect(shellCss).not.toMatch(/^header\s*\{/m);
+    expect(visualPolishCss).toContain("--font-body:");
+    expect(visualPolishCss).toContain("--focus-ring:");
+    expect(visualPolishCss).toContain(".shell > aside nav button");
+    expect(visualPolishCss).toContain(".shell > main > header");
   });
 
   it("keeps the six-template creation wizard readable and scroll-safe", () => {
