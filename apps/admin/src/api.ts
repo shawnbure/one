@@ -333,6 +333,33 @@ export interface ActorLocalWork {
   tasks: ActorLocalTask[];
   schedules: Array<{ id: string; type: string; callback: string; time: number }>;
 }
+export interface ActorOperationalHealth {
+  observedAt: string;
+  executionProfile: string;
+  storage: "durable_object_sqlite";
+  compute: "ephemeral_worker_request";
+  durability: "durable_actor";
+  health: "healthy" | "attention" | "critical" | "awaiting_evidence";
+  releaseState: "current" | "update_available" | "unattributed";
+  bound: boolean;
+  turnCount: number;
+  lastActiveAt: string | null;
+  pinnedProcessReleaseId: string | null;
+  pinnedPromptReleaseId: string | null;
+  activeProcessReleaseId: string | null;
+  activeProcessVersion: number | null;
+  pinnedProcessVersion: number | null;
+  installedPromptBundles: number;
+  liveConnections: number;
+  memory: { active: number; quarantined: number; deleted: number };
+  facts: { proposed: number; active: number; retired: number; expiredActive: number };
+  localWork: {
+    queued: number; scheduled: number; running: number; completed: number;
+    cancelled: number; failed: number;
+  };
+  sdkSchedules: number;
+  attention: string[];
+}
 export interface RecoveryTask {
   id: string;
   execution_id: string;
@@ -365,7 +392,8 @@ export interface QueueOperation {
   blueprint_id: string;
   process_name: string | null;
   source: "api" | "webhook" | "email" | "schedule" | "replay";
-  status: "queued" | "processing" | "retrying" | "completed" | "deferred" | "dead_lettered" | "enqueue_failed";
+  status: "queued" | "processing" | "retrying" | "completed" | "deferred" | "dead_lettered" |
+    "enqueue_failed" | "cancelled";
   attempt_count: number;
   replayed_from: string | null;
   last_error: string | null;
@@ -1390,6 +1418,8 @@ export const api = {
     request<{ data: ExecutionMemory }>(`/api/executions/${encodeURIComponent(id)}/memory`),
   actorLocalWork: (id: string) =>
     request<{ data: ActorLocalWork }>(`/api/executions/${encodeURIComponent(id)}/actor-work`),
+  actorHealth: (id: string) =>
+    request<{ data: ActorOperationalHealth }>(`/api/executions/${encodeURIComponent(id)}/actor-health`),
   queueActorLocalWork: (id: string, label: string) =>
     request<{ data: { taskId: string; status: string } }>(
       `/api/executions/${encodeURIComponent(id)}/actor-work/queue`,

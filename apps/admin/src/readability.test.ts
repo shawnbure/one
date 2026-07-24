@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./readability.css", import.meta.url), "utf8");
 const wizardCss = readFileSync(new URL("./wizard-readability.css", import.meta.url), "utf8");
+const actorHealthCss = readFileSync(new URL("./actor-health.css", import.meta.url), "utf8");
 const contractStart = css.indexOf("Product-wide legibility contract");
 const contract = css.slice(contractStart);
 
@@ -48,6 +49,14 @@ describe("product readability contract", () => {
     expect(css).toContain(".portfolio-actions");
     expect(css).toContain(".connection-workspace-index");
     expect(css).toContain(".typed-tool-list article > .connection-state");
+  });
+
+  it("keeps durable actor health evidence readable without desktop-only columns", () => {
+    expect(actorHealthCss).toContain("font-size:14px");
+    expect(actorHealthCss).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
+    expect(actorHealthCss).toContain("@media(max-width:800px)");
+    expect(actorHealthCss).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
+    expect(actorHealthCss).toContain(".actor-health>header>button{width:100%");
   });
 
   it("provides a compact mobile navigation state", () => {

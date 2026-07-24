@@ -24,7 +24,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
-import { api, type ActorLocalWork, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
+import { api, type ActorLocalWork, type ActorOperationalHealth, type Approval, type AuditEvent, type Execution, type ExecutionKnowledgeCitation,
   type DurableActorFact, type ExecutionExplanation, type ExecutionMemory, type GovernedMemoryTurn,
   type QueueOperationsData, type RecoveryOperations, type RecoveryTask, type SessionData,
   type ShadowReview,
@@ -32,6 +32,7 @@ import { api, type ActorLocalWork, type Approval, type AuditEvent, type Executio
   type ToolInvocation } from "./api";
 import "./queue-operations.css";
 import "./durable-facts.css";
+import "./actor-health.css";
 
 interface Props {
   processes: AgentBlueprint[];
@@ -297,6 +298,8 @@ export function ActivityView({ processes, session, onNotice }: Props) {
               </section>}
               {shadowReview && <ShadowReviewPanel review={shadowReview} session={session}
                 onSaved={setShadowReview} onNotice={onNotice}/>}
+              {hasActorMemory(detail.execution_profile) &&
+                <ActorHealthPanel key={`health-${detail.id}`} executionId={detail.id} onNotice={onNotice}/>}
               {hasActorMemory(detail.execution_profile) && canGovernMemory(session) &&
                 <MemoryGovernance key={detail.id} executionId={detail.id} onNotice={onNotice}/>}
               {hasActorMemory(detail.execution_profile) &&
@@ -732,6 +735,52 @@ function RecoveryQueue({ data, runs, canManage, canAcceptRisk, busy, setBusy, on
     })}</div>
     {!data.tasks.length && <div className="queue-empty">No failed, blocked, or deferred execution requires recovery.</div>}
   </article>;
+}
+
+function ActorHealthPanel({ executionId, onNotice }: {
+  executionId: string; onNotice: (message: string) => void;
+}) {
+  const [health, setHealth] = useState<ActorOperationalHealth | null>(null);
+  const [loading, setLoading] = useState(false);
+  async function inspect() {
+    setLoading(true);
+    try { setHealth((await api.actorHealth(executionId)).data); }
+    catch (error) { onNotice(error instanceof Error ? error.message : "Actor health could not be inspected"); }
+    finally { setLoading(false); }
+  }
+  return <section className={`actor-health ${health?.health ?? "uninspected"}`}>
+    <header><span><Activity size={20}/></span><div><small>DURABLE ACTOR HEALTH</small>
+      <h2>{health ? actorHealthTitle(health.health) : "Inspect this durable actor"}</h2>
+      <p>Reads identity, release, memory, schedules, and local work directly from this actor’s SQLite state.</p>
+    </div><button disabled={loading} onClick={() => void inspect()}>
+      <RefreshCw size={14}/>{loading ? "Inspecting…" : health ? "Refresh" : "Inspect actor"}
+    </button></header>
+    {health && <><div className="actor-health-facts">
+      <span><small>LAST ACTIVE</small><strong>{health.lastActiveAt ? formatDate(health.lastActiveAt) : "No run evidence"}</strong></span>
+      <span><small>RELEASE</small><strong>{health.releaseState === "current"
+        ? `Current · v${health.activeProcessVersion ?? "?"}`
+        : health.releaseState === "update_available"
+          ? `Update available · v${health.pinnedProcessVersion ?? "?"} → v${health.activeProcessVersion ?? "?"}`
+          : "Unattributed"}</strong></span>
+      <span><small>MEMORY</small><strong>{health.memory.active} active turns · {health.facts.active} approved facts</strong></span>
+      <span><small>LOCAL WORK</small><strong>{health.localWork.running + health.localWork.queued + health.localWork.scheduled} active · {health.localWork.failed} failed</strong></span>
+      <span><small>SDK SCHEDULES</small><strong>{health.sdkSchedules}</strong></span>
+      <span><small>LIVE CLIENTS</small><strong>{health.liveConnections}</strong></span>
+    </div>
+    {health.attention.length > 0 && <div className="actor-health-attention">{health.attention.map((item) =>
+      <span key={item}><AlertTriangle size={14}/>{item}</span>)}</div>}
+    <footer><span>Durable state survives Worker and Durable Object eviction.</span>
+      <span>Inspection wakes this one known actor only; it does not scan Durable Objects or add a normal-turn D1 read.</span>
+      <span>Live clients count direct Agent WebSockets; API-routed actors commonly show zero.</span>
+      <em>Observed {formatDate(health.observedAt)}</em></footer></>}
+  </section>;
+}
+
+function actorHealthTitle(health: ActorOperationalHealth["health"]) {
+  if (health === "healthy") return "Actor state is healthy";
+  if (health === "critical") return "Actor needs operator attention";
+  if (health === "attention") return "Actor has reviewable attention";
+  return "Actor is ready and awaiting run evidence";
 }
 
 function MemoryGovernance({ executionId, onNotice }: {

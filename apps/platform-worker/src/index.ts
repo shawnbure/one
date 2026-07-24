@@ -43,6 +43,7 @@ import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedule
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
 import { acknowledgeCancelledQueueJob, cancelQueuedExecution,
   ExecutionCancellationConflict } from "./execution-cancellation";
+import { inspectExecutionActorHealth } from "./actor-health";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
   queryKnowledge, queueKnowledgeReindex, reviewKnowledgeSource, expireKnowledgeSources } from "./knowledge";
 import { ContractViolationError, isContractViolation } from "./contracts";
@@ -1408,6 +1409,20 @@ app.get("/api/executions/:id/actor-work",
       return c.json({ data: result });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Actor-local work could not be loaded";
+      return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+    }
+  });
+
+app.get("/api/executions/:id/actor-health",
+  requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {
+    try {
+      const executionId = c.req.param("id");
+      if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+      const result = await inspectExecutionActorHealth(c.env, c.get("tenantId"), executionId);
+      c.header("cache-control", "no-store");
+      return c.json({ data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Actor health could not be inspected";
       return c.json({ error: message }, message.includes("not found") ? 404 : 400);
     }
   });

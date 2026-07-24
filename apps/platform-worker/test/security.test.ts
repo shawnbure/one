@@ -96,6 +96,15 @@ describe("control-plane security boundary", () => {
     expect(viewer.queries.some((sql) => sql.includes("LEFT JOIN process_queue_jobs"))).toBe(false);
   });
 
+  it("prevents consumer identities from inspecting another durable actor", async () => {
+    const consumer = environment("consumer");
+    const response = await app.request("/api/executions/execution-1/actor-health", {
+      headers: { "x-workrr-user": "operator@example.com" },
+    }, consumer.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(consumer.queries.some((sql) => sql.includes("e.instance_key"))).toBe(false);
+  });
+
   it("maps an Access service-token common name to one active tenant principal", async () => {
     let bound: unknown[] = [];
     const DB = { prepare(sql: string) {

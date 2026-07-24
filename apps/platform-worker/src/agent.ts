@@ -59,6 +59,24 @@ export interface ActorLocalTask {
   completedAt: string | null;
 }
 
+export interface ActorOperationalSnapshot {
+  observedAt: string;
+  bound: boolean;
+  turnCount: number;
+  lastActiveAt: string | null;
+  pinnedProcessReleaseId: string | null;
+  pinnedPromptReleaseId: string | null;
+  installedPromptBundles: number;
+  liveConnections: number;
+  memory: { active: number; quarantined: number; deleted: number };
+  facts: { proposed: number; active: number; retired: number; expiredActive: number };
+  localWork: {
+    queued: number; scheduled: number; running: number; completed: number;
+    cancelled: number; failed: number;
+  };
+  sdkSchedules: number;
+}
+
 interface ActorLocalTaskPayload {
   taskId: string;
   tenantId: string;
@@ -337,6 +355,72 @@ export class ProcessAgent extends Agent<Env, AgentState> {
     })) };
   }
 
+  async inspectOperationalHealth(tenantId: string, blueprintId: string): Promise<ActorOperationalSnapshot> {
+    const bound = Boolean(this.state.tenantId && this.state.blueprintId);
+    if (bound) this.assertIdentity(tenantId, blueprintId);
+    if (!bound) {
+      return {
+        observedAt: new Date().toISOString(),
+        bound: false,
+        turnCount: 0,
+        lastActiveAt: null,
+        pinnedProcessReleaseId: null,
+        pinnedPromptReleaseId: null,
+        installedPromptBundles: 0,
+        liveConnections: 0,
+        memory: { active: 0, quarantined: 0, deleted: 0 },
+        facts: { proposed: 0, active: 0, retired: 0, expiredActive: 0 },
+        localWork: { queued: 0, scheduled: 0, running: 0, completed: 0, cancelled: 0, failed: 0 },
+        sdkSchedules: 0,
+      };
+    }
+    const [memory = {}, facts = {}, work = {}, promptBundles = {}] = [
+      this.sql<Record<string, number | null>>`SELECT
+        SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active,
+        SUM(CASE WHEN status='quarantined' THEN 1 ELSE 0 END) quarantined,
+        SUM(CASE WHEN status='deleted' THEN 1 ELSE 0 END) deleted
+        FROM governed_memory`[0],
+      this.sql<Record<string, number | null>>`SELECT
+        SUM(CASE WHEN status='proposed' THEN 1 ELSE 0 END) proposed,
+        SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active,
+        SUM(CASE WHEN status='retired' THEN 1 ELSE 0 END) retired,
+        SUM(CASE WHEN status='active' AND expires_at <= ${new Date().toISOString()} THEN 1 ELSE 0 END) expiredActive
+        FROM durable_fact`[0],
+      this.sql<Record<string, number | null>>`SELECT
+        SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) queued,
+        SUM(CASE WHEN status='scheduled' THEN 1 ELSE 0 END) scheduled,
+        SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) running,
+        SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) completed,
+        SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) cancelled,
+        SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed
+        FROM actor_local_work`[0],
+      this.sql<Record<string, number | null>>`SELECT COUNT(*) count FROM prompt_bundle`[0],
+    ];
+    const schedules = await this.listSchedules();
+    return {
+      observedAt: new Date().toISOString(),
+      bound,
+      turnCount: this.state.turnCount,
+      lastActiveAt: this.state.lastActiveAt,
+      pinnedProcessReleaseId: this.pinnedReleaseId(),
+      pinnedPromptReleaseId: this.pinnedPromptReleaseId(),
+      installedPromptBundles: count(promptBundles.count),
+      liveConnections: Array.from(this.getConnections()).length,
+      memory: {
+        active: count(memory.active), quarantined: count(memory.quarantined), deleted: count(memory.deleted),
+      },
+      facts: {
+        proposed: count(facts.proposed), active: count(facts.active), retired: count(facts.retired),
+        expiredActive: count(facts.expiredActive),
+      },
+      localWork: {
+        queued: count(work.queued), scheduled: count(work.scheduled), running: count(work.running),
+        completed: count(work.completed), cancelled: count(work.cancelled), failed: count(work.failed),
+      },
+      sdkSchedules: schedules.length,
+    };
+  }
+
   async cancelLocalSchedule(tenantId: string, blueprintId: string, scheduleId: string) {
     this.assertIdentity(tenantId, blueprintId);
     const task = this.sql<{ id: string; status: string }>`SELECT id, status FROM actor_local_work
@@ -490,6 +574,10 @@ export class ProcessAgent extends Agent<Env, AgentState> {
       throw new Error("Agent memory identity mismatch");
     }
   }
+}
+
+function count(value: number | null | undefined) {
+  return Number(value ?? 0);
 }
 
 export function boundedConversationContext(rows: MemoryRow[], maxTurns = 20, maxCharacters = 24_000) {
