@@ -490,6 +490,13 @@ export interface StudioData {
     blockers: string[];
   };
   autonomySafety: AutonomySafetyData;
+  actorIdentity: {
+    version: 1 | 2;
+    durable: boolean;
+    knownActors: number;
+    upgradeEligible: boolean;
+    blocker: string | null;
+  };
   actorAdoption: {
     supported: boolean;
     knownActors: number;
@@ -1422,6 +1429,10 @@ export const api = {
     targetVersion: number | null; percentage: number; eligibleActors: number; selectedActorCount: number } }>(
     `/api/processes/${encodeURIComponent(id)}/actor-release-rollouts`,
     { method: "POST", body: JSON.stringify(body) }),
+  upgradeActorIdentity: (id: string, body: { reason: string; confirmation: "UPGRADE ACTOR IDENTITY" }) =>
+    request<{ data: { changed: boolean; version: 2; reason: string } }>(
+      `/api/processes/${encodeURIComponent(id)}/actor-identity/upgrade`,
+      { method: "POST", body: JSON.stringify(body) }),
   rollbackRelease: (processId: string, releaseId: string, body: {
     reason: string; confirmVersion: number;
   }) => request<{ releaseId: string; previousReleaseId: string; version: number;

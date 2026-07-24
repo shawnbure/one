@@ -74,6 +74,7 @@ import { getDeploymentVerification } from "./deployment-verification";
 import { applyConfigurationRestore, ConfigurationRestoreConflict, exportConfigurationPackage,
   previewConfigurationRestore } from "./configuration-packages";
 import { createActorReleaseRollout, listActorReleaseRollouts } from "./actor-release-rollouts";
+import { upgradeActorIdentity } from "./actor-identity";
 import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
   setLaunchpadThreadArchived } from "./launchpad";
@@ -1173,6 +1174,25 @@ app.post("/api/processes/:id/actor-release-rollouts", requireRoles("admin", "own
     const message = error instanceof Error ? error.message : "Actor release rollout could not be started";
     return c.json({ error: message }, message.includes("already active") || message.includes("changed") ||
       message.includes("Confirm") ? 409 : 400);
+  }
+});
+
+app.post("/api/processes/:id/actor-identity/upgrade", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    if (!processId) return c.json({ error: "Process ID is required" }, 400);
+    const result = await upgradeActorIdentity(
+      c.env, c.get("tenantId"), processId, await c.req.json(),
+    );
+    if (result.changed) {
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "actor_identity.upgraded",
+        "process", processId, { version: result.version, reason: result.reason });
+    }
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Actor identity could not be upgraded";
+    return c.json({ error: message }, message.includes("not found") ? 404 :
+      message.includes("changed") || message.includes("Existing durable") ? 409 : 400);
   }
 });
 

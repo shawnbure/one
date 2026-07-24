@@ -71,6 +71,20 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("tenant_ai_gateway_settings"))).toBe(false);
   });
 
+  it("reserves durable actor identity upgrades for owners and administrators", async () => {
+    const viewer = environment("viewer");
+    const denied = await app.request("/api/processes/process-1/actor-identity/upgrade", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        reason: "No durable state exists for this paused process.",
+        confirmation: "UPGRADE ACTOR IDENTITY",
+      }),
+    }, viewer.env as never, executionCtx as never);
+    expect(denied.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("SET actor_identity_version=2"))).toBe(false);
+  });
+
   it("maps an Access service-token common name to one active tenant principal", async () => {
     let bound: unknown[] = [];
     const DB = { prepare(sql: string) {

@@ -261,6 +261,7 @@ function Studio({
   const [releaseReviewEvidence, setReleaseReviewEvidence] = useState("");
   const [rolloutPercentage, setRolloutPercentage] = useState(25);
   const [rolloutReason, setRolloutReason] = useState("");
+  const [identityUpgradeReason, setIdentityUpgradeReason] = useState("");
   const [safetyForm, setSafetyForm] = useState({
     enabled: true, minTerminalRuns: 5, successThreshold: 70, windowHours: 24
   });
@@ -470,6 +471,23 @@ function Studio({
       onNotice(`Queued ${result.data.selectedActorCount} actor migration${result.data.selectedActorCount === 1 ? "" : "s"} in a durable Workflow.`);
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Actor release rollout could not start");
+    } finally { setBusy(false); }
+  }
+
+  async function upgradeActorIdentity() {
+    setBusy(true);
+    try {
+      const result = await api.upgradeActorIdentity(processId, {
+        reason: identityUpgradeReason.trim(),
+        confirmation: "UPGRADE ACTOR IDENTITY",
+      });
+      setIdentityUpgradeReason("");
+      await load();
+      onNotice(result.data.changed
+        ? "Future durable actors now use tenant-scoped v2 identity."
+        : "Actor identity was already tenant-scoped.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Actor identity could not be upgraded");
     } finally { setBusy(false); }
   }
 
@@ -1078,6 +1096,20 @@ function Studio({
             <span className={data.actorAdoption.unattributedActors ? "risk" : ""}>
               <strong>{data.actorAdoption.unattributedActors}</strong><small>Unattributed</small></span>
           </div>
+          {data.actorIdentity.version === 1 && <section className="actor-identity-upgrade">
+            <div><strong>Legacy actor isolation</strong>
+              <p>{data.actorIdentity.blocker ??
+                "No durable actor evidence exists. Upgrade future actors to tenant-scoped v2 without moving memory."}</p>
+            </div>
+            {data.actorIdentity.upgradeEligible && canActivate && <>
+              <label>Operational reason<textarea maxLength={500} value={identityUpgradeReason}
+                placeholder="Why this process can safely adopt tenant-scoped actor identity"
+                onChange={(event) => setIdentityUpgradeReason(event.target.value)}/></label>
+              <button disabled={busy || identityUpgradeReason.trim().length < 10}
+                onClick={() => void upgradeActorIdentity()}>
+                <ShieldCheck size={14}/>{busy ? "Upgrading…" : "Upgrade actor isolation"}</button>
+            </>}
+          </section>}
           <div className="actor-cohorts">{data.actorAdoption.cohorts.map((cohort) =>
             <article className={cohort.state} key={cohort.release_id ?? "unattributed"}>
               <span><strong>{cohort.version ? `Release v${cohort.version}` : "Unattributed release"}</strong>

@@ -199,6 +199,9 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
   }) : null;
   const completedStats = runStats.results.find((item) =>
     String((item as Record<string, unknown>).status) === "completed") as Record<string, unknown> | undefined;
+  const knownActors = cohorts.reduce((sum, cohort) => sum + Number(cohort.actor_count), 0);
+  const durableProfile = !["instant", "workflow"].includes(String(row.execution_profile));
+  const identityVersion = Number(row.actor_identity_version ?? 1) === 2 ? 2 : 1;
   return {
     blueprint,
     solutionPackProvenance,
@@ -206,9 +209,21 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     prompt,
     releases: releases.results, activations: activations.results,
     runStats: runStats.results,
+    actorIdentity: {
+      version: identityVersion,
+      durable: durableProfile,
+      knownActors,
+      upgradeEligible: durableProfile && identityVersion === 1 && knownActors === 0 &&
+        String(row.operating_mode) === "paused",
+      blocker: !durableProfile ? "This execution profile has no Durable Agent identity."
+        : identityVersion === 2 ? "Actor identity is already tenant-scoped."
+          : knownActors > 0 ? "Existing durable actor evidence must remain on its current identity."
+            : String(row.operating_mode) !== "paused" ? "Pause the process before upgrading actor identity."
+              : null
+    },
     actorAdoption: {
-      supported: !["instant", "workflow"].includes(String(row.execution_profile)),
-      knownActors: cohorts.reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
+      supported: durableProfile,
+      knownActors,
       currentActors: cohorts.filter((cohort) => cohort.state === "current")
         .reduce((sum, cohort) => sum + Number(cohort.actor_count), 0),
       pinnedPreviousActors: cohorts.filter((cohort) => cohort.state === "pinned_previous")
