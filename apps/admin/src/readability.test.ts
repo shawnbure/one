@@ -6,6 +6,7 @@ const css = readFileSync(new URL("./readability.css", import.meta.url), "utf8");
 const shellCss = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 const visualPolishCss = readFileSync(new URL("./visual-polish.css", import.meta.url), "utf8");
 const activityPolishCss = readFileSync(new URL("./activity-polish.css", import.meta.url), "utf8");
+const settingsCss = readFileSync(new URL("./settings-view.css", import.meta.url), "utf8");
 const wizardCss = readFileSync(new URL("./wizard-readability.css", import.meta.url), "utf8");
 const actorHealthCss = readFileSync(new URL("./actor-health.css", import.meta.url), "utf8");
 const bulkApprovalCss = readFileSync(new URL("./bulk-approvals.css", import.meta.url), "utf8");
@@ -69,6 +70,12 @@ describe("product readability contract", () => {
     expect(activityPolishCss).toContain(".activity-page .section-head .eyebrow svg");
     expect(activityPolishCss).toContain("font-size: 18px");
     expect(activityPolishCss).toContain("padding: 22px 24px");
+  });
+
+  it("keeps the Settings hub readable and responsive", () => {
+    expect(settingsCss).toContain(".settings-module-grid");
+    expect(settingsCss).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(settingsCss).toContain("@media (max-width: 800px)");
   });
 
   it("keeps reviewer capacity readable and stacked on mobile", () => {

@@ -41,6 +41,7 @@ import {
   Lightbulb,
   BookOpen,
   Menu,
+  type LucideIcon,
 } from "lucide-react";
 import type { AgentBlueprint } from "@workrr/contracts";
 import {
@@ -129,6 +130,11 @@ const HelpCenterView = lazy(() =>
 const ProcessLaunchpadView = lazy(() =>
   import("./ProcessLaunchpadView").then(({ ProcessLaunchpadView }) => ({
     default: ProcessLaunchpadView,
+  })),
+);
+const SettingsView = lazy(() =>
+  import("./SettingsView").then(({ SettingsView }) => ({
+    default: SettingsView,
   })),
 );
 
@@ -225,22 +231,32 @@ const previewProcesses: AgentBlueprint[] = [
   },
 ];
 
-const nav = [
-  ["Overview", CircleGauge],
-  ["Launchpad", Sparkles],
-  ["Work inbox", Inbox],
-  ["Processes", Workflow],
-  ["Opportunities", Lightbulb],
-  ["Activity", Activity],
-  ["API logs", Code2],
-  ["Connections", Boxes],
-  ["Knowledge", Database],
-  ["Evaluations", FileCheck2],
-  ["Governance", ShieldCheck],
-  ["Notifications", Bell],
-  ["Value & decisions", TrendingUp],
-  ["Usage & budgets", CircleDollarSign],
-] as const;
+type NavItem = readonly [string, LucideIcon];
+const navGroups: ReadonlyArray<{ label: string; items: readonly NavItem[] }> = [
+  { label: "Work", items: [
+    ["Overview", CircleGauge],
+    ["Launchpad", Sparkles],
+    ["Work inbox", Inbox],
+  ] },
+  { label: "Build", items: [
+    ["Opportunities", Lightbulb],
+    ["Processes", Workflow],
+    ["Knowledge", Database],
+    ["Connections", Boxes],
+    ["Evaluations", FileCheck2],
+  ] },
+  { label: "Operate", items: [
+    ["Activity", Activity],
+    ["API logs", Code2],
+    ["Notifications", Bell],
+  ] },
+  { label: "Govern", items: [
+    ["Governance", ShieldCheck],
+    ["Value & decisions", TrendingUp],
+    ["Usage & budgets", CircleDollarSign],
+  ] },
+];
+const nav = navGroups.flatMap((group) => group.items);
 
 const workspaceSearch: Record<string, { description: string; keywords: string[] }> = {
   Overview: { description: "Operational health, value, and work requiring attention", keywords: ["home", "health", "value"] },
@@ -311,6 +327,7 @@ export function App() {
   const visibleNav = consumerView
     ? nav.filter(([label]) => label === "Overview" || label === "Launchpad")
     : nav;
+  const visibleNavLabels = new Set(visibleNav.map(([label]) => label));
   const commandItems = useMemo<CommandSearchItem[]>(() => {
     const workspaceLabels = authorizedWorkspaceLabels(consumerView);
     const workspaces = workspaceLabels.map((label) => ({
@@ -513,24 +530,30 @@ export function App() {
           <ChevronDown size={15} />
         </div>
         <nav aria-label="Primary">
-          {visibleNav.map(([label, Icon]) => (
-            <button
-              key={label}
-              className={active === label ? "active" : ""}
-              onClick={() => {
-                setActive(label);
-                setMobileNavOpen(false);
-                if (label === "Processes") setStudioProcessId(null);
-              }}
-            >
-              <Icon size={18} />
-              {label}
-              {label === "Work inbox" &&
-                (overview?.pendingApprovals ?? 0) > 0 && (
-                  <em>{overview?.pendingApprovals}</em>
-                )}
-            </button>
-          ))}
+          {navGroups.map((group) => {
+            const items = group.items.filter(([label]) => visibleNavLabels.has(label));
+            return items.length ? <div className="nav-group" key={group.label}>
+              <span className="nav-group-label">{group.label}</span>
+              {items.map(([label, Icon]) => (
+                <button
+                  key={label}
+                  className={active === label ? "active" : ""}
+                  onClick={() => {
+                    setActive(label);
+                    setMobileNavOpen(false);
+                    if (label === "Processes") setStudioProcessId(null);
+                  }}
+                >
+                  <Icon size={18} />
+                  {label}
+                  {label === "Work inbox" &&
+                    (overview?.pendingApprovals ?? 0) > 0 && (
+                      <em>{overview?.pendingApprovals}</em>
+                    )}
+                </button>
+              ))}
+            </div> : null;
+          })}
         </nav>
         <div className="aside-bottom">
           <div className="private">
@@ -541,7 +564,8 @@ export function App() {
             </div>
           </div>
           {!consumerView && <>
-            <button onClick={() => { setActive("Governance"); setMobileNavOpen(false); }}>
+            <span className="nav-group-label administration-label">Administration</span>
+            <button onClick={() => { setActive("Settings"); setMobileNavOpen(false); }}>
               <Settings2 size={17} />
               Settings
             </button>
@@ -608,6 +632,8 @@ export function App() {
               focused={focusedLaunchpad}
               onNotice={setNotice}
             />
+          ) : active === "Settings" ? (
+            <SettingsView onNavigate={setActive} />
           ) : active === "Usage & budgets" ? (
             <UsageView session={session} onNotice={setNotice} />
           ) : active === "Value & decisions" ? (

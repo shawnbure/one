@@ -1076,6 +1076,8 @@ a:focus-visible {
   .shell > aside:not(.mobile-open) > .aside-bottom { display: none; }
   .shell > aside.mobile-open .workspace { margin: 16px 0 12px; }
   .shell > aside.mobile-open nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .shell > aside.mobile-open nav { align-items: start; }
+  .shell > aside.mobile-open nav .nav-group { min-width: 0; }
   .shell > aside.mobile-open nav button { min-width: 0; white-space: normal; }
   .aside-bottom { margin-top: 16px; }
   .shell > main { grid-column: auto; }
