@@ -60,9 +60,11 @@ describe("Process Studio durable actor adoption", () => {
       supported: true, knownActors: 7, currentActors: 4, pinnedPreviousActors: 2, unattributedActors: 1
     });
     expect(studio?.actorAdoption.actors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ instance_key: "process-1:thread:one", state: "current" }),
-      expect.objectContaining({ instance_key: "process-1:thread:two", state: "pinned_previous" })
+      expect.objectContaining({ actor_ref: "actor-executioncur", actor_type: "conversation",
+        actor_isolation: "legacy_guarded_v1", state: "current" }),
+      expect.objectContaining({ actor_ref: "actor-executionpin", state: "pinned_previous" })
     ]));
+    expect(JSON.stringify(studio?.actorAdoption.actors)).not.toContain("process-1:thread");
     expect(studio?.launchReadiness).toMatchObject({
       ready: true, baselineConfigured: true, targetConfigured: true, targetCurrent: true
     });

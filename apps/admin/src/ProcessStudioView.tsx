@@ -1152,8 +1152,9 @@ function Studio({
           {data.actorAdoption.actors.length > 0 && <details className="actor-inventory">
             <summary>Inspect {data.actorAdoption.actors.length} recent actor identities</summary>
             <div><header><span>Actor identity</span><span>Release</span><span>State</span><span>Last evidence</span></header>
-              {data.actorAdoption.actors.map((actor) => <article key={actor.instance_key}>
-                <span><strong>{actorIdentityLabel(actor.instance_key)}</strong><small>{actor.instance_key}</small></span>
+              {data.actorAdoption.actors.map((actor) => <article key={actor.execution_id}>
+                <span><strong>{actor.actor_type.replaceAll("_", " ")} actor</strong>
+                  <small>{actor.actor_ref} · {actor.actor_isolation.replaceAll("_", " ")}</small></span>
                 <span>v{actor.version ?? "?"}</span><em className={actor.state}>{actor.state.replaceAll("_", " ")}</em>
                 <span>{actor.migrated_at ?? actor.last_active_at}</span>
               </article>)}</div>
@@ -1604,13 +1605,6 @@ function toolPolicyCount(value: string | null | undefined) {
   if (!value) return 0;
   try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.length : 0; }
   catch { return 0; }
-}
-function actorIdentityLabel(instanceKey: string) {
-  const marker = [":thread:", ":consumer:", ":entity:", ":shard:", ":temporary:"]
-    .find((candidate) => instanceKey.includes(candidate));
-  if (!marker) return "Durable actor";
-  const identity = instanceKey.split(marker)[1];
-  return `${marker.slice(1, -1).replace("_", " ")} · ${identity || "unknown"}`;
 }
 const exampleInputSchema = {
   type: "object",

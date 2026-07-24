@@ -4,6 +4,12 @@ import type {
   ExecutionResult,
 } from "@workrr/contracts";
 
+export type PublicExecutionResult = Omit<ExecutionResult, "instanceKey"> & {
+  actorRef: string | null;
+  actorType: string | null;
+  actorIsolation: "tenant_scoped_v2" | "legacy_guarded_v1" | null;
+};
+
 export interface OverviewData {
   activeProcesses: number;
   pendingApprovals: number;
@@ -207,7 +213,9 @@ export interface Execution {
   id: string;
   blueprint_id: string;
   blueprint_name?: string;
-  instance_key: string | null;
+  actor_ref: string | null;
+  actor_type: string | null;
+  actor_isolation: "tenant_scoped_v2" | "legacy_guarded_v1" | null;
   execution_profile: string;
   status: string;
   input_preview: string;
@@ -509,7 +517,9 @@ export interface StudioData {
       state: "current" | "pinned_previous" | "unattributed";
     }>;
     actors: Array<{
-      execution_id: string; instance_key: string; effective_release_id: string | null;
+      execution_id: string; actor_ref: string; actor_type: string;
+      actor_isolation: "tenant_scoped_v2" | "legacy_guarded_v1";
+      effective_release_id: string | null;
       version: number | null; status: string | null; last_active_at: string;
       migrated_at: string | null; state: "current" | "pinned_previous" | "unattributed";
     }>;
@@ -1258,7 +1268,7 @@ export const api = {
       `/api/approvals/${encodeURIComponent(id)}`,
     ),
   execute: (body: ExecutionRequest) =>
-    request<ExecutionResult>("/api/execute", {
+    request<PublicExecutionResult>("/api/execute", {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -1276,12 +1286,12 @@ export const api = {
       `/api/launchpad/threads/${encodeURIComponent(threadId)}`,
     ),
   sendLaunchpadMessage: (threadId: string, input: string) =>
-    request<{ data: ExecutionResult }>(
+    request<{ data: PublicExecutionResult }>(
       `/api/launchpad/threads/${encodeURIComponent(threadId)}/messages`,
       { method: "POST", body: JSON.stringify({ input }) },
     ),
   runLaunchpadProcess: (blueprintId: string, input: string) =>
-    request<{ data: ExecutionResult }>(
+    request<{ data: PublicExecutionResult }>(
       `/api/launchpad/processes/${encodeURIComponent(blueprintId)}/run`,
       { method: "POST", body: JSON.stringify({ input }) },
     ),

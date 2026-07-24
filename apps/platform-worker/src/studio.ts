@@ -9,6 +9,7 @@ import { requireAiGatewaySetting } from "./ai-gateway";
 import { assertExternalModelAllowed, dataClassifications, normalizeDataClassification } from "./data-governance";
 import { analyzePromptBudget, assertPromptBudget } from "./prompt-budget";
 import { listSolutionPackHandoffChecks } from "./solution-pack-handoff";
+import { publicActorReference } from "./actor-reference";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -181,7 +182,16 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
   });
   const actors = recentActors.results.map((actor) => {
     const item = actor as Record<string, unknown>;
-    return { ...item, state: item.effective_release_id
+    const instanceKey = String(item.instance_key ?? "");
+    const publicActor = publicActorReference(
+      String(item.execution_id ?? ""),
+      String(row.execution_profile),
+      instanceKey,
+    );
+    const { instance_key: _instanceKey, ...publicItem } = item;
+    void _instanceKey;
+    return { ...publicItem, actor_ref: publicActor.actorRef, actor_type: publicActor.actorType,
+      actor_isolation: publicActor.actorIsolation, state: item.effective_release_id
       ? String(item.effective_release_id) === activeReleaseId ? "current" : "pinned_previous"
       : "unattributed" };
   });

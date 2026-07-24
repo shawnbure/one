@@ -75,6 +75,7 @@ import { applyConfigurationRestore, ConfigurationRestoreConflict, exportConfigur
   previewConfigurationRestore } from "./configuration-packages";
 import { createActorReleaseRollout, listActorReleaseRollouts } from "./actor-release-rollouts";
 import { upgradeActorIdentity } from "./actor-identity";
+import { publicExecutionResult, publicExecutionRow } from "./actor-reference";
 import { createLaunchpadThread, executeLaunchpadProcess, executeLaunchpadThread,
   getLaunchpadConversation, governConsumerExecutionRequest, listLaunchpadThreads,
   setLaunchpadThreadArchived } from "./launchpad";
@@ -1272,7 +1273,9 @@ app.get("/api/executions", requireRoles("admin", "builder", "owner", "operator",
     autonomy_level, autonomy_disposition, approval_id, inference_provider, gateway_id, gateway_step,
     gateway_cache_status, gateway_log_id
     FROM executions WHERE ${filters.join(" AND ")} ORDER BY started_at DESC LIMIT 100`).bind(...bindings).all();
-  return c.json({ data: results });
+  return c.json({ data: results.map((row) => publicExecutionRow(row as {
+    id: string; execution_profile: string; instance_key?: string | null;
+  })) });
 });
 
 app.get("/api/recovery", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) =>
@@ -1325,7 +1328,7 @@ app.get("/api/executions/:id", requireRoles("admin", "builder", "owner", "operat
   if (!evidence) return c.json({ error: "Execution not found" }, 404);
   const shadowReview = evidence.execution.autonomy_disposition === "shadowed"
     ? await getShadowReview(c.env, c.get("tenantId"), executionId) : null;
-  return c.json({ data: evidence.execution, approvals: evidence.approvals, audit: evidence.audit,
+  return c.json({ data: publicExecutionRow(evidence.execution), approvals: evidence.approvals, audit: evidence.audit,
     citations: evidence.citations, toolInvocations: evidence.toolInvocations, toolActions: evidence.toolActions,
     explanation: explainExecution(evidence), shadowReview });
 });
@@ -1522,7 +1525,7 @@ app.post("/api/executions/:id/retry", requireRoles("admin", "builder", "owner", 
   const result = await executeRequest(c.env, c.get("tenantId"), request);
   await c.env.DB.prepare("UPDATE executions SET retry_of = ? WHERE id = ?").bind(sourceId, result.executionId).run();
   await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "execution.retried", "execution", result.executionId, { sourceExecutionId: sourceId });
-  return c.json(result, 202);
+  return c.json(publicExecutionResult(result), 202);
 });
 
 app.get("/api/launchpad/threads", requireRoles("admin", "builder", "owner", "operator", "consumer"), async (c) => {
@@ -1571,7 +1574,7 @@ app.post("/api/launchpad/threads/:threadId/messages",
       );
       await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "launchpad.thread.executed",
         "process_thread", threadId, { executionId: data.executionId, status: data.status });
-      return c.json({ data }, 202);
+      return c.json({ data: publicExecutionResult(data) }, 202);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Conversation could not be executed";
       return c.json({ error: message }, isDlpBlocked(error) || isContractViolation(error) ? 422 :
@@ -1589,7 +1592,7 @@ app.post("/api/launchpad/processes/:blueprintId/run",
       );
       await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "launchpad.process.executed",
         "execution", data.executionId, { blueprintId, status: data.status });
-      return c.json({ data }, 202);
+      return c.json({ data: publicExecutionResult(data) }, 202);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Process could not be executed";
       return c.json({ error: message }, isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
@@ -1620,7 +1623,9 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
     if (c.get("role") === "consumer") {
       request = await governConsumerExecutionRequest(c.env, c.get("tenantId"), c.get("actorId"), request);
     }
-    return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
+    return c.json(publicExecutionResult(
+      await executeRequest(c.env, c.get("tenantId"), request),
+    ), 202);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Execution failed" },
       isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
@@ -1635,7 +1640,9 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
       request = await governConsumerExecutionRequest(c.env, c.get("tenantId"), c.get("actorId"), request);
     }
     const admission = await assertAsyncExecutionAdmission(c.env, c.get("tenantId"), request.blueprintId);
-    if (admission.deferred) return c.json(await executeRequest(c.env, c.get("tenantId"), request), 202);
+    if (admission.deferred) return c.json(publicExecutionResult(
+      await executeRequest(c.env, c.get("tenantId"), request),
+    ), 202);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Execution admission failed" }, 409);
   }

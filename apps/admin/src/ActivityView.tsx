@@ -345,12 +345,14 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                   ))}
                 </div>
               )}
-              {detail.instance_key && (
+              {detail.actor_ref && (
                 <div className="affinity-note">
                   <GitBranch size={16} />
                   <span>
                     <strong>Durable actor affinity</strong>
-                    <small>{detail.instance_key}</small>
+                    <small>{detail.actor_type?.replaceAll("_", " ")} · {detail.actor_ref} · {
+                      detail.actor_isolation?.replaceAll("_", " ")
+                    }</small>
                   </span>
                 </div>
               )}
@@ -368,10 +370,10 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                   detail={detail.prompt_release_id ?? "Current release"}
                   state="done"
                 />
-                {detail.instance_key && (
+                {detail.actor_ref && (
                   <TraceItem
                     title="Durable actor selected"
-                    detail={detail.instance_key}
+                    detail={`${detail.actor_type?.replaceAll("_", " ")} · ${detail.actor_ref}`}
                     state="done"
                   />
                 )}
