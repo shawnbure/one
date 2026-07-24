@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listSolutionPacks, resolveSolutionPack } from "../src/solution-pack-catalog";
+import { listSolutionPacks, resolveSolutionPack, resolveSolutionPackHandoffChecks } from "../src/solution-pack-catalog";
 
 describe("code-owned solution pack catalog", () => {
   it("exposes safe install metadata without prompt or credential content", () => {
@@ -35,5 +35,9 @@ describe("code-owned solution pack catalog", () => {
     const first = resolveSolutionPack("scheduled-reconciliation", "1.0.0");
     first.process.name = "Mutated";
     expect(resolveSolutionPack("scheduled-reconciliation", "1.0.0").process.name).not.toBe("Mutated");
+    const checks = resolveSolutionPackHandoffChecks("scheduled-reconciliation", "1.0.0");
+    expect(checks.length).toBeGreaterThanOrEqual(3);
+    checks[0] = "Mutated";
+    expect(resolveSolutionPackHandoffChecks("scheduled-reconciliation", "1.0.0")[0]).not.toBe("Mutated");
   });
 });

@@ -51,8 +51,9 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
 }
 
 export async function importProcessPackage(env: Env, tenantId: string, actorId: string, value: unknown,
-  provenance?: { packId: string; packVersion: string }) {
+  provenance?: { packId: string; packVersion: string; handoffChecks: string[] }) {
   const pkg = validateProcessPackage(value);
+  const installProvenance = provenance ? validateInstallProvenance(provenance) : null;
   const id = `${slug(pkg.process.name)}-${crypto.randomUUID().slice(0, 6)}`;
   const now = new Date().toISOString();
   await env.DB.prepare(`INSERT INTO agent_blueprints
@@ -102,15 +103,23 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
       dataClassification: pkg.process.dataClassification ?? "internal",
       topology: pkg.behavior.topology,
       releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
-    if (provenance) {
+    if (installProvenance) {
       await env.DB.prepare(`INSERT INTO process_solution_pack_provenance
         (blueprint_id, tenant_id, pack_id, pack_version, installed_by)
         VALUES (?, ?, ?, ?, ?)`)
-        .bind(id, tenantId, provenance.packId, provenance.packVersion, actorId).run();
+        .bind(id, tenantId, installProvenance.packId, installProvenance.packVersion, actorId).run();
+      for (const [index, description] of installProvenance.handoffChecks.entries()) {
+        await env.DB.prepare(`INSERT INTO process_solution_pack_handoff_checks
+          (id, tenant_id, blueprint_id, check_order, description)
+          VALUES (?, ?, ?, ?, ?)`)
+          .bind(`pack-check-${crypto.randomUUID()}`, tenantId, id, index + 1, description).run();
+      }
     }
     return { id, status: "draft", release, source: pkg.provenance ?? null };
   } catch (error) {
     await env.DB.prepare("DELETE FROM process_solution_pack_provenance WHERE blueprint_id = ? AND tenant_id = ?")
+      .bind(id, tenantId).run();
+    await env.DB.prepare("DELETE FROM process_solution_pack_handoff_checks WHERE blueprint_id = ? AND tenant_id = ?")
       .bind(id, tenantId).run();
     await env.DB.prepare(`DELETE FROM evaluation_cases WHERE tenant_id = ? AND scenario_id IN
       (SELECT id FROM evaluation_scenarios WHERE blueprint_id = ? AND tenant_id = ?)`).bind(tenantId, id, tenantId).run();
@@ -119,6 +128,18 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
     await env.DB.prepare("DELETE FROM agent_blueprints WHERE id = ? AND tenant_id = ?").bind(id, tenantId).run();
     throw error;
   }
+}
+
+function validateInstallProvenance(value: { packId: string; packVersion: string; handoffChecks: string[] }) {
+  const packId = value.packId.trim();
+  const packVersion = value.packVersion.trim();
+  if (!/^[a-z0-9][a-z0-9-]{2,79}$/.test(packId) || !/^\d+\.\d+\.\d+$/.test(packVersion) ||
+      !Array.isArray(value.handoffChecks) || value.handoffChecks.length < 1 || value.handoffChecks.length > 20) {
+    throw new Error("Solution pack installation provenance is invalid");
+  }
+  const handoffChecks = value.handoffChecks.map((item) => boundedText(item, 10, 500));
+  if (!handoffChecks.every(Boolean)) throw new Error("Solution pack handoff checks are invalid");
+  return { packId, packVersion, handoffChecks };
 }
 
 export function validateProcessPackage(value: unknown): PortableProcessPackage {

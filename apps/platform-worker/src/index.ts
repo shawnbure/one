@@ -87,7 +87,8 @@ import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector, disc
   discoverMcpTools, governMcpTool, listMcpConnectors } from "./mcp-connectors";
 import { checkMcpConnectorHealth } from "./mcp-connector-health";
 import { updateDataEgressPolicy } from "./data-governance";
-import { listSolutionPacks, resolveSolutionPack } from "./solution-pack-catalog";
+import { listSolutionPacks, resolveSolutionPack, resolveSolutionPackHandoffChecks } from "./solution-pack-catalog";
+import { SolutionPackHandoffConflict, updateSolutionPackHandoffCheck } from "./solution-pack-handoff";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -826,7 +827,8 @@ app.post("/api/solution-packs/:id/install", requireRoles("admin", "builder", "ow
     if (!id || !body.version) return c.json({ error: "Solution pack and version are required" }, 400);
     const result = await importProcessPackage(
       c.env, c.get("tenantId"), c.get("actorId"), resolveSolutionPack(id, body.version),
-      { packId: id, packVersion: body.version }
+      { packId: id, packVersion: body.version,
+        handoffChecks: resolveSolutionPackHandoffChecks(id, body.version) }
     );
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "solution_pack.installed",
       "process", result.id, { packId: id, packVersion: body.version, releaseId: result.release.releaseId,
@@ -837,6 +839,25 @@ app.post("/api/solution-packs/:id/install", requireRoles("admin", "builder", "ow
     return c.json({ error: message }, message.includes("not found") ? 404 : 400);
   }
 });
+
+app.patch("/api/processes/:id/solution-pack-handoff/:checkId",
+  requireRoles("admin", "builder", "owner"), async (c) => {
+    try {
+      const blueprintId = c.req.param("id");
+      const checkId = c.req.param("checkId");
+      if (!blueprintId || !checkId) return c.json({ error: "Process and handoff check are required" }, 400);
+      const result = await updateSolutionPackHandoffCheck(
+        c.env, c.get("tenantId"), blueprintId, checkId, c.get("actorId"), await c.req.json()
+      );
+      await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "solution_pack.handoff_updated",
+        "process", blueprintId, { checkId, status: result.status, revision: result.revision });
+      return c.json({ data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Solution pack handoff could not be updated";
+      return c.json({ error: message }, error instanceof SolutionPackHandoffConflict ? 409 :
+        message.includes("not found") ? 404 : 400);
+    }
+  });
 
 app.get("/api/opportunities", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
   c.json({ data: await listOpportunities(c.env, c.get("tenantId")) }));

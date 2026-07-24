@@ -1007,6 +1007,11 @@ The installed process retains tenant-scoped pack ID/version, installer, and
 timestamp provenance. Studio may compare this evidence with the deployed catalog
 and flag a newer reviewed version, but it never merges or upgrades customer
 configuration automatically.
+Manifest handoff checks are copied into ordered tenant/process records at
+installation. Authorized builders resolve or reopen them with evidence and
+optimistic revision control; read-only roles can inspect progress. These checks
+coordinate connection ownership, customer cases, evaluation, operating posture,
+and value targets without conferring release or external-action authority.
 
 ### Phase 3 — Scale and governance
 

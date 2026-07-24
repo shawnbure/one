@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 93, name: "0093_solution_pack_provenance.sql", applied_at: "2026-07-24 00:20:00"
+            id: 94, name: "0094_solution_pack_handoff.sql", applied_at: "2026-07-24 00:30:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -601,6 +601,20 @@ describe("control-plane security boundary", () => {
       }), env as never, executionCtx as never);
     expect(response.status).toBe(404);
     expect(queries.some((sql) => sql.includes("INSERT INTO agent_blueprints"))).toBe(false);
+  });
+
+  it("prevents viewers from changing solution pack handoff evidence", async () => {
+    const { env, queries } = environment("viewer");
+    const response = await app.fetch(new Request(
+      "http://localhost/api/processes/process-1/solution-pack-handoff/check-1", {
+        method: "PATCH",
+        headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ status: "complete", evidence: "Approved by the data owner.",
+          expectedRevision: 1 })
+      }), env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("UPDATE process_solution_pack_handoff_checks"))).toBe(false);
   });
 
   it("does not enable external delivery when its Cloudflare credential is absent", async () => {

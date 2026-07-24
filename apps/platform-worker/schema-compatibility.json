@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 93,
-  "requiredMigrationName": "0093_solution_pack_provenance.sql"
+  "requiredMigrationId": 94,
+  "requiredMigrationName": "0094_solution_pack_handoff.sql"
 }

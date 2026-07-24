@@ -176,6 +176,8 @@ Process Studio also exposes the two repository-reviewed solution packs as an in-
 
 Each library installation also writes tenant-scoped process provenance with the exact pack ID, semantic version, accountable installer, and installation time. Process Studio compares that installed version with the current code-owned catalog and labels an available newer version without changing the customer process. Pack updates are never automatic: customer prompt, tool, evaluation, and release changes remain independent and must move through normal review controls.
 
+The manifest handoff list is operational evidence rather than a forgotten README. Installation creates ordered, tenant/process-scoped checks for connection scope, customer evaluation cases, release-gate execution, operating-mode choice, and value ownership. Builders, owners, and administrators resolve or reopen each item with substantive evidence under optimistic revision control; viewers can inspect progress without mutating it. Completion identifies the accountable member and time, emits metadata-only audit evidence, and still does not grant publication authority or bypass any destination control.
+
 Inbound email is now a first-class process trigger rather than a Microsoft-specific polling shortcut. Cloudflare Email Routing invokes the deployment Worker, which resolves an exact tenant route, authorizes the trustworthy SMTP envelope sender against an explicit domain allowlist, applies a 1 MB bound, parses MIME once, omits attachments, runs tenant DLP and the published input contract, claims a hashed idempotency receipt, and hands the execution to Queue. It never runs AI inline or stores raw MIME, addresses, subjects, message IDs, HTML, or attachments. Conversation routes derive durable stickiness from RFC thread headers; consumer routes use a SHA-256 sender identity; instant and Workflow profiles remain non-sticky; entity routes fail closed until a code-owned entity resolver exists. Process retirement disables the channel, receipt metadata follows API-log retention, and the privacy report inventories configured routes. Cloudflare MX/routing-rule creation remains an explicit customer-account change documented in [`inbound-email-channel.md`](./inbound-email-channel.md).
 
 Rendered browser verification now checks the actual built wizard rather than inferring layout from source alone. That review caught an implicit CSS Grid column which split the progress/content and footer into different widths. The dialog now declares one explicit full-width column: at the desktop audit viewport the modal, scrollable main region, and fixed action footer each measured 1,040px, while the responsive rule retains a single-column template list below 820px.
@@ -283,6 +285,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 91. `0091_data_egress_policies.sql`: release-pinned process classification and tenant-controlled external model/tool egress policy.
 92. `0092_model_latency_evidence.sql`: per-execution model-call latency for prompt/runtime budget evidence.
 93. `0093_solution_pack_provenance.sql`: exact tenant/process solution-pack lineage and installed-version evidence.
+94. `0094_solution_pack_handoff.sql`: attributable, revisioned customer handoff checks for installed solution packs.
 
 ### Classification and egress boundary
 

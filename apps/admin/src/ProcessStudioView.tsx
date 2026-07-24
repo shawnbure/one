@@ -6,6 +6,7 @@ import {
   Bot,
   Boxes,
   Check,
+  Circle,
   ChevronRight,
   Clock3,
   FileCode2,
@@ -248,6 +249,9 @@ function Studio({
   const [businessSteps, setBusinessSteps] = useState<StudioData["topology"]["businessSteps"]>([]);
   const [busy, setBusy] = useState(false);
   const [catalogPacks, setCatalogPacks] = useState<SolutionPack[]>([]);
+  const [handoffEditing, setHandoffEditing] = useState<string | null>(null);
+  const [handoffStatus, setHandoffStatus] = useState<"open" | "complete" | "not_applicable">("complete");
+  const [handoffEvidence, setHandoffEvidence] = useState("");
   const [rollbackTarget, setRollbackTarget] = useState<ProcessRelease | null>(null);
   const [rollbackReason, setRollbackReason] = useState("");
   const [rollbackVersion, setRollbackVersion] = useState("");
@@ -426,6 +430,21 @@ function Studio({
     } finally { setBusy(false); }
   }
 
+  async function saveHandoffCheck(check: StudioData["solutionPackHandoffChecks"][number]) {
+    setBusy(true);
+    try {
+      await api.updateSolutionPackHandoff(processId, check.id, {
+        status: handoffStatus, evidence: handoffEvidence.trim(), expectedRevision: check.revision
+      });
+      setHandoffEditing(null);
+      setHandoffEvidence("");
+      await load();
+      onNotice("Solution pack handoff evidence updated.");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Handoff evidence could not be updated");
+    } finally { setBusy(false); }
+  }
+
   function addBusinessStep() {
     if (businessSteps.length >= 8) return;
     setBusinessSteps([...businessSteps, {
@@ -507,6 +526,58 @@ function Studio({
             <small>Installed from reviewed solution pack v{packProvenance.pack_version} · customer changes remain independent</small>
           </div>
           <em>{packUpdateAvailable ? `v${currentPack?.version} available` : "Current catalog version"}</em>
+        </section>
+      ) : null}
+      {packProvenance && data.solutionPackHandoffChecks.length ? (
+        <section className="solution-pack-handoff panel" aria-labelledby="pack-handoff-heading">
+          <header>
+            <div>
+              <span className="eyebrow">CUSTOMER HANDOFF</span>
+              <h2 id="pack-handoff-heading">Make this solution customer-ready</h2>
+              <p>Each decision is tenant-scoped, attributable, and separate from publication authority.</p>
+            </div>
+            <strong>{data.solutionPackHandoffChecks.filter((check) => check.status !== "open").length}
+              /{data.solutionPackHandoffChecks.length} resolved</strong>
+          </header>
+          <div className="solution-handoff-list">
+            {data.solutionPackHandoffChecks.map((check) => (
+              <article key={check.id} className={check.status}>
+                <span className="solution-handoff-state">
+                  {check.status === "complete" ? <Check size={16}/> :
+                    check.status === "not_applicable" ? <X size={16}/> : <Circle size={15}/>}
+                </span>
+                <div>
+                  <strong>{check.description}</strong>
+                  {check.evidence ? <small>{check.evidence}</small> : <small>Evidence is still required.</small>}
+                  {check.completed_by_name ? <em>{check.completed_by_name} · {check.status.replace("_", " ")}</em> : null}
+                </div>
+                {canDesign ? <button className="secondary" onClick={() => {
+                  setHandoffEditing(check.id);
+                  setHandoffStatus(check.status === "open" ? "complete" : check.status);
+                  setHandoffEvidence(check.evidence ?? "");
+                }}>{check.status === "open" ? "Resolve" : "Review"}</button> : null}
+                {handoffEditing === check.id ? (
+                  <div className="solution-handoff-editor">
+                    <label>Status<select value={handoffStatus}
+                      onChange={(event) => setHandoffStatus(event.target.value as typeof handoffStatus)}>
+                      <option value="complete">Complete</option>
+                      <option value="not_applicable">Not applicable</option>
+                      <option value="open">Reopen</option>
+                    </select></label>
+                    <label>Evidence<textarea maxLength={1000} value={handoffEvidence}
+                      placeholder="Reference the owner, approved evidence, connection, evaluation, or customer decision."
+                      onChange={(event) => setHandoffEvidence(event.target.value)}/></label>
+                    <div>
+                      <button className="secondary" onClick={() => setHandoffEditing(null)}>Cancel</button>
+                      <button className="primary" disabled={busy ||
+                        (handoffStatus !== "open" && handoffEvidence.trim().length < 10)}
+                        onClick={() => void saveHandoffCheck(check)}>Save evidence</button>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
         </section>
       ) : null}
       <nav className="studio-tabs">

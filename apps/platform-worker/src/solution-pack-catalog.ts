@@ -92,6 +92,12 @@ export function resolveSolutionPack(id: string, version: string): PortableProces
   return structuredClone(match.process);
 }
 
+export function resolveSolutionPackHandoffChecks(id: string, version: string): string[] {
+  const match = packs.find((item) => item.manifest.id === id && item.manifest.version === version);
+  if (!match) throw new Error("Solution pack or version was not found");
+  return [...match.manifest.handoffChecks];
+}
+
 function validateManifest(value: unknown): SolutionPackManifest {
   if (!value || typeof value !== "object") throw new Error("Solution pack manifest is invalid");
   const manifest = value as Partial<SolutionPackManifest>;
@@ -100,7 +106,9 @@ function validateManifest(value: unknown): SolutionPackManifest {
       !manifest.summary?.trim() || !manifest.audience?.trim() ||
       manifest.processArtifact !== "process.json" || manifest.secrets !== "excluded" ||
       !Array.isArray(manifest.requiredConnections) || !Array.isArray(manifest.handoffChecks) ||
-      manifest.handoffChecks.length === 0) {
+      manifest.handoffChecks.length === 0 || manifest.handoffChecks.length > 20 ||
+      !manifest.handoffChecks.every((item) =>
+        typeof item === "string" && item.trim().length >= 10 && item.trim().length <= 500)) {
     throw new Error("Solution pack manifest is incomplete");
   }
   return manifest as SolutionPackManifest;

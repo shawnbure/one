@@ -418,6 +418,12 @@ export interface StudioData {
   solutionPackProvenance: {
     pack_id: string; pack_version: string; installed_by: string; installed_at: string;
   } | null;
+  solutionPackHandoffChecks: Array<{
+    id: string; check_order: number; description: string;
+    status: "open" | "complete" | "not_applicable"; evidence: string | null;
+    revision: number; completed_by: string | null; completed_at: string | null;
+    completed_by_name: string | null;
+  }>;
   prompt: {
     system_prompt: string;
     instructions_json: string;
@@ -1846,6 +1852,11 @@ export const api = {
     request<{ data: { id: string; status: string; packId: string; packVersion: string } }>(
       `/api/solution-packs/${encodeURIComponent(id)}/install`,
       { method: "POST", body: JSON.stringify({ version }) }),
+  updateSolutionPackHandoff: (processId: string, checkId: string, body: {
+    status: "open" | "complete" | "not_applicable"; evidence: string; expectedRevision: number;
+  }) => request<{ data: { id: string; status: string; revision: number } }>(
+    `/api/processes/${encodeURIComponent(processId)}/solution-pack-handoff/${encodeURIComponent(checkId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }),
   usage: () => request<{ data: UsageData }>("/api/usage"),
   importBillingEvidence: (body: {
     periodStart: string; periodEnd: string; source: string; sourceReference: string;

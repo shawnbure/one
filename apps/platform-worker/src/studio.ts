@@ -8,6 +8,7 @@ import { assertTenantModelAllowed } from "./model-governance";
 import { requireAiGatewaySetting } from "./ai-gateway";
 import { assertExternalModelAllowed, dataClassifications, normalizeDataClassification } from "./data-governance";
 import { analyzePromptBudget, assertPromptBudget } from "./prompt-budget";
+import { listSolutionPackHandoffChecks } from "./solution-pack-handoff";
 
 interface ReleaseInput {
   systemPrompt: string;
@@ -49,7 +50,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       WHERE le.rank=1
     )`;
   const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors, launchReadiness,
-    approvedModels, solutionPackProvenance] = await Promise.all([
+    approvedModels, solutionPackProvenance, solutionPackHandoffChecks] = await Promise.all([
     env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
@@ -94,7 +95,8 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       .bind(tenantId).all<{ model_id: string; context_tokens: number }>(),
     env.DB.prepare(`SELECT pack_id, pack_version, installed_by, installed_at
       FROM process_solution_pack_provenance WHERE tenant_id=? AND blueprint_id=?`)
-      .bind(tenantId, blueprintId).first()
+      .bind(tenantId, blueprintId).first(),
+    listSolutionPackHandoffChecks(env, tenantId, blueprintId)
   ]);
   if (!blueprint) return null;
   const autonomySafety = await getAutonomySafety(env, tenantId, blueprintId);
@@ -133,6 +135,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
   return {
     blueprint,
     solutionPackProvenance,
+    solutionPackHandoffChecks,
     prompt,
     releases: releases.results, activations: activations.results,
     runStats: runStats.results,
