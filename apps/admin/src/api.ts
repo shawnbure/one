@@ -824,6 +824,8 @@ export interface WebhookReceipt {
   event_type: string | null;
   execution_id: string | null;
   execution_status: string | null;
+  receipt_status: "accepted" | "enqueue_failed" | "blocked";
+  attempt_count: number;
   received_at: string;
   completed_at: string | null;
 }

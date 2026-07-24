@@ -5,8 +5,9 @@ const secret = "test-webhook-secret";
 const endpoint = { id: "inbox-intake", tenant_id: "tenant-1", blueprint_id: "inbox-triage", secret_binding: "WEBHOOK_INBOX_SECRET",
   status: "active", accepted_events_json: '["request.created"]' };
 
-function webhookEnvironment(rules: unknown[] = []) {
-  let receipt: { execution_id: string } | null = null;
+function webhookEnvironment(rules: unknown[] = [], queueFailures = 0) {
+  let receipt: { execution_id: string; status: string } | null = null;
+  let remainingFailures = queueFailures;
   const jobs: unknown[] = [];
   const DB = {
     prepare(sql: string) {
@@ -28,7 +29,14 @@ function webhookEnvironment(rules: unknown[] = []) {
         async run() {
           if (sql.includes("INSERT OR IGNORE INTO webhook_receipts")) {
             if (receipt) return { meta: { changes: 0 } };
-            receipt = { execution_id: String(bindings[5]) };
+            receipt = { execution_id: String(bindings[5]),
+              status: sql.includes("'blocked'") ? "blocked" : "accepted" };
+          }
+          if (receipt && sql.includes("UPDATE webhook_receipts SET status='enqueue_failed'")) {
+            receipt.status = "enqueue_failed";
+          }
+          if (receipt && sql.includes("UPDATE webhook_receipts SET status='accepted'")) {
+            receipt.status = "accepted";
           }
           return { meta: { changes: 1 } };
         }
@@ -39,7 +47,13 @@ function webhookEnvironment(rules: unknown[] = []) {
   };
   return { env: { DB, WEBHOOK_INBOX_SECRET: secret,
     OAUTH_TOKEN_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    PROCESS_QUEUE: { async send(job: unknown) { jobs.push(job); } } }, jobs };
+    PROCESS_QUEUE: { async send(job: unknown) {
+      if (remainingFailures > 0) {
+        remainingFailures -= 1;
+        throw new Error("Queue unavailable");
+      }
+      jobs.push(job);
+    } } }, jobs, receipt: () => receipt };
 }
 
 async function signature(body: string) {
@@ -80,6 +94,20 @@ describe("signed webhook intake", () => {
     expect(duplicate.status).toBe(200);
     expect(await duplicate.json()).toMatchObject({ duplicate: true, executionId: firstPayload.executionId });
     expect(jobs).toHaveLength(1);
+  });
+
+  it("retries the same claimed execution after an initial Queue handoff failure", async () => {
+    const state = webhookEnvironment([], 1);
+    const body = '{"event":"request.created","input":"hello"}';
+    const failed = await deliver(state.env, body, "event-recover");
+    const failedPayload = await failed.json() as { executionId: string };
+    expect(failed.status).toBe(503);
+    expect(state.receipt()?.status).toBe("enqueue_failed");
+    const recovered = await deliver(state.env, body, "event-recover");
+    expect(recovered.status).toBe(202);
+    expect(await recovered.json()).toMatchObject({ accepted: true, executionId: failedPayload.executionId });
+    expect(state.jobs).toHaveLength(1);
+    expect(state.receipt()?.status).toBe("accepted");
   });
 
   it("rejects unapproved event types after signature verification", async () => {

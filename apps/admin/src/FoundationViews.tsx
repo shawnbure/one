@@ -760,7 +760,10 @@ function Connections({ data, session, onReload, onNotice }: { data: GovernanceDa
                 <strong>{receipt.event_type || "Unspecified event"}</strong>
                 <small>{receipt.execution_id ? `Execution ${receipt.execution_id.slice(0, 12)}` : "Blocked before execution"} ·{" "}
                   {dateTime(receipt.received_at)}</small>
-                <em>{receipt.execution_status || (receipt.execution_id ? "queued" : "blocked")}</em>
+                <em className={receipt.receipt_status === "enqueue_failed" ? "attention" : ""}>
+                  {receipt.receipt_status === "enqueue_failed"
+                    ? `handoff failed · ${receipt.attempt_count} attempt${receipt.attempt_count === 1 ? "" : "s"}`
+                    : receipt.execution_status || (receipt.execution_id ? "queued" : "blocked")}</em>
               </span>)}
               {!webhookReceipts[webhook.id]!.length && <p>No receipts have been retained for this endpoint.</p>}
             </div>}

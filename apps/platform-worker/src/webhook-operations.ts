@@ -62,7 +62,7 @@ export async function listWebhookReceipts(env: Env, tenantId: string, endpointId
     .bind(endpointId, tenantId).first<{ id: string; name: string }>();
   if (!endpoint) throw new Error("Webhook endpoint was not found");
   const { results } = await env.DB.prepare(`SELECT r.id, r.event_type, r.execution_id, r.received_at,
-    e.status execution_status, e.completed_at
+    r.status receipt_status, r.attempt_count, e.status execution_status, e.completed_at
     FROM webhook_receipts r LEFT JOIN executions e
       ON e.id=r.execution_id AND e.tenant_id=r.tenant_id
     WHERE r.tenant_id=? AND r.endpoint_id=? ORDER BY r.received_at DESC LIMIT 25`)

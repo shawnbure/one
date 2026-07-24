@@ -11,6 +11,8 @@ export async function enqueueProcessJob(
   replayedFrom?: string,
 ) {
   const tenantId = job.tenantId ?? "demo";
+  let deliveryJob = job;
+  let executionId = job.executionId;
   const idempotencyFingerprint = job.idempotencyKey
     ? await executionFingerprint(env, tenantId, job)
     : null;
@@ -22,49 +24,69 @@ export async function enqueueProcessJob(
     FROM agent_blueprints b WHERE b.id=? AND b.tenant_id=?`)
     .bind(job.executionId, job.input.slice(0, 500), job.idempotencyKey ?? null, idempotencyFingerprint,
       job.blueprintId, tenantId).run();
+  let recoveringHandoff = false;
   if (reservation.meta.changes !== 1) {
     const existing = await (job.idempotencyKey
-      ? env.DB.prepare(`SELECT id, blueprint_id, idempotency_fingerprint
+      ? env.DB.prepare(`SELECT id, blueprint_id, idempotency_fingerprint, status, error
           FROM executions WHERE tenant_id=? AND idempotency_key=?`)
         .bind(tenantId, job.idempotencyKey)
-      : env.DB.prepare(`SELECT id, blueprint_id, idempotency_fingerprint
+      : env.DB.prepare(`SELECT id, blueprint_id, idempotency_fingerprint, status, error
           FROM executions WHERE tenant_id=? AND id=?`)
         .bind(tenantId, job.executionId)
-    ).first<{ id: string; blueprint_id: string; idempotency_fingerprint: string | null }>();
+    ).first<{ id: string; blueprint_id: string; idempotency_fingerprint: string | null;
+      status: string; error: string | null }>();
     if (!existing) throw new Error("Process not found or execution reservation could not be resolved");
     if (existing.blueprint_id !== job.blueprintId) {
       throw new IdempotencyConflictError("Idempotency key is already assigned to a different process");
     }
     assertMatchingFingerprint(existing.idempotency_fingerprint, idempotencyFingerprint ?? "");
+    recoveringHandoff = existing.status === "failed" &&
+      existing.error?.startsWith("Queue handoff failed before processing:") === true;
     if (existing.id !== job.executionId) {
-      return { queueJobId: null, executionId: existing.id, duplicate: true };
+      if (!recoveringHandoff) {
+        return { queueJobId: null, executionId: existing.id, duplicate: true };
+      }
+      executionId = existing.id;
+      deliveryJob = { ...job, executionId };
     }
   }
   const queueJobId = crypto.randomUUID();
-  const claim = await env.DB.prepare(`INSERT INTO process_queue_jobs
+  const claimStatement = env.DB.prepare(`INSERT INTO process_queue_jobs
     (id, tenant_id, execution_id, blueprint_id, source, status, replayed_from)
     VALUES (?, ?, ?, ?, ?, 'queued', ?)
     ON CONFLICT(tenant_id, execution_id) DO UPDATE SET status='queued', last_error=NULL,
       completed_at=NULL, updated_at=CURRENT_TIMESTAMP
     WHERE process_queue_jobs.status='enqueue_failed'`)
-    .bind(queueJobId, tenantId, job.executionId, job.blueprintId, source, replayedFrom ?? null).run();
-  if (claim.meta.changes !== 1) throw new Error("Execution already has a Queue delivery record");
+    .bind(queueJobId, tenantId, executionId, job.blueprintId, source, replayedFrom ?? null);
+  if (recoveringHandoff) {
+    const rearmStatement = env.DB.prepare(`UPDATE executions SET status='queued', error=NULL, completed_at=NULL
+      WHERE id=? AND tenant_id=? AND status='failed'
+        AND error LIKE 'Queue handoff failed before processing:%'`)
+      .bind(executionId, tenantId);
+    const [claim, rearmed] = await env.DB.batch([claimStatement, rearmStatement]);
+    if (claim?.meta.changes !== 1 || rearmed?.meta.changes !== 1) {
+      throw new Error("Queue handoff recovery lost its execution claim");
+    }
+  } else {
+    const claim = await claimStatement.run();
+    if (claim.meta.changes !== 1) throw new Error("Execution already has a Queue delivery record");
+  }
   try {
-    await env.PROCESS_QUEUE.send(job, { contentType: "json" });
+    await env.PROCESS_QUEUE.send(deliveryJob, { contentType: "json" });
   } catch (error) {
     const message = errorMessage(error);
     await env.DB.batch([
       env.DB.prepare(`UPDATE process_queue_jobs SET status = 'enqueue_failed', last_error = ?,
         completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE execution_id = ? AND tenant_id = ?`)
-        .bind(message, job.executionId, tenantId),
+        .bind(message, executionId, tenantId),
       env.DB.prepare(`UPDATE executions SET status='failed', error=?, completed_at=CURRENT_TIMESTAMP
         WHERE id=? AND tenant_id=? AND status='queued'`)
-        .bind(`Queue handoff failed before processing: ${message}`.slice(0, 1000), job.executionId, tenantId)
+        .bind(`Queue handoff failed before processing: ${message}`.slice(0, 1000), executionId, tenantId)
     ]);
     throw error;
   }
-  return { queueJobId, executionId: job.executionId, duplicate: false };
+  return { queueJobId, executionId, duplicate: false };
 }
 
 export async function markQueueProcessing(env: Env, job: QueueJob, attempts: number) {

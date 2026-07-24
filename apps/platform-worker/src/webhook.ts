@@ -22,15 +22,18 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   const idempotencyKey = c.req.header("idempotency-key") ?? c.req.header("x-workrr-event-id");
   if (!idempotencyKey) return c.json({ error: "Idempotency-Key is required" }, 400);
   if (idempotencyKey.length > 200) return c.json({ error: "Idempotency-Key is limited to 200 characters" }, 400);
-  const existing = await c.env.DB.prepare("SELECT execution_id FROM webhook_receipts WHERE endpoint_id = ? AND idempotency_key = ?")
-    .bind(endpoint.id, idempotencyKey).first<{ execution_id: string | null }>();
-  if (existing) return c.json({ duplicate: true, executionId: existing.execution_id }, 200);
+  const existing = await c.env.DB.prepare(`SELECT execution_id, status FROM webhook_receipts
+    WHERE endpoint_id = ? AND idempotency_key = ?`)
+    .bind(endpoint.id, idempotencyKey).first<{ execution_id: string | null; status: string }>();
+  if (existing && existing.status !== "enqueue_failed") {
+    return c.json({ duplicate: true, executionId: existing.execution_id }, 200);
+  }
   let payload: { event?: string; input?: string; data?: unknown };
   try { payload = JSON.parse(new TextDecoder().decode(raw)) as typeof payload; }
   catch { return c.json({ error: "Webhook body must be valid JSON" }, 400); }
   const accepted = JSON.parse(endpoint.accepted_events_json) as string[];
   if (accepted.length && (!payload.event || !accepted.includes(payload.event))) return c.json({ error: "Event type is not accepted" }, 422);
-  const executionId = crypto.randomUUID();
+  const executionId = existing?.execution_id ?? crypto.randomUUID();
   const request: ExecutionRequest = { blueprintId: endpoint.blueprint_id,
     input: payload.input ?? JSON.stringify(payload.data ?? payload),
     idempotencyKey: `webhook:${endpoint.id}:${idempotencyKey}` };
@@ -41,26 +44,50 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   catch (error) {
     if (isContractViolation(error)) return c.json({ error: error.message }, 422);
     if (!isDlpBlocked(error)) return c.json({ error: "Execution admission inspection failed" }, 400);
-    await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
-      (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id) VALUES (?, ?, ?, ?, ?, NULL)`)
-      .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null).run();
+    if (existing) {
+      await c.env.DB.prepare(`UPDATE webhook_receipts SET status='blocked', last_error=?,
+        updated_at=CURRENT_TIMESTAMP WHERE endpoint_id=? AND idempotency_key=?`)
+        .bind("DLP policy blocked retry content", endpoint.id, idempotencyKey).run();
+    } else {
+      await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
+        (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id, status)
+        VALUES (?, ?, ?, ?, ?, NULL, 'blocked')`)
+        .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null).run();
+    }
     return c.json({ error: error instanceof Error ? error.message : "DLP policy blocked webhook content" }, 422);
   }
   const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: endpoint.tenant_id };
-  const receipt = await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
-    (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id) VALUES (?, ?, ?, ?, ?, ?)`)
+  const receipt = existing ? null : await c.env.DB.prepare(`INSERT OR IGNORE INTO webhook_receipts
+    (id, tenant_id, endpoint_id, idempotency_key, event_type, execution_id, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'accepted')`)
     .bind(crypto.randomUUID(), endpoint.tenant_id, endpoint.id, idempotencyKey, payload.event ?? null, executionId).run();
-  if (receipt.meta.changes !== 1) {
+  if (receipt && receipt.meta.changes !== 1) {
     const concurrent = await c.env.DB.prepare("SELECT execution_id FROM webhook_receipts WHERE endpoint_id = ? AND idempotency_key = ?")
       .bind(endpoint.id, idempotencyKey).first<{ execution_id: string | null }>();
     return c.json({ duplicate: true, executionId: concurrent?.execution_id ?? null }, 200);
   }
   await c.env.DB.prepare("UPDATE webhook_endpoints SET last_received_at = ? WHERE id = ?")
     .bind(new Date().toISOString(), endpoint.id).run();
-  const queued = await enqueueProcessJob(c.env, job, "webhook");
+  let queued;
+  try {
+    queued = await enqueueProcessJob(c.env, job, "webhook");
+  } catch (error) {
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    await c.env.DB.prepare(`UPDATE webhook_receipts SET status='enqueue_failed',
+      attempt_count=attempt_count+1, last_error=?, updated_at=CURRENT_TIMESTAMP
+      WHERE endpoint_id=? AND idempotency_key=?`)
+      .bind(message, endpoint.id, idempotencyKey).run();
+    return c.json({ error: "Webhook was verified but Queue handoff failed; retry with the same idempotency key",
+      executionId }, 503);
+  }
   if (queued.executionId !== executionId) {
-    await c.env.DB.prepare(`UPDATE webhook_receipts SET execution_id=?
+    await c.env.DB.prepare(`UPDATE webhook_receipts SET execution_id=?, status='accepted',
+      attempt_count=attempt_count+1, last_error=NULL, updated_at=CURRENT_TIMESTAMP
       WHERE endpoint_id=? AND idempotency_key=?`).bind(queued.executionId, endpoint.id, idempotencyKey).run();
+  } else {
+    await c.env.DB.prepare(`UPDATE webhook_receipts SET status='accepted',
+      attempt_count=attempt_count+1, last_error=NULL, updated_at=CURRENT_TIMESTAMP
+      WHERE endpoint_id=? AND idempotency_key=?`).bind(endpoint.id, idempotencyKey).run();
   }
   return c.json({ accepted: !queued.duplicate, duplicate: queued.duplicate || undefined,
     executionId: queued.executionId }, queued.duplicate ? 200 : 202);

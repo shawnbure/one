@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "../src/queue-operations";
 
-function environment(sendError?: Error, existingExecutionId?: string) {
+function environment(sendError?: Error, existingExecutionId?: string,
+  existingState: { status: string; error: string | null } = { status: "completed", error: null }) {
   const writes: Array<{ sql: string; bindings: unknown[] }> = [];
   const queries: string[] = [];
   const sent: unknown[] = [];
@@ -13,7 +14,8 @@ function environment(sendError?: Error, existingExecutionId?: string) {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
           return sql.includes("FROM executions WHERE") && existingExecutionId
-            ? { id: existingExecutionId, blueprint_id: "process-1", idempotency_fingerprint: null }
+            ? { id: existingExecutionId, blueprint_id: "process-1", idempotency_fingerprint: null,
+              ...existingState }
             : null;
         },
         async run() {
@@ -26,8 +28,7 @@ function environment(sendError?: Error, existingExecutionId?: string) {
       return statement;
     },
     async batch(statements: Array<{ run(): Promise<unknown> }>) {
-      for (const statement of statements) await statement.run();
-      return [];
+      return Promise.all(statements.map((statement) => statement.run()));
     }
   };
   const PROCESS_QUEUE = { async send(job: unknown) {
@@ -69,6 +70,28 @@ describe("Queue lifecycle evidence", () => {
       queueJobId: null, executionId: "execution-original", duplicate: true
     });
     expect(sent).toHaveLength(0);
+  });
+
+  it("rearms only an execution that failed before Queue processing", async () => {
+    const { env, writes, sent } = environment(undefined, "execution-1", {
+      status: "failed", error: "Queue handoff failed before processing: Queue unavailable"
+    });
+    await enqueueProcessJob(env, job, "email");
+    expect(sent).toEqual([job]);
+    expect(writes.some((write) => write.sql.includes("SET status='queued', error=NULL") &&
+      write.bindings.includes("execution-1") && write.bindings.includes("tenant-1"))).toBe(true);
+  });
+
+  it("requeues the canonical execution when an API retry supplies a fresh execution id", async () => {
+    const retry = { ...job, executionId: "execution-retry", idempotencyKey: "customer-job-42" };
+    const { env, writes, sent } = environment(undefined, "execution-original", {
+      status: "failed", error: "Queue handoff failed before processing: Queue unavailable"
+    });
+    const result = await enqueueProcessJob(env, retry, "api");
+    expect(result).toMatchObject({ executionId: "execution-original", duplicate: false });
+    expect(sent).toEqual([{ ...retry, executionId: "execution-original" }]);
+    expect(writes.some((write) => write.sql.includes("INSERT INTO process_queue_jobs") &&
+      write.bindings.includes("execution-original"))).toBe(true);
   });
 
   it("tracks processing, retry, terminal dead-letter, and completion states", async () => {
