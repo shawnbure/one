@@ -82,6 +82,7 @@ export interface ExecutionResult {
   instanceKey: string | null;
   profile: ExecutionProfile;
   status: "completed" | "queued" | "running" | "waiting_approval" | "deferred" | "blocked" | "failed";
+  idempotentReplay?: boolean;
   output?: string;
   model?: string;
   startedAt: string;

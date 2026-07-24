@@ -124,9 +124,10 @@ async function dispatchSchedule(env: Env, schedule: ScheduleRow, scheduledFor: s
       schedule.identity_key ?? "", executionId);
     const request = await sanitizeAsyncExecutionInput(env, schedule.tenant_id, raw, executionId);
     const job: QueueJob = { ...request, executionId, attempt: 0, tenantId: schedule.tenant_id };
-    await enqueueProcessJob(env, job, "schedule");
-    await recordDispatch(env, schedule, dispatchId, executionId, scheduledFor, "queued", null);
-    return { scheduleId: schedule.id, executionId, status: "queued" };
+    const queued = await enqueueProcessJob(env, job, "schedule");
+    await recordDispatch(env, schedule, dispatchId, queued.executionId, scheduledFor, "queued", null);
+    return { scheduleId: schedule.id, executionId: queued.executionId, status: "queued",
+      ...(queued.duplicate ? { idempotentReplay: true } : {}) };
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     await recordDispatch(env, schedule, dispatchId, executionId, scheduledFor, "failed", message);

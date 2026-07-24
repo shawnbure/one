@@ -10,6 +10,28 @@ export async function enqueueProcessJob(
   replayedFrom?: string,
 ) {
   const tenantId = job.tenantId ?? "demo";
+  const reservation = await env.DB.prepare(`INSERT OR IGNORE INTO executions
+    (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
+     started_at, process_release_id)
+    SELECT ?, b.tenant_id, b.id, NULL, b.execution_profile, 'queued', ?, ?, CURRENT_TIMESTAMP, b.active_release_id
+    FROM agent_blueprints b WHERE b.id=? AND b.tenant_id=?`)
+    .bind(job.executionId, job.input.slice(0, 500), job.idempotencyKey ?? null,
+      job.blueprintId, tenantId).run();
+  if (reservation.meta.changes !== 1) {
+    const existing = await (job.idempotencyKey
+      ? env.DB.prepare("SELECT id, blueprint_id FROM executions WHERE tenant_id=? AND idempotency_key=?")
+        .bind(tenantId, job.idempotencyKey)
+      : env.DB.prepare("SELECT id, blueprint_id FROM executions WHERE tenant_id=? AND id=?")
+        .bind(tenantId, job.executionId)
+    ).first<{ id: string; blueprint_id: string }>();
+    if (!existing) throw new Error("Process not found or execution reservation could not be resolved");
+    if (existing.blueprint_id !== job.blueprintId) {
+      throw new Error("Idempotency key is already assigned to a different process");
+    }
+    if (existing.id !== job.executionId) {
+      return { queueJobId: null, executionId: existing.id, duplicate: true };
+    }
+  }
   const queueJobId = crypto.randomUUID();
   const claim = await env.DB.prepare(`INSERT INTO process_queue_jobs
     (id, tenant_id, execution_id, blueprint_id, source, status, replayed_from)
@@ -34,7 +56,7 @@ export async function enqueueProcessJob(
     ]);
     throw error;
   }
-  return queueJobId;
+  return { queueJobId, executionId: job.executionId, duplicate: false };
 }
 
 export async function markQueueProcessing(env: Env, job: QueueJob, attempts: number) {

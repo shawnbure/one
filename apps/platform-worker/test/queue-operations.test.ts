@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "../src/queue-operations";
 
-function environment(sendError?: Error) {
+function environment(sendError?: Error, existingExecutionId?: string) {
   const writes: Array<{ sql: string; bindings: unknown[] }> = [];
   const queries: string[] = [];
   const sent: unknown[] = [];
@@ -11,7 +11,16 @@ function environment(sendError?: Error) {
       let bindings: unknown[] = [];
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement; },
-        async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; },
+        async first() {
+          return sql.includes("FROM executions WHERE") && existingExecutionId
+            ? { id: existingExecutionId, blueprint_id: "process-1" }
+            : null;
+        },
+        async run() {
+          writes.push({ sql, bindings });
+          return { meta: { changes: existingExecutionId &&
+            sql.includes("INSERT OR IGNORE INTO executions") ? 0 : 1 } };
+        },
         async all() { return { results: [] }; },
       };
       return statement;
@@ -36,8 +45,9 @@ describe("Queue lifecycle evidence", () => {
     const { env, writes, sent } = environment();
     await enqueueProcessJob(env, job, "webhook");
     expect(sent).toEqual([job]);
-    expect(writes[0]?.sql).toContain("INSERT INTO process_queue_jobs");
-    expect(writes[0]?.bindings).toEqual(expect.arrayContaining(["tenant-1", "execution-1", "process-1", "webhook"]));
+    expect(writes[0]?.sql).toContain("INSERT OR IGNORE INTO executions");
+    const queueEvidence = writes.find((write) => write.sql.includes("INSERT INTO process_queue_jobs"));
+    expect(queueEvidence?.bindings).toEqual(expect.arrayContaining(["tenant-1", "execution-1", "process-1", "webhook"]));
   });
 
   it("preserves an enqueue failure for operator diagnosis", async () => {
@@ -48,6 +58,16 @@ describe("Queue lifecycle evidence", () => {
     expect(writes.some((write) => write.sql.includes("UPDATE executions SET status='failed'") &&
       write.bindings.includes("Queue handoff failed before processing: Queue unavailable") &&
       write.bindings.includes("tenant-1"))).toBe(true);
+  });
+
+  it("does not enqueue a second delivery when another execution owns the idempotency key", async () => {
+    const keyedJob = { ...job, idempotencyKey: "customer-job-42" };
+    const { env, sent } = environment(undefined, "execution-original");
+    const result = await enqueueProcessJob(env, keyedJob, "api");
+    expect(result).toEqual({
+      queueJobId: null, executionId: "execution-original", duplicate: true
+    });
+    expect(sent).toHaveLength(0);
   });
 
   it("tracks processing, retry, terminal dead-letter, and completion states", async () => {

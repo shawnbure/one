@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { assertAsyncExecutionAdmission, executeRequest } from "../src/execution";
 
 function executionEnvironment(tenantMode: string, processMode: string, processStatus = "active",
-  inputSchemaJson: string | null = null, autonomy = "suggest") {
+  inputSchemaJson: string | null = null, autonomy = "suggest", existingExecution?: {
+    id: string; status: string; output_preview: string | null; model: string | null;
+  }) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const DB = {
     prepare(sql: string) {
@@ -18,10 +20,17 @@ function executionEnvironment(tenantMode: string, processMode: string, processSt
           };
           if (sql.includes("tenant_operating_controls")) return { mode: tenantMode };
           if (sql.includes("tenant_budgets")) return null;
+          if (sql.includes("FROM executions WHERE")) return existingExecution ? {
+            ...existingExecution, blueprint_id: "process-1", instance_key: null,
+            execution_profile: "instant", started_at: "earlier"
+          } : null;
           return null;
         },
         async all() { return { results: [] }; },
-        async run() { writes.push({ sql, values }); return { meta: { changes: 1 } }; }
+        async run() {
+          writes.push({ sql, values });
+          return { meta: { changes: existingExecution && sql.includes("INSERT OR IGNORE INTO executions") ? 0 : 1 } };
+        }
       };
       return statement;
     }
@@ -80,5 +89,31 @@ describe("execution admission controls", () => {
       values.includes("execution-unexpected"));
     expect(failure?.sql).toContain("status IN ('running','queued','completed')");
     expect(failure?.values).toContain("tenant-1");
+  });
+
+  it("returns the claimed execution on an idempotent retry without loading a prompt or model", async () => {
+    const { env, writes } = executionEnvironment("active", "active", "active", null, "suggest", {
+      id: "execution-original", status: "completed", output_preview: "Already completed", model: "model-1"
+    });
+    const result = await executeRequest(env, "tenant-1", {
+      blueprintId: "process-1", input: "Retry this request", idempotencyKey: "customer-job-42"
+    }, "execution-retry");
+    expect(result).toMatchObject({
+      executionId: "execution-original", status: "completed", output: "Already completed",
+      idempotentReplay: true
+    });
+    expect(writes.some(({ sql }) => sql.includes("prompt_releases"))).toBe(false);
+    expect(writes.some(({ sql }) => sql.includes("output_preview=?"))).toBe(false);
+  });
+
+  it("rejects empty and oversized idempotency keys before doing database work", async () => {
+    const { env, writes } = executionEnvironment("active", "active");
+    await expect(executeRequest(env, "tenant-1", {
+      blueprintId: "process-1", input: "input", idempotencyKey: " "
+    })).rejects.toThrow("cannot be empty");
+    await expect(executeRequest(env, "tenant-1", {
+      blueprintId: "process-1", input: "input", idempotencyKey: "x".repeat(201)
+    })).rejects.toThrow("limited to 200");
+    expect(writes).toHaveLength(0);
   });
 });

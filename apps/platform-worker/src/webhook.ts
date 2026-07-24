@@ -55,8 +55,13 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   }
   await c.env.DB.prepare("UPDATE webhook_endpoints SET last_received_at = ? WHERE id = ?")
     .bind(new Date().toISOString(), endpoint.id).run();
-  await enqueueProcessJob(c.env, job, "webhook");
-  return c.json({ accepted: true, executionId }, 202);
+  const queued = await enqueueProcessJob(c.env, job, "webhook");
+  if (queued.executionId !== executionId) {
+    await c.env.DB.prepare(`UPDATE webhook_receipts SET execution_id=?
+      WHERE endpoint_id=? AND idempotency_key=?`).bind(queued.executionId, endpoint.id, idempotencyKey).run();
+  }
+  return c.json({ accepted: !queued.duplicate, duplicate: queued.duplicate || undefined,
+    executionId: queued.executionId }, queued.duplicate ? 200 : 202);
 }
 
 function secretValue(env: Env, binding: string): string | undefined {

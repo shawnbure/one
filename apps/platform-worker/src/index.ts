@@ -1654,8 +1654,9 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
       isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
   }
   const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
-  await enqueueProcessJob(c.env, job, "api");
-  return c.json({ executionId, status: "queued" }, 202);
+  const queued = await enqueueProcessJob(c.env, job, "api");
+  return c.json({ executionId: queued.executionId, status: "queued",
+    ...(queued.duplicate ? { idempotentReplay: true } : {}) }, 202);
 });
 
 app.get("/api/queue-operations", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>
@@ -1699,10 +1700,12 @@ app.post("/api/queue-jobs/:id/replay", requireRoles("admin", "owner", "operator"
     const request = replayRequest(source);
     const protectedRequest = await sanitizeAsyncExecutionInput(c.env, c.get("tenantId"), request, executionId);
     const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
-    const replayJobId = await enqueueProcessJob(c.env, job, "replay", source.id);
+    const replay = await enqueueProcessJob(c.env, job, "replay", source.id);
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "queue_job.replayed",
-      "queue_job", replayJobId, { replayedFrom: source.id, sourceExecutionId: source.execution_id, executionId });
-    return c.json({ data: { queueJobId: replayJobId, executionId, status: "queued" } }, 202);
+      "queue_job", replay.queueJobId ?? replay.executionId,
+      { replayedFrom: source.id, sourceExecutionId: source.execution_id, executionId: replay.executionId });
+    return c.json({ data: { queueJobId: replay.queueJobId, executionId: replay.executionId, status: "queued",
+      ...(replay.duplicate ? { idempotentReplay: true } : {}) } }, 202);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Queue job replay failed" },
       isDlpBlocked(error) ? 422 : 409);

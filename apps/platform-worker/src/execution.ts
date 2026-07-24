@@ -13,6 +13,7 @@ import { autonomyPlan, routeApproval } from "./autonomy";
 import { recordShadowReview } from "./shadow";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
+  validateIdempotencyKey(request.idempotencyKey);
   let blueprint = await getBlueprint(env, tenantId, request.blueprintId);
   if (!blueprint) throw new Error("Process not found");
   const instanceKey = tenantInstanceKeyFor(
@@ -77,7 +78,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     }
     throw error;
   }
-  await env.DB.prepare(`INSERT OR IGNORE INTO executions
+  const claim = await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
      started_at, process_release_id, input_contract_status, output_contract_status, autonomy_level,
      autonomy_disposition, tool_policy_json)
@@ -87,6 +88,22 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       startedAt, blueprint.activeReleaseId ?? null, contractedInput.status,
       contracts.outputSchema ? "pending" : "not_configured", autonomy.effective,
       admission.deferred ? "deferred" : autonomy.disposition, JSON.stringify(blueprint.toolPolicies ?? [])).run();
+  if (claim.meta.changes !== 1) {
+    const existing = await existingExecution(env, tenantId, blueprint.id, executionId, request.idempotencyKey);
+    if (!existing) throw new Error("Execution idempotency claim could not be resolved");
+    if (existing.executionId !== executionId || existing.status !== "queued") {
+      return { ...existing, idempotentReplay: true };
+    }
+    await env.DB.prepare(`UPDATE executions SET instance_key=?, execution_profile=?, status=?, input_preview=?,
+      process_release_id=?, input_contract_status=?, output_contract_status=?, autonomy_level=?,
+      autonomy_disposition=?, tool_policy_json=?, error=NULL, completed_at=NULL
+      WHERE id=? AND tenant_id=? AND status='queued'`)
+      .bind(instanceKey, blueprint.executionProfile, admission.deferred ? "deferred" : "running",
+        inputDlp.safeText.slice(0, 500), blueprint.activeReleaseId ?? null, contractedInput.status,
+        contracts.outputSchema ? "pending" : "not_configured", autonomy.effective,
+        admission.deferred ? "deferred" : autonomy.disposition, JSON.stringify(blueprint.toolPolicies ?? []),
+        executionId, tenantId).run();
+  }
 
   try {
     if (admission.deferred) {
@@ -171,6 +188,7 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
 }
 
 export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, request: ExecutionRequest, executionId: string) {
+  validateIdempotencyKey(request.idempotencyKey);
   const result = await applyDlp(env, tenantId, request.input, {
     direction: "input", stage: "queue_admission", executionId, blueprintId: request.blueprintId
   });
@@ -180,6 +198,38 @@ export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, re
   const contracted = validateContractInput(result.modelText,
     parseContracts(blueprint.inputSchemaJson, blueprint.outputSchemaJson).inputSchema);
   return { ...request, input: contracted.value };
+}
+
+async function existingExecution(env: Env, tenantId: string, blueprintId: string,
+  executionId: string, idempotencyKey?: string) {
+  const row = await (idempotencyKey
+    ? env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status, output_preview, model, started_at
+        FROM executions WHERE tenant_id=? AND idempotency_key=?`).bind(tenantId, idempotencyKey)
+    : env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status, output_preview, model, started_at
+        FROM executions WHERE tenant_id=? AND id=?`).bind(tenantId, executionId)
+  ).first<{
+    id: string; blueprint_id: string; instance_key: string | null; execution_profile: ExecutionResult["profile"];
+    status: ExecutionResult["status"]; output_preview: string | null; model: string | null; started_at: string;
+  }>();
+  if (!row) return null;
+  if (row.blueprint_id !== blueprintId) {
+    throw new Error("Idempotency key is already assigned to a different process");
+  }
+  return {
+    executionId: row.id,
+    instanceKey: row.instance_key,
+    profile: row.execution_profile,
+    status: row.status,
+    ...(row.output_preview ? { output: row.output_preview } : {}),
+    ...(row.model ? { model: row.model } : {}),
+    startedAt: row.started_at,
+  } satisfies ExecutionResult;
+}
+
+function validateIdempotencyKey(value?: string) {
+  if (value === undefined) return;
+  if (!value.trim()) throw new Error("Idempotency key cannot be empty");
+  if (value.length > 200) throw new Error("Idempotency key is limited to 200 characters");
 }
 
 export async function assertAsyncExecutionAdmission(env: Env, tenantId: string, blueprintId: string) {
