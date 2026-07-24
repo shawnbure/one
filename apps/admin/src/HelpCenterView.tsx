@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, BookOpen, CheckCircle2, ChevronDown, CircleHelp, Clock3,
-  GraduationCap, LifeBuoy, Route, Send, ShieldCheck, Sparkles, Users
+  GraduationCap, LifeBuoy, Route, Search, Send, ShieldCheck, Sparkles, Users
 } from "lucide-react";
 import { api, type HelpCenterData, type SessionData } from "./api";
+import { productGuide } from "./help-guide";
 import "./help-center.css";
 import "./help-operations.css";
 
@@ -15,6 +16,7 @@ export function HelpCenterView({ session, onNotice }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [guideQuery, setGuideQuery] = useState("");
   const [requestForm, setRequestForm] = useState({
     category: "how_to", priority: "normal", subject: "", detail: "", blueprintId: "", executionId: ""
   });
@@ -34,6 +36,16 @@ export function HelpCenterView({ session, onNotice }: {
     return (data?.processRunbooks ?? []).filter((item) =>
       `${item.name} ${item.purpose} ${item.business_owner} ${item.department}`.toLowerCase().includes(normalized));
   }, [data?.processRunbooks, query]);
+  const guideSections = useMemo(() => {
+    const normalized = guideQuery.trim().toLowerCase();
+    if (!normalized) return productGuide;
+    return productGuide.flatMap((section) => {
+      const sectionMatch = `${section.title} ${section.summary}`.toLowerCase().includes(normalized);
+      const topics = sectionMatch ? section.topics : section.topics.filter((topic) =>
+        `${topic.title} ${topic.plain} ${topic.details.join(" ")}`.toLowerCase().includes(normalized));
+      return topics.length ? [{ ...section, topics }] : [];
+    });
+  }, [guideQuery]);
 
   async function acknowledge(id: string, version: number) {
     setBusy(id);
@@ -105,13 +117,49 @@ export function HelpCenterView({ session, onNotice }: {
       </article>
     </section>
 
+    <section className="help-handbook" aria-labelledby="handbook-title">
+      <div className="handbook-hero panel">
+        <div>
+          <span className="eyebrow"><BookOpen size={14}/> COMPLETE PRODUCT GUIDE</span>
+          <h2 id="handbook-title">The Workrr Handbook</h2>
+          <p>Learn what the whole application does, why each part exists, and how to use it safely. Every explanation starts with the simple version and then adds the important details.</p>
+        </div>
+        <label className="handbook-search"><Search size={17}/>
+          <input value={guideQuery} onChange={(event) => setGuideQuery(event.target.value)}
+            placeholder="Search processes, memory, fields, costs…" aria-label="Search the Workrr handbook"/>
+        </label>
+      </div>
+      <nav className="handbook-nav" aria-label="Handbook chapters">
+        {productGuide.map((section) => <a key={section.id} href={`#help-${section.id}`}>{section.title}</a>)}
+      </nav>
+      <div className="handbook-chapters">
+        {guideSections.map((section, index) => <article className="panel handbook-chapter"
+          id={`help-${section.id}`} key={section.id}>
+          <header>
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <div><h2>{section.title}</h2><p>{section.summary}</p></div>
+          </header>
+          <div className="handbook-topics">{section.topics.map((topic) =>
+            <details className="handbook-topic" key={topic.title} open={guideQuery.trim().length > 0}>
+              <summary><span><strong>{topic.title}</strong><small>{topic.plain}</small></span><ChevronDown size={18}/></summary>
+              <div><p className="simple-label">In practical terms</p><p>{topic.plain}</p>
+                <ul>{topic.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>
+            </details>)}</div>
+        </article>)}
+        {!guideSections.length && <div className="panel handbook-empty">
+          <CircleHelp size={20}/><strong>No handbook chapter matched “{guideQuery}”.</strong>
+          <button onClick={() => setGuideQuery("")}>Clear Search</button>
+        </div>}
+      </div>
+    </section>
+
     <section className="help-section support-section">
-      <div className="section-head"><div><h2>Get operational help</h2>
+      <div className="section-head"><div><h2>Get Operational Help</h2>
         <p>Ask for assistance without losing the tenant, process, or execution context.</p></div></div>
       <div className="support-grid">
         <article className="panel support-form">
           <div className="support-card-title"><span className="help-icon"><LifeBuoy size={18}/></span>
-            <div><h3>Create a help request</h3><p>Do not include credentials, tokens, or unnecessary personal data.</p></div></div>
+            <div><h3>Create a Help Request</h3><p>Do not include credentials, tokens, or unnecessary personal data.</p></div></div>
           <div className="support-fields">
             <label>Category<select value={requestForm.category}
               onChange={(event) => {
@@ -148,7 +196,7 @@ export function HelpCenterView({ session, onNotice }: {
 
         <article className="panel support-queue">
           <div className="support-card-title"><span className="help-icon"><LifeBuoy size={18}/></span>
-            <div><h3>{data.supportAccess.canManage ? "Support queue" : "Your requests"}</h3>
+            <div><h3>{data.supportAccess.canManage ? "Support Queue" : "Your Requests"}</h3>
               <p>{data.supportRequests.filter((item) => item.status !== "resolved").length} request(s) need a next action.</p></div></div>
           <div className="support-request-list">{data.supportRequests.length ? data.supportRequests.map((request) => {
             const edit = requestEdits[request.id] ?? {
@@ -190,7 +238,7 @@ export function HelpCenterView({ session, onNotice }: {
     </section>
 
     {data.supportAccess.canViewTeamProgress && <section className="help-section">
-      <div className="section-head"><div><h2>Team training readiness</h2>
+      <div className="section-head"><div><h2>Team Training Readiness</h2>
         <p>Current-version completion for active organization members.</p></div>
         <span className="team-count"><Users size={15}/>{data.teamProgress.length} active members</span></div>
       <div className="panel team-progress-table">
@@ -209,7 +257,7 @@ export function HelpCenterView({ session, onNotice }: {
     </section>}
 
     <section className="help-section">
-      <div className="section-head"><div><h2>Your learning path</h2>
+      <div className="section-head"><div><h2>Your Learning Path</h2>
         <p>Short operating modules selected for your current role.</p></div></div>
       <div className="learning-grid">{data.modules.map((module) =>
         <article className={`panel learning-card ${module.acknowledgedAt ? "complete" : ""}`} key={module.id}>
@@ -228,7 +276,7 @@ export function HelpCenterView({ session, onNotice }: {
     </section>
 
     <section className="help-section">
-      <div className="section-head"><div><h2>How Workrr executes work</h2>
+      <div className="section-head"><div><h2>How Workrr Executes Work</h2>
         <p>The important distinctions behind agents, memory, orchestration, and human control.</p></div></div>
       <div className="concept-grid">{data.concepts.map((concept) =>
         <article className="panel concept-card" key={concept.name}><CircleHelp size={18}/>
@@ -236,7 +284,7 @@ export function HelpCenterView({ session, onNotice }: {
     </section>
 
     <section className="help-section">
-      <div className="section-head"><div><h2>Process operating procedures</h2>
+      <div className="section-head"><div><h2>Process Operating Procedures</h2>
         <p>Live, tenant-specific runbooks derived from each configured process.</p></div>
         <input className="runbook-search" aria-label="Find a process runbook" placeholder="Find a process…"
           value={query} onChange={(event) => setQuery(event.target.value)}/></div>
