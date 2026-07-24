@@ -228,9 +228,9 @@ const previewProcesses: AgentBlueprint[] = [
 const nav = [
   ["Overview", CircleGauge],
   ["Launchpad", Sparkles],
+  ["Work inbox", Inbox],
   ["Processes", Workflow],
   ["Opportunities", Lightbulb],
-  ["Work inbox", Inbox],
   ["Activity", Activity],
   ["API logs", Code2],
   ["Connections", Boxes],

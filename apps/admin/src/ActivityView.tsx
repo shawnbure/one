@@ -33,6 +33,7 @@ import { api, type ActorLocalWork, type ActorOperationalHealth, type Approval, t
 import "./queue-operations.css";
 import "./durable-facts.css";
 import "./actor-health.css";
+import "./activity-polish.css";
 
 interface Props {
   processes: AgentBlueprint[];
