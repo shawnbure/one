@@ -93,6 +93,7 @@ import { listSolutionPacks, resolveSolutionPack, resolveSolutionPackHandoffCheck
 import { SolutionPackHandoffConflict, updateSolutionPackHandoffCheck } from "./solution-pack-handoff";
 import { decideProcessRelease } from "./release-governance";
 import { isIdempotencyConflict } from "./execution-idempotency";
+import { boundedCredentialExpiry, emitServicePrincipalExpiryAlerts } from "./service-principal-lifecycle";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -675,28 +676,44 @@ app.put("/api/approval-delegations/:memberId",
   });
 
 app.get("/api/service-principals", requireRoles("admin", "owner", "viewer"), async (c) => {
-  const { results } = await c.env.DB.prepare(`SELECT id, access_common_name, display_name, role, status, created_at, last_seen_at
-    FROM access_service_principals WHERE tenant_id = ? ORDER BY display_name`)
+  const { results } = await c.env.DB.prepare(`SELECT p.id, p.access_common_name, p.display_name, p.role,
+      p.status, p.created_at, p.last_seen_at, p.credential_expires_at, p.rotation_owner,
+      p.last_rotated_at, p.revision, p.updated_at, m.display_name rotation_owner_name
+    FROM access_service_principals p
+    LEFT JOIN tenant_members m ON m.id=p.rotation_owner AND m.tenant_id=p.tenant_id
+    WHERE p.tenant_id = ? ORDER BY p.display_name`)
     .bind(c.get("tenantId")).all();
   return c.json({ data: results });
 });
 
 app.post("/api/service-principals", requireRoles("admin", "owner"), async (c) => {
-  const body = await c.req.json<{ commonName?: string; displayName?: string; role?: string }>();
+  const body = await c.req.json<{ commonName?: string; displayName?: string; role?: string;
+    credentialExpiresAt?: string; rotationOwner?: string }>();
   const commonName = body.commonName?.trim() ?? "";
   const displayName = body.displayName?.trim() ?? "";
   if (!/^[A-Za-z0-9._-]{8,200}$/.test(commonName) || !commonName.endsWith(".access") ||
-      !displayName || displayName.length > 100 || !["operator", "viewer"].includes(body.role ?? "")) {
-    return c.json({ error: "A valid Access service-token client ID, display name, and operator or viewer role are required" }, 400);
+      !displayName || displayName.length > 100 || !["operator", "viewer"].includes(body.role ?? "") ||
+      !body.rotationOwner) {
+    return c.json({ error: "A valid Access Client ID, display name, role, expiry, and rotation owner are required" }, 400);
   }
+  let expiresAt: string;
+  try { expiresAt = boundedCredentialExpiry(body.credentialExpiresAt); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : "Invalid credential expiry" }, 400); }
   const id = crypto.randomUUID();
   try {
-    await c.env.DB.prepare(`INSERT INTO access_service_principals
-      (id, tenant_id, access_common_name, display_name, role, created_by) VALUES (?, ?, ?, ?, ?, ?)`)
-      .bind(id, c.get("tenantId"), commonName, displayName, body.role, c.get("actorId")).run();
+    const created = await c.env.DB.prepare(`INSERT INTO access_service_principals
+      (id, tenant_id, access_common_name, display_name, role, created_by, credential_expires_at,
+       rotation_owner, last_rotated_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, m.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM tenant_members m WHERE m.id=? AND m.tenant_id=? AND m.status='active'
+        AND m.role IN ('admin','owner','operator')`)
+      .bind(id, c.get("tenantId"), commonName, displayName, body.role, c.get("actorId"), expiresAt,
+        body.rotationOwner, body.rotationOwner, c.get("tenantId")).run();
+    if (created.meta.changes !== 1) return c.json({ error: "Rotation owner must be an active administrator, owner, or operator" }, 400);
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "service_principal.created",
-      "service_principal", id, { commonName, role: body.role });
-    return c.json({ id, status: "active" }, 201);
+      "service_principal", id, { commonName, role: body.role, credentialExpiresAt: expiresAt,
+        rotationOwner: body.rotationOwner });
+    return c.json({ id, status: "active", revision: 1 }, 201);
   } catch (error) {
     return c.json({ error: String(error).includes("UNIQUE") ?
       "That Access service-token client ID is already registered" : "Machine identity creation failed" }, 409);
@@ -705,16 +722,42 @@ app.post("/api/service-principals", requireRoles("admin", "owner"), async (c) =>
 
 app.patch("/api/service-principals/:id", requireRoles("admin", "owner"), async (c) => {
   const id = c.req.param("id");
-  const body = await c.req.json<{ role?: string; status?: string }>();
+  const body = await c.req.json<{ role?: string; status?: string; credentialExpiresAt?: string;
+    rotationOwner?: string; lastRotatedAt?: string; expectedRevision?: number }>();
   if (!id || (body.role && !["operator", "viewer"].includes(body.role)) ||
       (body.status && !["active", "suspended"].includes(body.status)) ||
-      (!body.role && !body.status)) return c.json({ error: "Invalid machine identity update" }, 400);
+      !Number.isInteger(body.expectedRevision) ||
+      (!body.role && !body.status && !body.credentialExpiresAt && !body.rotationOwner && !body.lastRotatedAt)) {
+    return c.json({ error: "Invalid machine identity update" }, 400);
+  }
+  let expiresAt: string | null = null;
+  try {
+    if (body.credentialExpiresAt) expiresAt = boundedCredentialExpiry(body.credentialExpiresAt);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Invalid credential expiry" }, 400);
+  }
+  if (body.rotationOwner) {
+    const owner = await c.env.DB.prepare(`SELECT id FROM tenant_members WHERE id=? AND tenant_id=?
+      AND status='active' AND role IN ('admin','owner','operator')`)
+      .bind(body.rotationOwner, c.get("tenantId")).first();
+    if (!owner) return c.json({ error: "Rotation owner must be an active administrator, owner, or operator" }, 400);
+  }
+  const rotatedAt = body.lastRotatedAt ? new Date(body.lastRotatedAt) : null;
+  if (rotatedAt && (!Number.isFinite(rotatedAt.getTime()) || rotatedAt.getTime() > Date.now() + 60_000)) {
+    return c.json({ error: "Last rotation must be a valid past date" }, 400);
+  }
   const result = await c.env.DB.prepare(`UPDATE access_service_principals
-    SET role = COALESCE(?, role), status = COALESCE(?, status) WHERE id = ? AND tenant_id = ?`)
-    .bind(body.role ?? null, body.status ?? null, id, c.get("tenantId")).run();
+    SET role=COALESCE(?, role), status=COALESCE(?, status),
+      credential_expires_at=COALESCE(?, credential_expires_at),
+      rotation_owner=COALESCE(?, rotation_owner), last_rotated_at=COALESCE(?, last_rotated_at),
+      revision=revision+1, updated_at=CURRENT_TIMESTAMP
+    WHERE id=? AND tenant_id=? AND revision=?`)
+    .bind(body.role ?? null, body.status ?? null, expiresAt, body.rotationOwner ?? null,
+      rotatedAt?.toISOString() ?? null, id, c.get("tenantId"), body.expectedRevision).run();
   if (result.meta.changes === 1) await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
     "service_principal.updated", "service_principal", id, body);
-  return c.json({ updated: result.meta.changes === 1 });
+  if (result.meta.changes !== 1) return c.json({ error: "Machine identity changed; refresh and try again" }, 409);
+  return c.json({ updated: true, revision: Number(body.expectedRevision) + 1 });
 });
 
 app.post("/api/smoke-fixtures", requireRoles("admin", "owner", "operator"), async (c) => {
@@ -2790,6 +2833,7 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       { name: "tool_action_recovery", run: () => enqueueRecoverableToolActions(env) },
       { name: "knowledge_expiry", run: () => expireKnowledgeSources(env, now) },
       { name: "connection_expiry_alerts", run: () => emitConnectionExpiryAlerts(env, now) },
+      { name: "service_principal_expiry_alerts", run: () => emitServicePrincipalExpiryAlerts(env, now) },
       { name: "mcp_connector_health", run: () => checkMcpConnectorHealth(env, now) },
       { name: "notification_escalation", run: () => escalateUnacknowledgedNotifications(env, now) },
       { name: "approval_escalation", run: () => escalateOverdueApprovals(env, now) },

@@ -4,11 +4,13 @@ const evidenceWindowDays = 30;
 
 export async function getDeploymentVerification(env: Env, tenantId: string) {
   const [principals, latestSmoke] = await Promise.all([
-    env.DB.prepare(`SELECT id, display_name, role, status, last_seen_at
+    env.DB.prepare(`SELECT id, display_name, role, status, last_seen_at, credential_expires_at
       FROM access_service_principals
       WHERE tenant_id=? AND status='active' AND role='operator'
+        AND credential_expires_at IS NOT NULL AND datetime(credential_expires_at) > datetime('now')
       ORDER BY last_seen_at DESC`).bind(tenantId).all<{
         id: string; display_name: string; role: string; status: string; last_seen_at: string | null;
+        credential_expires_at: string;
       }>(),
     env.DB.prepare(`SELECT deleted.target_id fixture_id, deleted.actor_id principal_id,
       principal.display_name principal_name, created.created_at started_at,
@@ -19,6 +21,8 @@ export async function getDeploymentVerification(env: Env, tenantId: string) {
         AND created.event_type='smoke_fixture.created' AND created.actor_id=deleted.actor_id
       JOIN access_service_principals principal ON principal.id=deleted.actor_id
         AND principal.tenant_id=deleted.tenant_id AND principal.status='active'
+        AND principal.credential_expires_at IS NOT NULL
+        AND datetime(principal.credential_expires_at) > datetime('now')
       WHERE deleted.tenant_id=? AND deleted.target_type='smoke_fixture'
         AND deleted.event_type='smoke_fixture.deleted'
       ORDER BY datetime(deleted.created_at) DESC LIMIT 1`).bind(tenantId).first<{

@@ -82,3 +82,10 @@
   .emergency-events article { grid-template-columns: 1fr; }
   .event-review { grid-template-columns: 1fr; }
 }
+.machine-principals .members-head,.machine-principals .member-row{grid-template-columns:minmax(210px,1.4fr) minmax(100px,.55fr) minmax(90px,.48fr) minmax(180px,.85fr) minmax(130px,.65fr)}
+.machine-principals .rotation-ready,.machine-principals .rotation-due{display:block;padding:7px 9px;border:1px solid #d7e2dc;border-radius:8px;background:#f7faf8;color:#365b4b;text-align:left}
+.machine-principals .rotation-due{border-color:#e5c6b8;background:#fff7f2;color:#944f36}
+.machine-principals .rotation-ready strong,.machine-principals .rotation-ready small,.machine-principals .rotation-due strong,.machine-principals .rotation-due small{display:block}
+.machine-principals .rotation-ready strong,.machine-principals .rotation-due strong{font-size:13px}
+.machine-principals .rotation-ready small,.machine-principals .rotation-due small{margin-top:2px;font-size:12px}
+@media(max-width:900px){.machine-principals{overflow-x:auto}.machine-principals .members-head,.machine-principals .member-row{min-width:850px}}

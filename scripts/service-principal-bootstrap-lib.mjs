@@ -51,18 +51,29 @@ export function availablePrecedence(policies, preferred = 10) {
   throw new Error("Access application has no available policy precedence");
 }
 
-export function registrationSql({ tenantId, clientId, displayName }) {
+export function registrationSql({ tenantId, clientId, displayName, expiresAt }) {
   if (!/^[A-Za-z0-9._-]{8,200}\.access$/.test(clientId ?? "")) {
     throw new Error("Cloudflare service-token Client ID is invalid");
+  }
+  if (!expiresAt || !Number.isFinite(Date.parse(expiresAt))) {
+    throw new Error("Cloudflare service-token expiry is required");
   }
   const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
   const principalId = `service-${clientId.replace(/\.access$/, "").slice(0, 32)}`;
   return `INSERT INTO access_service_principals
-    (id, tenant_id, access_common_name, display_name, role, created_by)
+    (id, tenant_id, access_common_name, display_name, role, created_by,
+     credential_expires_at, rotation_owner, last_rotated_at, updated_at)
     VALUES (${quote(principalId)}, ${quote(tenantId)}, ${quote(clientId)}, ${quote(displayName)},
-      'operator', 'bootstrap:access')
+      'operator', 'bootstrap:access', ${quote(expiresAt)},
+      (SELECT id FROM tenant_members WHERE tenant_id=${quote(tenantId)} AND status='active'
+       AND role IN ('admin','owner','operator') ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+       created_at LIMIT 1), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT(access_common_name) DO UPDATE SET
-      display_name=excluded.display_name, role='operator', status='active';`;
+      display_name=excluded.display_name, role='operator', status='active',
+      credential_expires_at=excluded.credential_expires_at,
+      rotation_owner=COALESCE(excluded.rotation_owner, access_service_principals.rotation_owner),
+      last_rotated_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP,
+      revision=access_service_principals.revision+1;`;
 }
 
 export function publicPlan({ environment, app, tokenAction, policyAction, databaseName, tenantId, credentialPath }) {

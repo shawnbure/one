@@ -200,7 +200,7 @@ Production remains closed until its own Access application, audience, allow poli
 
 ### Machine access and live smoke tests
 
-Workrr maps Cloudflare Access service tokens by the verified JWT `common_name` claim. Register the service-token Client ID (`…access`) under **Team & roles → Service principals** with an `operator` or `viewer` role. Workrr stores the Client ID as a tenant-scoped identity, but never accepts or stores the Client Secret.
+Workrr maps Cloudflare Access service tokens by the verified JWT `common_name` claim. Register the service-token Client ID (`…access`) under **Team & roles → Service principals** with an `operator` or `viewer` role, its actual Cloudflare expiry, and an accountable rotation owner. Workrr stores the Client ID and lifecycle evidence as a tenant-scoped identity, but never accepts or stores the Client Secret. Declared-expired principals fail authentication even if an upstream policy is accidentally left in place; hourly maintenance emits one owned warning cycle within 30 days and one expired cycle.
 
 The Access application also needs a Service Auth policy that includes that service token. Keep both credentials in the calling CI/FDE secret manager, then run:
 
@@ -226,7 +226,7 @@ npm run access:bootstrap-service -- \
   --smoke
 ```
 
-The default duration is 90 days and `forever` is rejected. The generated credential file is created with owner-only mode `0600`; neither the Client Secret nor the Cloudflare API token is printed, sent to Workrr, or stored in D1. The policy trusts only the newly created token—not “any valid service token.” If the named token already exists, the command stops rather than silently rotating a one-time secret. Production uses `--env production` and the exact confirmation `BOOTSTRAP PRODUCTION SERVICE PRINCIPAL`.
+The default duration is 90 days and `forever` is rejected. The generated credential file is created with owner-only mode `0600`; neither the Client Secret nor the Cloudflare API token is printed, sent to Workrr, or stored in D1. The bootstrap records the exact Cloudflare expiry and assigns the best eligible tenant rotation owner while the policy trusts only the newly created token—not “any valid service token.” If the named token already exists, the command stops rather than silently rotating a one-time secret. Production uses `--env production` and the exact confirmation `BOOTSTRAP PRODUCTION SERVICE PRINCIPAL`.
 
 For credentials managed separately, the underlying smoke command remains:
 

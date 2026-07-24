@@ -939,6 +939,12 @@ export interface ServicePrincipal {
   status: "active" | "suspended";
   created_at: string;
   last_seen_at: string | null;
+  credential_expires_at: string;
+  rotation_owner: string | null;
+  rotation_owner_name: string | null;
+  last_rotated_at: string | null;
+  revision: number;
+  updated_at: string | null;
 }
 export interface AccessOperationsData {
   sessions: Array<{
@@ -1686,12 +1692,14 @@ export const api = {
   }) => request<{ data: AccessOperationsData }>(
     `/api/access/emergency-events/${encodeURIComponent(eventId)}/review`,
     { method: "POST", body: JSON.stringify(body) }),
-  createServicePrincipal: (body: { commonName: string; displayName: string; role: "operator" | "viewer" }) =>
-    request<{ id: string; status: string }>("/api/service-principals", {
+  createServicePrincipal: (body: { commonName: string; displayName: string; role: "operator" | "viewer";
+    credentialExpiresAt: string; rotationOwner: string }) =>
+    request<{ id: string; status: string; revision: number }>("/api/service-principals", {
       method: "POST", body: JSON.stringify(body),
     }),
-  updateServicePrincipal: (id: string, body: { role?: "operator" | "viewer"; status?: "active" | "suspended" }) =>
-    request<{ updated: boolean }>(`/api/service-principals/${encodeURIComponent(id)}`, {
+  updateServicePrincipal: (id: string, body: { role?: "operator" | "viewer"; status?: "active" | "suspended";
+    credentialExpiresAt?: string; rotationOwner?: string; lastRotatedAt?: string; expectedRevision: number }) =>
+    request<{ updated: boolean; revision: number }>(`/api/service-principals/${encodeURIComponent(id)}`, {
       method: "PATCH", body: JSON.stringify(body),
     }),
   value: () => request<{ data: ValueData }>("/api/value"),

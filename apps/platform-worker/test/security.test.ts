@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 98, name: "0098_execution_idempotency_fingerprint.sql", applied_at: "2026-07-24 01:45:00"
+            id: 99, name: "0099_service_principal_lifecycle.sql", applied_at: "2026-07-24 02:15:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -89,6 +89,7 @@ describe("control-plane security boundary", () => {
     let bound: unknown[] = [];
     const DB = { prepare(sql: string) {
       expect(sql).toContain("FROM access_service_principals");
+      expect(sql).toContain("credential_expires_at");
       const statement = {
         bind(...values: unknown[]) { bound = values; return statement; },
         async first() { return { id: "machine-1", tenant_id: "customer-a", email: "service:client.access",
@@ -517,6 +518,23 @@ describe("control-plane security boundary", () => {
       expect(queries.some((sql) => sql.includes("INSERT INTO smoke_fixtures") ||
         sql.includes("INSERT INTO access_service_principals"))).toBe(false);
     }
+  });
+
+  it("creates machine lifecycle evidence only through an active same-tenant rotation owner", async () => {
+    const { env, queries } = environment("owner");
+    const response = await app.fetch(new Request("http://localhost/api/service-principals", {
+      method: "POST", headers: { origin: "http://localhost", "content-type": "application/json",
+        "x-workrr-user": "operator@example.com" },
+      body: JSON.stringify({
+        commonName: "customer-automation.access", displayName: "Customer automation", role: "operator",
+        credentialExpiresAt: "2026-10-23T23:59:59.000Z", rotationOwner: "member-1"
+      })
+    }), env as never, executionCtx as never);
+    expect(response.status).toBe(201);
+    const insert = queries.find((sql) => sql.includes("INSERT INTO access_service_principals"));
+    expect(insert).toContain("FROM tenant_members m");
+    expect(insert).toContain("m.tenant_id=?");
+    expect(insert).toContain("credential_expires_at");
   });
 
   it("keeps immutable release comparison readable to audit roles but out of consumer sessions", async () => {

@@ -101,7 +101,9 @@ export async function resolveAccessPrincipal(env: Env, payload: Record<string, u
   if (typeof payload.common_name !== "string" || !payload.common_name.trim()) return null;
   return env.DB.prepare(`SELECT id, tenant_id, 'service:' || access_common_name email, display_name, role,
       'service' identity_type FROM access_service_principals
-    WHERE access_common_name = ? AND status = 'active' LIMIT 1`)
+    WHERE access_common_name = ? AND status = 'active'
+      AND credential_expires_at IS NOT NULL AND datetime(credential_expires_at) > datetime('now')
+    LIMIT 1`)
     .bind(payload.common_name.trim()).first<MemberRow>();
 }
 

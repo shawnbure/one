@@ -43,11 +43,14 @@ test("creates a specific-token Service Auth policy rather than trusting any toke
 test("generates a bounded operator upsert and a secret-free public plan", () => {
   const clientId = `${"a".repeat(32)}.access`;
   const sql = registrationSql({
-    tenantId: "demo", clientId, displayName: "Customer's smoke operator"
+    tenantId: "demo", clientId, displayName: "Customer's smoke operator",
+    expiresAt: "2026-10-22T00:00:00.000Z"
   });
   assert.match(sql, /role='operator'/);
   assert.match(sql, /Customer''s smoke operator/);
   assert.doesNotMatch(sql, /client_secret/i);
+  assert.match(sql, /credential_expires_at/);
+  assert.match(sql, /2026-10-22/);
   const plan = publicPlan({
     environment: "dev",
     app: { id: "app-1", name: "Workrr", domain: valid.domain, aud: valid.audience },

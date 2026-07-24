@@ -109,7 +109,7 @@ if (existingPolicy) {
 execFileSync("npx", ["wrangler", "d1", "execute", manifest.databaseName,
   ...(environment === "production" ? [] : ["--env", environment]),
   "--remote", "--command", registrationSql({
-    tenantId, clientId: token.client_id, displayName: name,
+    tenantId, clientId: token.client_id, displayName: name, expiresAt: token.expires_at,
   })], {
   cwd: workerDir,
   env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: manifest.accountId },

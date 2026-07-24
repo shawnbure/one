@@ -24,12 +24,16 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
   const [emergencyReviewDue, setEmergencyReviewDue] = useState("");
   const [emergencyEnabled, setEmergencyEnabled] = useState(true);
   const [eventDrafts, setEventDrafts] = useState<Record<string, { classification: "drill" | "incident" | "false_positive"; note: string }>>({});
-  const [modal, setModal] = useState<"member" | "machine" | "delegation" | null>(null);
+  const [modal, setModal] = useState<"member" | "machine" | "machine-lifecycle" | "delegation" | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("operator");
   const [commonName, setCommonName] = useState("");
   const [machineRole, setMachineRole] = useState<"operator" | "viewer">("operator");
+  const [machineExpiry, setMachineExpiry] = useState("");
+  const [machineOwner, setMachineOwner] = useState("");
+  const [machineRotatedAt, setMachineRotatedAt] = useState("");
+  const [selectedMachine, setSelectedMachine] = useState<ServicePrincipal | null>(null);
   const [delegatingMemberId, setDelegatingMemberId] = useState("");
   const [delegateId, setDelegateId] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -60,12 +64,31 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
     setModal(null); setName(""); setEmail(""); await load(); } catch (error) { onNotice(error instanceof Error ? error.message : "Could not add member"); } }
   async function updateMember(id: string, body: { role?: string; status?: string }) { try { await api.updateMember(id, body);
     onNotice("Membership updated and audited."); await load(); } catch (error) { onNotice(error instanceof Error ? error.message : "Could not update member"); } }
-  async function addMachine() { try { await api.createServicePrincipal({ commonName, displayName: name, role: machineRole });
+  async function addMachine() { try { await api.createServicePrincipal({ commonName, displayName: name,
+    role: machineRole, credentialExpiresAt: new Date(`${machineExpiry}T23:59:59Z`).toISOString(),
+    rotationOwner: machineOwner });
     onNotice("Machine identity registered. Its secret remains in your secret manager."); setModal(null); setName(""); setCommonName(""); await load();
   } catch (error) { onNotice(error instanceof Error ? error.message : "Could not add machine identity"); } }
-  async function updateMachine(id: string, body: { role?: "operator" | "viewer"; status?: "active" | "suspended" }) { try {
-    await api.updateServicePrincipal(id, body); onNotice("Machine identity updated and audited."); await load();
+  async function updateMachine(machine: ServicePrincipal,
+    body: { role?: "operator" | "viewer"; status?: "active" | "suspended"; credentialExpiresAt?: string;
+      rotationOwner?: string; lastRotatedAt?: string }) { try {
+    await api.updateServicePrincipal(machine.id, { ...body, expectedRevision: machine.revision });
+    onNotice("Machine identity updated and audited."); await load();
   } catch (error) { onNotice(error instanceof Error ? error.message : "Could not update machine identity"); } }
+  function openMachineLifecycle(machine: ServicePrincipal) {
+    setSelectedMachine(machine); setMachineExpiry(machine.credential_expires_at.slice(0, 10));
+    setMachineOwner(machine.rotation_owner ?? ""); setMachineRotatedAt(machine.last_rotated_at?.slice(0, 10) ?? "");
+    setModal("machine-lifecycle");
+  }
+  async function saveMachineLifecycle() {
+    if (!selectedMachine) return;
+    await updateMachine(selectedMachine, {
+      credentialExpiresAt: new Date(`${machineExpiry}T23:59:59Z`).toISOString(),
+      rotationOwner: machineOwner,
+      ...(machineRotatedAt ? { lastRotatedAt: new Date(`${machineRotatedAt}T12:00:00Z`).toISOString() } : {})
+    });
+    setModal(null); setSelectedMachine(null);
+  }
   function openDelegation(member: Member) {
     const current = delegations.find((item) => item.member_id === member.id);
     const start = current ? new Date(current.starts_at) : new Date();
@@ -123,15 +146,22 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
     </div>
     <div className="machine-heading"><div><span className="eyebrow"><Bot size={14}/> MACHINE ACCESS</span><h2>Service principals</h2>
       <p>Register only an Access service-token Client ID. Workrr never receives or stores its secret.</p></div>
-      {privileged && <button onClick={() => { setName(""); setModal("machine"); }}><Plus size={15}/>Add machine</button>}</div>
-    <div className="members-table panel"><div className="members-head"><span>Machine</span><span>Role</span><span>Status</span><span>Last active</span></div>
+      {privileged && <button onClick={() => { setName(""); setMachineExpiry(new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10));
+        setMachineOwner(members.find((member) => member.id === session?.user.id)?.id ??
+          members.find((member) => ["owner", "admin", "operator"].includes(member.role) && member.status === "active")?.id ?? "");
+        setModal("machine"); }}><Plus size={15}/>Add machine</button>}</div>
+    <div className="members-table machine-principals panel"><div className="members-head"><span>Machine</span><span>Role</span><span>Status</span><span>Rotation</span><span>Last active</span></div>
       {machines.length === 0 && <div className="machine-empty">No machine identities registered.</div>}
       {machines.map((machine) => <div className="member-row" key={machine.id}><span><i><Bot size={16}/></i><span>
         <strong>{machine.display_name}</strong><small>{machine.access_common_name}</small></span></span>
-        <select value={machine.role} disabled={!privileged} onChange={(event) => void updateMachine(machine.id, { role: event.target.value as "operator" | "viewer" })}>
+        <select value={machine.role} disabled={!privileged} onChange={(event) => void updateMachine(machine, { role: event.target.value as "operator" | "viewer" })}>
           <option value="operator">operator</option><option value="viewer">viewer</option></select>
-        <button className={`member-status ${machine.status}`} disabled={!privileged} onClick={() => void updateMachine(machine.id,
+        <button className={`member-status ${machine.status}`} disabled={!privileged} onClick={() => void updateMachine(machine,
           { status: machine.status === "active" ? "suspended" : "active" })}><i/>{machine.status}</button>
+        <button className={new Date(machine.credential_expires_at) <= new Date(Date.now() + 30 * 86_400_000) ? "rotation-due" : "rotation-ready"}
+          disabled={!privileged} onClick={() => openMachineLifecycle(machine)}>
+          <strong>{formatMachineExpiry(machine.credential_expires_at)}</strong>
+          <small>{machine.rotation_owner_name ?? "Owner required"}</small></button>
         <span>{machine.last_seen_at ?? "Never"}</span></div>)}</div>
     {access && <AccessOperations access={access} session={session} privileged={privileged}
       memberId={emergencyMember} setMemberId={setEmergencyMember}
@@ -153,11 +183,30 @@ export function TeamRolesView({ session, onNotice }: { session: SessionData | nu
     </IdentityModal>}
     {modal === "machine" && <IdentityModal title="Add machine identity" icon={<Bot size={20}/>}
       detail="Paste only the Cloudflare Access service-token Client ID. Keep the Client Secret in your deployment secret manager."
-      close={() => setModal(null)} action={addMachine} disabled={!name.trim() || !commonName.endsWith(".access")}>
+      close={() => setModal(null)} action={addMachine}
+      disabled={!name.trim() || !commonName.endsWith(".access") || !machineExpiry || !machineOwner}>
       <label>Display name<input value={name} onChange={(event) => setName(event.target.value)} autoFocus/></label>
       <label>Access Client ID<input value={commonName} placeholder="…access" onChange={(event) => setCommonName(event.target.value)}/></label>
       <label>Role<select value={machineRole} onChange={(event) => setMachineRole(event.target.value as "operator" | "viewer")}>
         <option value="operator">Operator — smoke and operate</option><option value="viewer">Viewer — read only</option></select></label>
+      <label>Credential expires<input type="date" value={machineExpiry}
+        onChange={(event) => setMachineExpiry(event.target.value)}/></label>
+      <label>Rotation owner<select value={machineOwner} onChange={(event) => setMachineOwner(event.target.value)}>
+        <option value="">Choose an accountable owner</option>
+        {members.filter((member) => member.status === "active" && ["admin", "owner", "operator"].includes(member.role))
+          .map((member) => <option value={member.id} key={member.id}>{member.display_name} · {member.role}</option>)}</select></label>
+    </IdentityModal>}
+    {modal === "machine-lifecycle" && selectedMachine && <IdentityModal title="Manage machine credential"
+      icon={<KeyRound size={20}/>} detail="Update lifecycle evidence after rotating the Cloudflare Access token. Workrr never receives the Client Secret."
+      close={() => setModal(null)} action={saveMachineLifecycle}
+      disabled={!machineExpiry || !machineOwner} actionLabel="Save lifecycle">
+      <label>Credential expires<input type="date" value={machineExpiry}
+        onChange={(event) => setMachineExpiry(event.target.value)}/></label>
+      <label>Rotation owner<select value={machineOwner} onChange={(event) => setMachineOwner(event.target.value)}>
+        {members.filter((member) => member.status === "active" && ["admin", "owner", "operator"].includes(member.role))
+          .map((member) => <option value={member.id} key={member.id}>{member.display_name} · {member.role}</option>)}</select></label>
+      <label>Last rotated<input type="date" value={machineRotatedAt}
+        onChange={(event) => setMachineRotatedAt(event.target.value)}/></label>
     </IdentityModal>}
     {modal === "delegation" && <IdentityModal title="Schedule approval coverage" icon={<CalendarClock size={20}/>}
       detail="Only new assignments during this window are routed. Existing review items do not move."
@@ -264,6 +313,13 @@ function initials(value: string) { return value.split(/\s+/).map((part) => part[
 function localDateTime(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function formatMachineExpiry(value: string) {
+  const expiry = new Date(value);
+  if (expiry <= new Date()) return `Expired ${expiry.toLocaleDateString()}`;
+  const days = Math.ceil((expiry.getTime() - Date.now()) / 86_400_000);
+  return `${days} day${days === 1 ? "" : "s"} · ${expiry.toLocaleDateString()}`;
 }
 function formatCoverage(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })

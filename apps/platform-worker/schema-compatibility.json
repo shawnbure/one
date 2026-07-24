@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 98,
-  "requiredMigrationName": "0098_execution_idempotency_fingerprint.sql"
+  "requiredMigrationId": 99,
+  "requiredMigrationName": "0099_service_principal_lifecycle.sql"
 }
