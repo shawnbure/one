@@ -437,6 +437,26 @@ a:focus-visible {
 .release-diff-values pre { max-height: 280px; margin: 0; overflow: auto; padding: 11px; border: 1px solid #e0e7e3; border-radius: 8px; background: #f7f9f8; color: #273b32; font: 13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .release-diff-empty { display: flex; align-items: center; gap: 7px; color: #347159 !important; }
 .release-diff-panel > footer { padding: 10px 17px; background: #f5f8f6; color: #63736b; font: 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap: anywhere; }
+.release-review-state { display: flex !important; width: fit-content; align-items: center; gap: 5px; margin-top: 6px; padding: 4px 8px; border-radius: 10px; background: #fff1d8; color: #7b5b22; font-size: 12px !important; font-style: normal; text-transform: capitalize; }
+.release-review-state.approved { background: #e6f3ec; color: #2f7457; }
+.release-review-state.rejected { background: #f8e7e3; color: #914a3c; }
+.release-decision-form { padding: 16px 17px; border-top: 1px solid #dce6e1; background: #f5f8f6; }
+.release-decision-form > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.release-decision-form > header strong,.release-decision-form > header small { display: block; }
+.release-decision-form > header strong { color: #2d4539; font-size: 15px; }
+.release-decision-form > header small { max-width: 720px; margin-top: 3px; color: #5b6e64; font-size: 13px; line-height: 1.5; }
+.release-decision-form > header em { padding: 4px 7px; border-radius: 10px; background: #fff0d5; color: #79591f; font-size: 12px; font-style: normal; font-weight: 750; white-space: nowrap; }
+.release-decision-form label { display: grid; gap: 6px; margin-top: 12px; color: #3b5247; font-size: 13px; font-weight: 750; }
+.release-decision-form textarea { min-height: 86px; padding: 10px 11px; border: 1px solid #cbd8d2; border-radius: 8px; background: #fff; color: #263a31; font: 14px/1.5 inherit; resize: vertical; }
+.release-decision-form > div { display: flex; justify-content: flex-end; gap: 9px; margin-top: 10px; }
+.release-decision-form button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 11px; border: 1px solid #dfc7c1; border-radius: 8px; background: #fff; color: #88473b; font-size: 13px; font-weight: 750; }
+.release-decision-form button.approve { border-color: #bcd8ca; background: #e8f4ed; color: #2f7256; }
+.release-decision-record { display: flex; align-items: flex-start; gap: 9px; padding: 14px 17px; border-top: 1px solid #dce6e1; background: #eef7f2; color: #307357; }
+.release-decision-record.rejected { background: #fbefec; color: #914b3d; }
+.release-decision-record strong,.release-decision-record small { display: block; }
+.release-decision-record strong { font-size: 14px; text-transform: capitalize; }
+.release-decision-record small { margin-top: 3px; color: #53685e; font-size: 13px; line-height: 1.5; }
+.release-decision-guidance { border-top: 1px solid #e5ded0; background: #fff8ea; color: #765925 !important; }
 .solution-handoff-list article > button { width: auto; margin: 0; }
 .solution-handoff-editor { grid-column: 2 / -1; display: grid !important; grid-template-columns: 180px minmax(0,1fr); gap: 10px 12px; margin-top: 4px; padding: 13px; border-radius: 9px; background: #f5f8f6; }
 .solution-handoff-editor label { display: grid; gap: 5px; color: #40564b; font-size: 12px; font-weight: 750; }
@@ -1842,6 +1862,8 @@ nav button em,
   .release-diff-panel > header > strong { justify-self: start; white-space: normal; }
   .release-diff-values { grid-template-columns: 1fr; }
   .release-diff-summary span { padding-inline: 10px; }
+  .release-decision-form > header,.release-decision-form > div { align-items: stretch; flex-direction: column; }
+  .release-decision-form > header em { align-self: flex-start; white-space: normal; }
   :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select, button) {
     min-height: 42px !important;
   }

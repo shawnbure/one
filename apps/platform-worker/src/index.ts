@@ -89,6 +89,7 @@ import { checkMcpConnectorHealth } from "./mcp-connector-health";
 import { updateDataEgressPolicy } from "./data-governance";
 import { listSolutionPacks, resolveSolutionPack, resolveSolutionPackHandoffChecks } from "./solution-pack-catalog";
 import { SolutionPackHandoffConflict, updateSolutionPackHandoffCheck } from "./solution-pack-handoff";
+import { decideProcessRelease } from "./release-governance";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -1183,6 +1184,27 @@ app.post("/api/processes/:id/releases", requireRoles("admin", "builder", "owner"
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "process_release.created", "process", processId, result);
     return c.json(result, 201);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Release creation failed" }, 400); }
+});
+
+app.post("/api/processes/:id/releases/:releaseId/review", requireRoles("admin", "owner"), async (c) => {
+  try {
+    const processId = c.req.param("id");
+    const releaseId = c.req.param("releaseId");
+    if (!processId || !releaseId) return c.json({ error: "Process and release IDs are required" }, 400);
+    const result = await decideProcessRelease(
+      c.env, c.get("tenantId"), processId, releaseId, c.get("actorId"), await c.req.json()
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"),
+      `process_release.${result.decision}`, "process", processId, {
+        releaseId: result.releaseId, version: result.version,
+        releaseChecksum: result.releaseChecksum
+      });
+    return c.json({ data: result }, 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Release review could not be recorded";
+    return c.json({ error: message }, message.includes("not found") ? 404 :
+      message.includes("already has") ? 409 : 400);
+  }
 });
 
 app.post("/api/processes/:id/releases/:releaseId/publish", requireRoles("admin", "owner"), async (c) => {

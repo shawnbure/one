@@ -817,6 +817,8 @@ Validation checks references, schemas, permissions, cycles, missing secrets, mod
 
 Before publication or rollback, the control plane can derive a human-readable comparison from the target and currently active immutable rows. The comparison is tenant- and process-scoped and covers the exact prompt bundle, model, autonomy, classification, contracts, snapshotted tool policies, and bounded workflow topology. It is loaded on demand in Process Studio rather than added to release listing or runtime admission, keeping the review useful to non-developer owners without adding D1 reads to agent turns.
 
+A new draft cannot publish until an owner or administrator records one terminal governance decision bound to its exact checksum. Rejected releases remain immutable and require a replacement draft. For high-risk processes, the approving identity must differ from `created_by`, preserving meaningful author/reviewer separation even when an owner authors the draft. Publication verifies the decision and checksum inside its normal control path; this adds no reads to runtime agent turns and does not interfere with the separate evaluated rollback path.
+
 ## 10. Repository structure
 
 ```text

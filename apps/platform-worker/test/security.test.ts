@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 95, name: "0095_solution_pack_handoff_gates.sql", applied_at: "2026-07-24 00:30:00"
+            id: 96, name: "0096_release_governance_reviews.sql", applied_at: "2026-07-24 00:30:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -521,6 +521,22 @@ describe("control-plane security boundary", () => {
     ), consumer.env as never, executionCtx as never);
     expect(denied.status).toBe(403);
     expect(consumer.queries.some((sql) => sql.includes("FROM process_releases r"))).toBe(false);
+  });
+
+  it("reserves terminal release decisions for owners and administrators", async () => {
+    for (const role of ["builder", "operator", "reviewer", "viewer", "consumer"]) {
+      const principal = environment(role);
+      const response = await app.fetch(new Request(
+        "http://localhost/api/processes/process-1/releases/release-2/review", {
+          method: "POST",
+          headers: { origin: "http://localhost", "content-type": "application/json",
+            "x-workrr-user": "operator@example.com" },
+          body: JSON.stringify({ decision: "approved", evidence: "Unauthorized release approval evidence." })
+        }), principal.env as never, executionCtx as never);
+      expect(response.status).toBe(403);
+      expect(principal.queries.some((sql) =>
+        sql.includes("INSERT OR IGNORE INTO process_release_governance_reviews"))).toBe(false);
+    }
   });
 
   it("keeps deployment-verification evidence out of consumer sessions", async () => {

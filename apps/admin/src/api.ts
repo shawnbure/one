@@ -390,6 +390,11 @@ export interface ProcessRelease {
   tool_policy_json: string | null;
   topology_json: string | null;
   data_classification: "public" | "internal" | "confidential" | "restricted";
+  review_decision: "approved" | "rejected" | null;
+  review_evidence: string | null;
+  review_decided_by: string | null;
+  review_decided_at: string | null;
+  review_decided_by_name: string | null;
 }
 export interface ProcessReleaseDiff {
   from: { id: string; version: number; status: string; checksum: string } | null;
@@ -1474,6 +1479,13 @@ export const api = {
     request<{ releaseId: string; version: number; status: string }>(
       `/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/publish`,
       { method: "POST" },
+    ),
+  decideProcessRelease: (processId: string, releaseId: string, body: {
+    decision: "approved" | "rejected"; evidence: string;
+  }) => request<{ data: { releaseId: string; version: number; releaseChecksum: string;
+    decision: "approved" | "rejected"; evidence: string; decidedBy: string } }>(
+      `/api/processes/${encodeURIComponent(processId)}/releases/${encodeURIComponent(releaseId)}/review`,
+      { method: "POST", body: JSON.stringify(body) },
     ),
   governance: () => request<{ data: GovernanceData }>("/api/governance"),
   updateModelPolicy: (modelId: string, enabled: boolean) =>

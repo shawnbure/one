@@ -99,9 +99,11 @@ describe("process launch readiness", () => {
         const statement = {
           bind(..._values: unknown[]) { return statement; },
           async first() {
-            if (sql.includes("SELECT * FROM process_releases")) {
+            if (sql.includes("FROM process_releases r")) {
               return { id: "release-1", status: "draft", prompt_release_id: "prompt-1", version: 1,
-                model_id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" };
+                model_id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", checksum: "checksum-1",
+                review_decision: "approved", review_checksum: "checksum-1",
+                review_decided_by: "owner-2", created_by: "builder-1", risk_level: "medium" };
             }
             if (sql.includes("LEFT JOIN tenant_model_policies")) return { enabled: 1 };
             if (sql.includes("baseline_configured")) {
@@ -120,5 +122,37 @@ describe("process launch readiness", () => {
     await expect(publishRelease({ DB } as never, "tenant-1", "process-1", "release-1", "owner-1"))
       .rejects.toThrow("have an owner approve a 30-day value target");
     expect(batchCalled).toBe(false);
+  });
+
+  it("requires an exact-checksum decision and high-risk author separation before other publication work", async () => {
+    function releaseEnvironment(release: Record<string, unknown>) {
+      let queries = 0;
+      const DB = {
+        prepare() {
+          const statement = {
+            bind(..._values: unknown[]) { return statement; },
+            async first() { queries += 1; return release; }
+          };
+          return statement;
+        }
+      };
+      return { DB, count: () => queries };
+    }
+    const unreviewed = releaseEnvironment({
+      id: "release-1", status: "draft", checksum: "checksum-1", risk_level: "medium"
+    });
+    await expect(publishRelease({ DB: unreviewed.DB } as never,
+      "tenant-1", "process-1", "release-1", "owner-1"))
+      .rejects.toThrow("owner review of the exact checksum");
+    expect(unreviewed.count()).toBe(1);
+
+    const selfApproved = releaseEnvironment({
+      id: "release-1", status: "draft", checksum: "checksum-1", review_checksum: "checksum-1",
+      review_decision: "approved", risk_level: "high", review_decided_by: "owner-1", created_by: "owner-1"
+    });
+    await expect(publishRelease({ DB: selfApproved.DB } as never,
+      "tenant-1", "process-1", "release-1", "owner-1"))
+      .rejects.toThrow("different owner or administrator");
+    expect(selfApproved.count()).toBe(1);
   });
 });

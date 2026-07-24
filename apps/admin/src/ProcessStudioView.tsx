@@ -258,6 +258,7 @@ function Studio({
   const [releaseDiff, setReleaseDiff] = useState<ProcessReleaseDiff | null>(null);
   const [releaseDiffTarget, setReleaseDiffTarget] = useState<string | null>(null);
   const [releaseDiffLoading, setReleaseDiffLoading] = useState(false);
+  const [releaseReviewEvidence, setReleaseReviewEvidence] = useState("");
   const [rolloutPercentage, setRolloutPercentage] = useState(25);
   const [rolloutReason, setRolloutReason] = useState("");
   const [safetyForm, setSafetyForm] = useState({
@@ -426,6 +427,7 @@ function Studio({
     }
     setReleaseDiffTarget(release.id);
     setReleaseDiff(null);
+    setReleaseReviewEvidence("");
     setReleaseDiffLoading(true);
     try {
       const result = await api.processReleaseDiff(processId, release.id);
@@ -435,6 +437,24 @@ function Studio({
       onNotice(error instanceof Error ? error.message : "Release comparison could not load");
     } finally {
       setReleaseDiffLoading(false);
+    }
+  }
+
+  async function decideRelease(release: ProcessRelease, decision: "approved" | "rejected") {
+    setBusy(true);
+    try {
+      await api.decideProcessRelease(processId, release.id, {
+        decision, evidence: releaseReviewEvidence.trim()
+      });
+      onNotice(`Release v${release.version} ${decision} against checksum ${release.checksum.slice(0, 12)}.`);
+      setReleaseDiffTarget(null);
+      setReleaseDiff(null);
+      setReleaseReviewEvidence("");
+      await load();
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Release decision could not be recorded");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1139,6 +1159,14 @@ function Studio({
                 <span className={`release-gate ${release.evaluation_status}`}>
                   <ShieldCheck size={12}/> Evaluation {release.evaluation_status.replaceAll("_", " ")}
                 </span>
+                {release.status === "draft" && <span className={`release-review-state ${release.review_decision ?? "pending"}`}>
+                  {release.review_decision === "approved" ? <Check size={12}/> :
+                    release.review_decision === "rejected" ? <X size={12}/> : <Clock3 size={12}/>}
+                  Owner review {release.review_decision ?? "pending"}
+                </span>}
+                {release.review_decided_by_name && <small>
+                  Decision by {release.review_decided_by_name} · {release.review_decided_at}
+                </small>}
               </span>
               <div className="release-actions">
                 {release.status !== "published" && <button className="review-release"
@@ -1147,9 +1175,13 @@ function Studio({
                 </button>}
                 {release.status !== "published" && canActivate &&
                   (release.status === "draft" || release.evaluation_status === "passing") ? (
-                  <button disabled={busy || (release.status === "draft" && !data.launchReadiness.ready)}
-                    title={release.status === "draft" && !data.launchReadiness.ready
-                      ? data.launchReadiness.blockers.join("; ") : undefined}
+                  <button disabled={busy || (release.status === "draft" &&
+                    (!data.launchReadiness.ready || release.review_decision !== "approved"))}
+                    title={release.status === "draft"
+                      ? release.review_decision !== "approved"
+                        ? "An owner or administrator must approve the exact release checksum"
+                        : !data.launchReadiness.ready ? data.launchReadiness.blockers.join("; ") : undefined
+                      : undefined}
                     onClick={() => release.status === "draft"
                     ? void publish(release) : (setRollbackTarget(release), setRollbackReason(""), setRollbackVersion(""))}>
                     {release.status === "draft" ? <Rocket size={14} /> : <History size={14} />}{" "}
@@ -1165,7 +1197,11 @@ function Studio({
                 )}
               </div>
               {releaseDiffTarget === release.id && <ReleaseDiffPanel
-                loading={releaseDiffLoading} diff={releaseDiff}/>}
+                loading={releaseDiffLoading} diff={releaseDiff} release={release}
+                highRisk={data.blueprint.risk_level === "high"}
+                canDecide={canActivate && release.status === "draft" && !release.review_decision}
+                busy={busy} evidence={releaseReviewEvidence} onEvidence={setReleaseReviewEvidence}
+                onDecide={(decision) => void decideRelease(release, decision)}/>}
               {rollbackTarget?.id === release.id && <div className="rollback-editor">
                 <header><div><strong>Restore release v{release.version}</strong>
                   <small>This immediately retires v{activeRelease?.version} and restores this exact immutable bundle.</small>
@@ -1201,7 +1237,11 @@ function Studio({
   );
 }
 
-function ReleaseDiffPanel({ loading, diff }: { loading: boolean; diff: ProcessReleaseDiff | null }) {
+function ReleaseDiffPanel({ loading, diff, release, highRisk, canDecide, busy, evidence, onEvidence, onDecide }: {
+  loading: boolean; diff: ProcessReleaseDiff | null; release: ProcessRelease; highRisk: boolean;
+  canDecide: boolean; busy: boolean; evidence: string; onEvidence: (value: string) => void;
+  onDecide: (decision: "approved" | "rejected") => void;
+}) {
   if (loading) return <section className="release-diff-panel" aria-live="polite">
     <p>Comparing the immutable release bundles…</p>
   </section>;
@@ -1233,6 +1273,27 @@ function ReleaseDiffPanel({ loading, diff }: { loading: boolean; diff: ProcessRe
         </article>)}
       </details>)}</div> :
       <p className="release-diff-empty"><Check size={15}/> No effective configuration change was detected.</p>}
+    {release.review_decision ? <section className={`release-decision-record ${release.review_decision}`}>
+      {release.review_decision === "approved" ? <Check size={17}/> : <X size={17}/>}
+      <span><strong>Release {release.review_decision}</strong>
+        <small>{release.review_evidence}</small></span>
+    </section> : canDecide ? <section className="release-decision-form">
+      <header><div><strong>Record the owner decision</strong>
+        <small>This terminal decision is bound to candidate checksum {diff.to.checksum.slice(0, 12)}.
+          A rejection requires a new immutable draft.</small></div>
+        {highRisk && <em>Different reviewer required</em>}</header>
+      <label>Review evidence<textarea maxLength={1000} value={evidence}
+        placeholder="Summarize the reviewed behavior, evaluation evidence, operational risk, and rollout expectation."
+        onChange={(event) => onEvidence(event.target.value)}/></label>
+      <div>
+        <button disabled={busy || evidence.trim().length < 10} onClick={() => onDecide("rejected")}>
+          <X size={14}/>Reject release</button>
+        <button className="approve" disabled={busy || evidence.trim().length < 10}
+          onClick={() => onDecide("approved")}><Check size={14}/>Approve checksum</button>
+      </div>
+    </section> : release.status === "draft" ? <p className="release-decision-guidance">
+      An owner or administrator must review and decide this exact checksum before publication.
+    </p> : null}
     <footer>Checksums: {diff.from?.checksum.slice(0, 12) ?? "no active release"} → {diff.to.checksum.slice(0, 12)}</footer>
   </section>;
 }

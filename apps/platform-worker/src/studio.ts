@@ -116,10 +116,16 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
       p.version DESC LIMIT 1`).bind(blueprintId, tenantId, blueprintId).first(),
-    env.DB.prepare(`SELECT id, version, prompt_release_id, model_profile, model_id, autonomy, status, release_notes,
-      created_by, created_at, published_at, published_by, checksum, evaluation_status, evaluated_at,
-      input_schema_json, output_schema_json, tool_policy_json, topology_json, data_classification FROM process_releases
-      WHERE tenant_id = ? AND blueprint_id = ? ORDER BY version DESC`).bind(tenantId, blueprintId).all(),
+    env.DB.prepare(`SELECT r.id, r.version, r.prompt_release_id, r.model_profile, r.model_id, r.autonomy,
+      r.status, r.release_notes, r.created_by, r.created_at, r.published_at, r.published_by, r.checksum,
+      r.evaluation_status, r.evaluated_at, r.input_schema_json, r.output_schema_json, r.tool_policy_json,
+      r.topology_json, r.data_classification, gr.decision review_decision, gr.evidence review_evidence,
+      gr.decided_by review_decided_by, gr.decided_at review_decided_at, gm.display_name review_decided_by_name
+      FROM process_releases r
+      LEFT JOIN process_release_governance_reviews gr
+        ON gr.release_id=r.id AND gr.tenant_id=r.tenant_id AND gr.blueprint_id=r.blueprint_id
+      LEFT JOIN tenant_members gm ON gm.id=gr.decided_by AND gm.tenant_id=gr.tenant_id
+      WHERE r.tenant_id = ? AND r.blueprint_id = ? ORDER BY r.version DESC`).bind(tenantId, blueprintId).all(),
     env.DB.prepare(`SELECT status, COUNT(*) count,
       ROUND(AVG(CASE WHEN input_tokens > 0 THEN input_tokens END)) average_input_tokens,
       ROUND(AVG(CASE WHEN total_tokens > 0 THEN total_tokens END)) average_total_tokens,
@@ -307,10 +313,22 @@ export async function createDraftRelease(env: Env, tenantId: string, blueprintId
 }
 
 export async function publishRelease(env: Env, tenantId: string, blueprintId: string, releaseId: string, actorId: string) {
-  const release = await env.DB.prepare(`SELECT * FROM process_releases WHERE id = ? AND tenant_id = ? AND blueprint_id = ?`)
+  const release = await env.DB.prepare(`SELECT r.*, b.risk_level, gr.decision review_decision,
+      gr.release_checksum review_checksum, gr.decided_by review_decided_by
+    FROM process_releases r
+    JOIN agent_blueprints b ON b.id=r.blueprint_id AND b.tenant_id=r.tenant_id
+    LEFT JOIN process_release_governance_reviews gr
+      ON gr.release_id=r.id AND gr.tenant_id=r.tenant_id AND gr.blueprint_id=r.blueprint_id
+    WHERE r.id = ? AND r.tenant_id = ? AND r.blueprint_id = ?`)
     .bind(releaseId, tenantId, blueprintId).first<Record<string, string | number>>();
   if (!release) throw new Error("Process release not found");
   if (release.status !== "draft") throw new Error("Only a draft release can be published; use governed rollback for retired releases");
+  if (release.review_decision !== "approved" || release.review_checksum !== release.checksum) {
+    throw new Error("Release requires an accountable owner review of the exact checksum");
+  }
+  if (release.risk_level === "high" && release.review_decided_by === release.created_by) {
+    throw new Error("A different owner or administrator must approve a high-risk release");
+  }
   await assertTenantModelAllowed(env, tenantId, String(release.model_id));
   const readiness = await getProcessLaunchReadiness(env, tenantId, blueprintId);
   if (!readiness.ready) throw new ProcessLaunchReadinessError(readiness);

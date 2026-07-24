@@ -51,6 +51,8 @@ Process release activation is governed separately from release authoring. Publis
 
 Release review is now a first-class owner workflow rather than a collection of opaque checksums. An authorized operating or audit role can request an on-demand, tenant/process/release-scoped comparison of any draft or rollback target against the active immutable release. The server joins the exact prompt bundle and derives additions, removals, and modifications across prompt behavior, exact model and autonomy, classification, input/output contracts, typed tool policies, and ordered business workflow steps. Process Studio presents readable before/after evidence with bounded long-text output and source checksums; it does not add a comparison query to ordinary Studio loads or any agent execution path.
 
+Review is consequential rather than cosmetic. An owner or administrator records one terminal approval or rejection with substantive evidence against the candidate checksum; rejection requires a new immutable draft. Publication rechecks that the stored decision is approved and its checksum still matches before model, launch-readiness, prompt-budget, and evaluation gates continue. High-risk processes additionally require a different owner or administrator from the release author, enforcing builder/publisher separation even when the author already has an owner role. Process Studio keeps the decision, reviewer, time, and evidence visible beside the release. Rollback remains separately governed because it restores an already evaluated historical bundle during recovery rather than introducing new behavior.
+
 ## Execution architecture
 
 Every process declares one execution profile:
@@ -289,6 +291,7 @@ Migrations are additive and ordered in `apps/platform-worker/migrations`:
 93. `0093_solution_pack_provenance.sql`: exact tenant/process solution-pack lineage and installed-version evidence.
 94. `0094_solution_pack_handoff.sql`: attributable, revisioned customer handoff checks for installed solution packs.
 95. `0095_solution_pack_handoff_gates.sql`: explicit publication-blocking versus customer-handoff semantics for solution pack evidence.
+96. `0096_release_governance_reviews.sql`: immutable exact-checksum release decisions with accountable owner identity and high-risk author separation.
 
 ### Classification and egress boundary
 
