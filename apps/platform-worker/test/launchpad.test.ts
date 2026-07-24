@@ -13,6 +13,8 @@ vi.mock("../src/execution", () => ({
   executeRequest: vi.fn(),
 }));
 
+import { getAgentByName } from "agents";
+
 function envWith(options: {
   process?: Record<string, unknown> | null;
   thread?: Record<string, unknown> | null;
@@ -25,6 +27,7 @@ function envWith(options: {
     status: "active",
     operating_mode: "active",
     active_release_id: "release-1",
+    actor_identity_version: 2,
   } : options.process;
   const thread = options.thread === undefined ? {
     id: "thread-1",
@@ -36,6 +39,7 @@ function envWith(options: {
     process_status: "active",
     operating_mode: "active",
     active_release_id: "release-1",
+    actor_identity_version: 2,
     last_execution_id: "execution-1",
     created_at: "2026-07-23T00:00:00Z",
     updated_at: "2026-07-23T00:00:00Z",
@@ -112,6 +116,10 @@ describe("launchpad threads", () => {
     const result = await getLaunchpadConversation(env, "tenant-1", "member-1", "thread-1");
 
     expect(bindTenant).toHaveBeenCalledWith("tenant-1", "process-1");
+    expect(getAgentByName).toHaveBeenCalledWith(
+      {},
+      "v2:tenant:tenant-1:process-1:thread:thread-1",
+    );
     expect(getConversation).toHaveBeenCalledWith(60);
     expect(result.messages[0]?.content).toBe("Prepared");
   });

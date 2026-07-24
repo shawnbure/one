@@ -98,7 +98,8 @@ Promise<AgentBlueprint | null> {
       ...tool,
       connectionReady: Boolean(tool.connectionReady)
     })) as AgentBlueprint["toolPolicies"],
-    dataClassification: row.resolved_data_classification ?? row.data_classification ?? "internal"
+    dataClassification: row.resolved_data_classification ?? row.data_classification ?? "internal",
+    actorIdentityVersion: Number(row.actor_identity_version ?? 1) === 2 ? 2 : 1
   };
 }
 

@@ -1,5 +1,5 @@
 import { getAgentByName } from "agents";
-import { instanceKeyFor, type ExecutionRequest, type ExecutionResult, type PromptBundle } from "@workrr/contracts";
+import { tenantInstanceKeyFor, type ExecutionRequest, type ExecutionResult, type PromptBundle } from "@workrr/contracts";
 import { runModel } from "./model";
 import { getBlueprint, getBlueprintForPromptRelease, getBlueprintForRelease, getPromptBundle } from "./repository";
 import type { ProcessAgent } from "./agent";
@@ -15,7 +15,12 @@ import { recordShadowReview } from "./shadow";
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   let blueprint = await getBlueprint(env, tenantId, request.blueprintId);
   if (!blueprint) throw new Error("Process not found");
-  const instanceKey = instanceKeyFor(blueprint.executionProfile, request);
+  const instanceKey = tenantInstanceKeyFor(
+    tenantId,
+    blueprint.executionProfile,
+    request,
+    blueprint.actorIdentityVersion ?? 1,
+  );
   let durableAgent: DurableObjectStub<ProcessAgent> | null = null;
   if (instanceKey) {
     durableAgent = await getAgentByName<Env, ProcessAgent>(env.PROCESS_AGENT, instanceKey);

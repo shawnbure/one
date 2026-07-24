@@ -32,6 +32,7 @@ export interface BlueprintRow {
   output_schema_json?: string | null;
   tool_policy_json?: string | null;
   data_classification?: "public" | "internal" | "confidential" | "restricted";
+  actor_identity_version?: 1 | 2;
 }
 
 export interface PromptRow {

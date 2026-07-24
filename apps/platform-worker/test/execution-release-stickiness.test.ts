@@ -26,7 +26,7 @@ const base = {
   executionProfile: "conversation" as const, modelProfile: "balanced", modelId: "@cf/model/new",
   promptReleaseId: "prompt-new", autonomy: "suggest" as const, status: "active" as const,
   tools: [], updatedAt: "now", operatingMode: "active" as const, activeReleaseId: "release-new",
-  inputSchemaJson: null, outputSchemaJson: null, toolPolicies: []
+  inputSchemaJson: null, outputSchemaJson: null, toolPolicies: [], actorIdentityVersion: 2 as const
 };
 
 function environment() {
@@ -71,6 +71,7 @@ describe("durable actor release stickiness", () => {
     }, "execution-1");
 
     expect(actor.bindTenant).toHaveBeenCalledWith("tenant-1", "process-1");
+    expect(result.instanceKey).toBe("v2:tenant:tenant-1:process-1:thread:customer-42");
     expect(getBlueprintForRelease).toHaveBeenCalledWith(env, "tenant-1", "process-1", "release-old");
     expect(result.status).toBe("completed");
     expect(writes.some(({ sql, bindings }) => sql.includes("INSERT OR IGNORE INTO executions") &&

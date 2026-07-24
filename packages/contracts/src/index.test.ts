@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { instanceKeyFor } from "./index";
+import { instanceKeyFor, tenantInstanceKeyFor } from "./index";
 
 describe("instanceKeyFor", () => {
   it("keeps a conversation sticky to its thread", () => {
@@ -26,5 +26,21 @@ describe("instanceKeyFor", () => {
   it("uses an explicit idempotency identity for temporary durable work", () => {
     expect(instanceKeyFor("temporary_durable", { blueprintId: "extract", idempotencyKey: "job-42", input: "hello" }))
       .toBe("extract:temporary:job-42");
+  });
+
+  it("isolates identical durable actors by authenticated tenant in v2", () => {
+    const request = { blueprintId: "support", threadId: "thread-42", input: "hello" };
+    expect(tenantInstanceKeyFor("tenant-a", "conversation", request))
+      .toBe("v2:tenant:tenant-a:support:thread:thread-42");
+    expect(tenantInstanceKeyFor("tenant-b", "conversation", request))
+      .toBe("v2:tenant:tenant-b:support:thread:thread-42");
+    expect(tenantInstanceKeyFor("tenant-a", "conversation", request, 1))
+      .toBe("support:thread:thread-42");
+  });
+
+  it("does not invent durable identity for instant or Workflow profiles", () => {
+    const request = { blueprintId: "classify", input: "hello" };
+    expect(tenantInstanceKeyFor("tenant-a", "instant", request)).toBeNull();
+    expect(tenantInstanceKeyFor("tenant-a", "workflow", request)).toBeNull();
   });
 });

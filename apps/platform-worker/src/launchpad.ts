@@ -1,5 +1,5 @@
 import { getAgentByName } from "agents";
-import type { ExecutionRequest } from "@workrr/contracts";
+import { tenantInstanceKeyFor, type ExecutionProfile, type ExecutionRequest } from "@workrr/contracts";
 import type { ProcessAgent } from "./agent";
 import { executeRequest } from "./execution";
 import type { Env } from "./types";
@@ -20,6 +20,7 @@ type OwnedThreadRow = ThreadRow & {
   process_status: string;
   operating_mode: string | null;
   active_release_id: string | null;
+  actor_identity_version: 1 | 2;
 };
 
 export async function listLaunchpadThreads(
@@ -70,7 +71,11 @@ export async function getLaunchpadConversation(
   if (!thread.last_execution_id) return { thread, messages: [] };
   const agent = await getAgentByName<Env, ProcessAgent>(
     env.PROCESS_AGENT,
-    `${thread.blueprint_id}:thread:${thread.id}`,
+    tenantInstanceKeyFor(tenantId, thread.execution_profile as ExecutionProfile, {
+      blueprintId: thread.blueprint_id,
+      threadId: thread.id,
+      input: "",
+    }, Number(thread.actor_identity_version) === 2 ? 2 : 1)!,
   );
   await agent.bindTenant(tenantId, thread.blueprint_id);
   return { thread, messages: await agent.getConversation(60) };
@@ -172,7 +177,7 @@ export async function setLaunchpadThreadArchived(
 async function ownedThread(env: Env, tenantId: string, actorId: string, threadId: string) {
   const thread = await env.DB.prepare(`SELECT t.id, t.blueprint_id, b.name process_name, t.title, t.status,
       t.last_execution_id, t.created_at, t.updated_at, b.execution_profile,
-      b.status process_status, b.operating_mode, b.active_release_id
+      b.status process_status, b.operating_mode, b.active_release_id, b.actor_identity_version
     FROM process_threads t
     JOIN agent_blueprints b ON b.id=t.blueprint_id AND b.tenant_id=t.tenant_id
     WHERE t.id=? AND t.tenant_id=? AND t.created_by=?`)

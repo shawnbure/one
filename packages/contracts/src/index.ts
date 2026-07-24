@@ -51,6 +51,8 @@ export interface AgentBlueprint {
   outputSchemaJson?: string | null;
   toolPolicies?: ToolPolicy[];
   dataClassification?: ToolPolicy["dataClassification"];
+  /** v1 preserves pre-tenant-prefix Durable Object names; v2 includes the tenant identity. */
+  actorIdentityVersion?: 1 | 2;
 }
 
 export interface PromptBundle {
@@ -141,6 +143,22 @@ export function instanceKeyFor(profile: ExecutionProfile, request: ExecutionRequ
     case "workflow":
       return null;
   }
+}
+
+/**
+ * Returns the server-derived Durable Object identity. Clients supply only the
+ * profile-specific business reference; the authenticated tenant is added here.
+ */
+export function tenantInstanceKeyFor(
+  tenantId: string,
+  profile: ExecutionProfile,
+  request: ExecutionRequest,
+  identityVersion: 1 | 2 = 2,
+): string | null {
+  const logicalKey = instanceKeyFor(profile, request);
+  if (!logicalKey || identityVersion === 1) return logicalKey;
+  if (!tenantId.trim()) throw new Error("tenantId is required for tenant-scoped agent identity");
+  return `v2:tenant:${encodeURIComponent(tenantId)}:${logicalKey}`;
 }
 
 export const modelProfiles = {

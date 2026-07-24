@@ -713,6 +713,12 @@ function Studio({
                 <dt>Execution profile</dt>
                 <dd>{executionProfile.replaceAll("_", " ")}</dd>
               </div>
+              {!["instant", "workflow"].includes(executionProfile) && <div>
+                <dt>Actor isolation</dt>
+                <dd>{Number(blueprint.actor_identity_version) === 2
+                  ? "Tenant-scoped v2"
+                  : "Legacy guarded v1"}</dd>
+              </div>}
               <div>
                 <dt>Operating mode</dt>
                 <dd>{blueprint.operating_mode}</dd>
