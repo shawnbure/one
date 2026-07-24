@@ -59,6 +59,8 @@ export function ActivityView({ processes, session, onNotice }: Props) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [busy, setBusy] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
 
   async function load() {
     try {
@@ -83,6 +85,8 @@ export function ActivityView({ processes, session, onNotice }: Props) {
       setDetail(null);
       setExplanation(null);
       setShadowReview(null);
+      setCancelling(false);
+      setCancellationReason("");
       return;
     }
     void api
@@ -157,6 +161,29 @@ export function ActivityView({ processes, session, onNotice }: Props) {
     }
   }
 
+  async function cancelExecution() {
+    if (!detail || cancellationReason.trim().length < 10) {
+      onNotice("Add a specific cancellation reason of at least ten characters.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await api.cancelExecution(detail.id, cancellationReason.trim());
+      const refreshed = await api.execution(detail.id);
+      setDetail(refreshed.data);
+      setAudit(refreshed.audit);
+      setExplanation(refreshed.explanation);
+      setCancelling(false);
+      setCancellationReason("");
+      await load();
+      onNotice(`${response.data.executionProfile === "workflow" ? "Workflow" : "Queue"} execution cancelled before processing.`);
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Queued execution could not be cancelled");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function operateAction(id: string, operation: "retry" | "cancel") {
     setBusy(true);
     try {
@@ -199,6 +226,10 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                   <a href={`/api/executions/${encodeURIComponent(detail.id)}/evidence-export`}>
                     <Download size={15}/>Export redacted evidence
                   </a>
+                  {canOperate(session) && detail.status === "queued" &&
+                    <button className="cancel-work" disabled={busy} onClick={() => setCancelling(true)}>
+                      <XCircle size={15}/>Cancel queued work
+                    </button>}
                   <button
                     disabled={busy || ["running", "queued"].includes(detail.status)}
                     onClick={() => void retry()}>
@@ -207,6 +238,17 @@ export function ActivityView({ processes, session, onNotice }: Props) {
                   </button>
                 </div>
               </div>
+              {cancelling && detail.status === "queued" && <section className="execution-cancellation">
+                <div><strong>Cancel this queued execution?</strong>
+                  <p>Workrr will stop its Cloudflare Workflow or make the Queue delivery a no-op. Work that has already started cannot be cancelled here.</p></div>
+                <label>Operational reason<textarea maxLength={500} value={cancellationReason}
+                  onChange={(event) => setCancellationReason(event.target.value)}
+                  placeholder="Why this queued work should not proceed"/></label>
+                <footer><button disabled={busy} onClick={() => {
+                  setCancelling(false); setCancellationReason("");
+                }}>Keep queued</button><button className="danger" disabled={busy || cancellationReason.trim().length < 10}
+                  onClick={() => void cancelExecution()}>{busy ? "Cancelling…" : "Confirm cancellation"}</button></footer>
+              </section>}
               <div className="run-facts">
                 <span>
                   <small>EXECUTION PROFILE</small>
@@ -566,6 +608,7 @@ export function ActivityView({ processes, session, onNotice }: Props) {
             <option value="queued">Queued</option>
             <option value="waiting_approval">Waiting approval</option>
             <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </label>
       </div>

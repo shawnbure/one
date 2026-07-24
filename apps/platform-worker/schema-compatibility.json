@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 100,
-  "requiredMigrationName": "0100_webhook_handoff_recovery.sql"
+  "requiredMigrationId": 101,
+  "requiredMigrationName": "0101_execution_cancellation.sql"
 }

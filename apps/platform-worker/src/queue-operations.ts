@@ -91,13 +91,15 @@ export async function enqueueProcessJob(
 
 export async function markQueueProcessing(env: Env, job: QueueJob, attempts: number) {
   const tenantId = job.tenantId ?? "demo";
-  await env.DB.prepare(`INSERT INTO process_queue_jobs
+  const result = await env.DB.prepare(`INSERT INTO process_queue_jobs
     (id, tenant_id, execution_id, blueprint_id, source, status, attempt_count, started_at)
     VALUES (?, ?, ?, ?, 'api', 'processing', ?, CURRENT_TIMESTAMP)
     ON CONFLICT(tenant_id, execution_id) DO UPDATE SET status = 'processing',
       attempt_count = excluded.attempt_count, started_at = COALESCE(process_queue_jobs.started_at, CURRENT_TIMESTAMP),
-      last_error = NULL, updated_at = CURRENT_TIMESTAMP`)
+      last_error = NULL, updated_at = CURRENT_TIMESTAMP
+    WHERE process_queue_jobs.cancellation_requested_at IS NULL`)
     .bind(crypto.randomUUID(), tenantId, job.executionId, job.blueprintId, attempts).run();
+  return result.meta.changes === 1;
 }
 
 export async function markQueueFinished(env: Env, job: QueueJob, status: "completed" | "deferred") {
@@ -115,10 +117,13 @@ export async function markQueueFailure(env: Env, job: QueueJob, attempts: number
 
 export async function getQueueOperations(env: Env, tenantId: string) {
   const [summary, jobs] = await Promise.all([
-    env.DB.prepare(`SELECT status, COUNT(*) count FROM process_queue_jobs
-      WHERE tenant_id = ? GROUP BY status`).bind(tenantId).all(),
-    env.DB.prepare(`SELECT q.id, q.execution_id, q.blueprint_id, b.name process_name, q.source, q.status,
+    env.DB.prepare(`SELECT CASE WHEN completion_disposition='cancelled' THEN 'cancelled' ELSE status END status,
+      COUNT(*) count FROM process_queue_jobs WHERE tenant_id = ?
+      GROUP BY CASE WHEN completion_disposition='cancelled' THEN 'cancelled' ELSE status END`).bind(tenantId).all(),
+    env.DB.prepare(`SELECT q.id, q.execution_id, q.blueprint_id, b.name process_name, q.source,
+      CASE WHEN q.completion_disposition='cancelled' THEN 'cancelled' ELSE q.status END status,
       q.attempt_count, q.replayed_from, q.last_error, q.enqueued_at, q.started_at, q.completed_at, q.updated_at,
+      q.cancellation_requested_at, q.cancellation_requested_by, q.cancellation_reason,
       CASE WHEN e.id IS NULL THEN 0 ELSE 1 END replayable,
       rt.id recovery_task_id, rt.status recovery_status, rt.due_at recovery_due_at,
       rt.assigned_to recovery_assigned_to, rm.display_name recovery_owner_name

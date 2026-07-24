@@ -30,6 +30,11 @@ select {
 
 body { color: var(--ink); }
 
+.run-icon.cancelled { background: #eeeae8; color: #6f5c55; }
+.run-dot.cancelled { background: #78655e; }
+.status.cancelled,
+.queue-state.cancelled { background: #f0ecea; color: #67534c; }
+
 /* The application chrome owns the sticky top bar. Semantic headers inside
    workspaces must size to their content instead of inheriting shell geometry. */
 .content header {
@@ -1141,6 +1146,20 @@ a:focus-visible {
   .review-main { padding: 18px; }
   .review-side { padding: 18px; }
   .decision-context { grid-template-columns: 1fr; }
+  .run-heading {
+    display: grid;
+    grid-template-columns: 43px minmax(0, 1fr);
+  }
+  .run-heading-actions {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+  .run-heading-actions > * { width: 100%; }
+  .run-heading-actions > :last-child { grid-column: 1 / -1; }
+  .run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .run-facts > span { min-width: 0; }
   .studio-page > .page-title {
     align-items: stretch;
     flex-direction: column;

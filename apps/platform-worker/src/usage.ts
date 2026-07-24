@@ -207,7 +207,7 @@ export function pricedCompletionSql() {
       (? * COALESCE((SELECT output_usd_per_million FROM model_catalog WHERE model_id = ?),0))) / 1000000.0,
     inference_provider = ?, gateway_id = ?, gateway_step = ?, gateway_cache_status = ?, gateway_log_id = ?,
     model_latency_ms = ?,
-    completed_at = ? WHERE id = ?`;
+    completed_at = ? WHERE id = ? AND status != 'cancelled'`;
 }
 
 function validDate(value: unknown, label: string) {

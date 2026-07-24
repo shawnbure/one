@@ -12,6 +12,7 @@ function evidence(overrides: Partial<ExecutionEvidence["execution"]> = {}): Exec
       input_contract_status: "passed", output_contract_status: "pending", contract_error: null,
       input_tokens: 120, output_tokens: 30, total_tokens: 150,
       started_at: "2026-07-23T10:00:00Z", completed_at: null, error: null,
+      cancellation_reason: null, cancelled_at: null,
       input_preview: "customer private input", output_preview: "customer private output",
       ...overrides
     },
@@ -76,6 +77,25 @@ describe("deterministic execution explanation", () => {
     expect(result.title).toBe("This run was blocked safely");
     expect(result.nextAction).toContain("data-protection");
     expect(result.nextAction).toContain("before replaying");
+  });
+
+  it("distinguishes deliberate pre-processing cancellation from failure", () => {
+    const cancelled = evidence({
+      status: "cancelled", autonomy_disposition: null, completed_at: "2026-07-23T10:01:00Z",
+      cancellation_reason: "Customer withdrew the queued request",
+      cancelled_at: "2026-07-23T10:01:00Z",
+    });
+    cancelled.approvals = [];
+    cancelled.toolInvocations = [];
+    cancelled.citations = [];
+    const result = explainExecution(cancelled);
+    expect(result.title).toBe("This queued run was cancelled");
+    expect(result.summary).toContain("before its queued Workflow or Queue delivery");
+    expect(result.reasons).toContainEqual(expect.objectContaining({
+      label: "Authorized cancellation recorded",
+      detail: "Customer withdrew the queued request",
+    }));
+    expect(result.nextAction).toContain("No work remains in flight");
   });
 });
 

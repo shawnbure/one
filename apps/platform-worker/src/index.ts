@@ -41,6 +41,8 @@ import { expireAccessSessions, getAccessOperations, reviewEmergencyAccessEvent,
   updateEmergencyAccessPlan } from "./access-operations";
 import { createSchedule, dispatchDueSchedules, dispatchScheduleNow, listSchedules, updateSchedule } from "./schedules";
 import { enqueueProcessJob, getQueueOperations, markQueueFailure, markQueueFinished, markQueueProcessing } from "./queue-operations";
+import { acknowledgeCancelledQueueJob, cancelQueuedExecution,
+  ExecutionCancellationConflict } from "./execution-cancellation";
 import { createKnowledgeSource, deleteKnowledgeSource, indexKnowledgeSource, markKnowledgeIndexFailure,
   queryKnowledge, queueKnowledgeReindex, reviewKnowledgeSource, expireKnowledgeSources } from "./knowledge";
 import { ContractViolationError, isContractViolation } from "./contracts";
@@ -1375,6 +1377,25 @@ app.get("/api/executions/:id", requireRoles("admin", "builder", "owner", "operat
   return c.json({ data: publicExecutionRow(evidence.execution), approvals: evidence.approvals, audit: evidence.audit,
     citations: evidence.citations, toolInvocations: evidence.toolInvocations, toolActions: evidence.toolActions,
     explanation: explainExecution(evidence), shadowReview });
+});
+
+app.post("/api/executions/:id/cancel", requireRoles("admin", "owner", "operator"), async (c) => {
+  try {
+    const executionId = c.req.param("id");
+    if (!executionId) return c.json({ error: "Execution ID is required" }, 400);
+    const result = await cancelQueuedExecution(c.env, c.get("tenantId"), c.get("actorId"),
+      executionId, await c.req.json<{ reason?: unknown }>().catch(() => ({})));
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "execution.cancelled",
+      "execution", executionId, {
+        executionProfile: result.executionProfile, reason: result.reason,
+        cancelledAt: result.cancelledAt
+      });
+    return c.json({ data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Execution could not be cancelled";
+    return c.json({ error: message }, error instanceof ExecutionCancellationConflict ? 409 :
+      isDlpBlocked(error) ? 422 : message.includes("not found") ? 404 : 400);
+  }
 });
 
 app.get("/api/executions/:id/actor-work",
@@ -2777,7 +2798,17 @@ const handler: ExportedHandler<Env, WorkrrQueueJob> = {
       }
       const job: QueueJob = message.body;
       try {
-        await markQueueProcessing(env, job, message.attempts);
+        if (await acknowledgeCancelledQueueJob(env, job)) {
+          message.ack();
+          continue;
+        }
+        if (!await markQueueProcessing(env, job, message.attempts)) {
+          if (await acknowledgeCancelledQueueJob(env, job)) {
+            message.ack();
+            continue;
+          }
+          throw new Error("Queue job could not claim processing");
+        }
         const result = await executeRequest(env, job.tenantId ?? "demo", job, job.executionId);
         await markQueueFinished(env, job, result.status === "deferred" ? "deferred" : "completed");
         await env.DB.prepare(`UPDATE schedule_dispatches SET status = ?, completed_at = CURRENT_TIMESTAMP

@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 100, name: "0100_webhook_handoff_recovery.sql", applied_at: "2026-07-24 02:30:00"
+            id: 101, name: "0101_execution_cancellation.sql", applied_at: "2026-07-24 02:30:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",
@@ -83,6 +83,17 @@ describe("control-plane security boundary", () => {
     }, viewer.env as never, executionCtx as never);
     expect(denied.status).toBe(403);
     expect(viewer.queries.some((sql) => sql.includes("SET actor_identity_version=2"))).toBe(false);
+  });
+
+  it("prevents viewers from cancelling queued customer work", async () => {
+    const viewer = environment("viewer");
+    const response = await app.request("/api/executions/execution-1/cancel", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "Customer withdrew the queued request" }),
+    }, viewer.env as never, executionCtx as never);
+    expect(response.status).toBe(403);
+    expect(viewer.queries.some((sql) => sql.includes("LEFT JOIN process_queue_jobs"))).toBe(false);
   });
 
   it("maps an Access service-token common name to one active tenant principal", async () => {

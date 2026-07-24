@@ -69,9 +69,9 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
             result.inputTokens, result.model, result.outputTokens, result.model,
             result.inferenceProvider, result.gatewayId, result.gatewayStep, result.gatewayCacheStatus, result.gatewayLogId,
             result.modelLatencyMs, completedAt, event.instanceId, tenantId),
-        this.env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=? AND tenant_id=?")
+        this.env.DB.prepare("UPDATE executions SET output_contract_status=? WHERE id=? AND tenant_id=? AND status!='cancelled'")
           .bind(result.outputContractStatus, event.instanceId, tenantId),
-        this.env.DB.prepare("UPDATE executions SET autonomy_level=?, autonomy_disposition=? WHERE id=? AND tenant_id=?")
+        this.env.DB.prepare("UPDATE executions SET autonomy_level=?, autonomy_disposition=? WHERE id=? AND tenant_id=? AND status!='cancelled'")
           .bind(autonomy.effective, autonomy.disposition, event.instanceId, tenantId),
         this.env.DB.prepare(`UPDATE schedule_dispatches SET status = 'completed', completed_at = ?, error = NULL
           WHERE execution_id = ? AND tenant_id = ?`).bind(completedAt, event.instanceId, tenantId)
@@ -97,7 +97,8 @@ export class ProcessWorkflow extends WorkflowEntrypoint<Env, ProcessWorkflowPara
         await this.env.DB.batch([
           this.env.DB.prepare(`UPDATE executions SET status = ?, error = ?, completed_at = ?,
             output_contract_status=CASE WHEN ?=1 THEN 'failed' ELSE output_contract_status END,
-            contract_error=CASE WHEN ?=1 THEN ? ELSE contract_error END WHERE id = ? AND tenant_id = ?`)
+            contract_error=CASE WHEN ?=1 THEN ? ELSE contract_error END
+            WHERE id = ? AND tenant_id = ? AND status != 'cancelled'`)
             .bind(isDlpBlocked(error) ? "blocked" : "failed", message.slice(0, 1000),
               completedAt, Number(isContractViolation(error)), Number(isContractViolation(error)), message.slice(0, 1000),
               event.instanceId, tenantId),

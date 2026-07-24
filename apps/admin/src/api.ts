@@ -232,6 +232,9 @@ export interface Execution {
   started_at: string;
   completed_at: string | null;
   error: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
   autonomy?: string;
   prompt_release_id?: string;
   retry_of?: string | null;
@@ -1376,6 +1379,12 @@ export const api = {
     request<{ executionId: string; status: string }>(
       `/api/executions/${encodeURIComponent(id)}/retry`,
       { method: "POST" },
+    ),
+  cancelExecution: (id: string, reason: string) =>
+    request<{ data: { id: string; status: "cancelled"; executionProfile: string;
+      reason: string; cancelledAt: string } }>(
+      `/api/executions/${encodeURIComponent(id)}/cancel`,
+      { method: "POST", body: JSON.stringify({ reason }) },
     ),
   executionMemory: (id: string) =>
     request<{ data: ExecutionMemory }>(`/api/executions/${encodeURIComponent(id)}/memory`),

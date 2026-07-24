@@ -41,6 +41,8 @@ describe("product readability contract", () => {
     expect(css).toContain(".work-row > svg { display: none; }");
     expect(css).toContain(".review-main { padding: 18px; }");
     expect(css).toContain(".decision-context { grid-template-columns: 1fr; }");
+    expect(css).toContain(".run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
+    expect(css).toContain(".run-heading-actions > :last-child");
     expect(css).toContain(".content header");
     expect(css).toContain(".studio-page > .page-title");
     expect(css).toContain(".portfolio-actions");

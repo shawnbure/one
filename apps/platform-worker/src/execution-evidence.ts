@@ -16,7 +16,7 @@ type ExecutionRow = {
   autonomy_level: string | null; autonomy_disposition: string | null;
   input_contract_status: string | null; output_contract_status: string | null; contract_error: string | null;
   input_tokens: number; output_tokens: number; total_tokens: number; started_at: string; completed_at: string | null;
-  error: string | null;
+  error: string | null; cancellation_reason: string | null; cancelled_at: string | null;
   [key: string]: unknown;
 };
 type ApprovalRow = {
@@ -149,6 +149,11 @@ export function explainExecution(evidence: ExecutionEvidence) {
     detail: "The execution stopped with an error. Use the timeline and bounded error evidence; do not assume partial work completed.",
     state: "attention"
   });
+  if (execution.status === "cancelled") reasons.push({
+    label: "Authorized cancellation recorded",
+    detail: execution.cancellation_reason || "Queued work was cancelled before processing.",
+    state: "neutral"
+  });
   return {
     schemaVersion: 1,
     title: outcomeTitle(execution.status),
@@ -250,7 +255,8 @@ function outcomeTitle(status: string) {
     completed: "This run completed", failed: "This run failed safely",
     waiting_approval: "This run is waiting for a person", queued: "This run is queued",
     running: "This run is still operating", blocked: "This run was blocked safely",
-    deferred: "This run was deferred by an operating control"
+    deferred: "This run was deferred by an operating control",
+    cancelled: "This queued run was cancelled"
   } as Record<string, string>)[status] ?? `This run is ${status.replaceAll("_", " ")}`;
 }
 function outcomeSummary(execution: ExecutionRow, approvals: ApprovalRow[], actions: ToolActionRow[]) {
@@ -258,6 +264,9 @@ function outcomeSummary(execution: ExecutionRow, approvals: ApprovalRow[], actio
     return `${approvals.filter((item) => item.status === "pending").length || 1} bounded proposal(s) require a human decision before consequential work can continue.`;
   }
   if (execution.status === "failed") return "Workrr preserved the failure evidence and does not infer that unfinished work succeeded.";
+  if (execution.status === "cancelled") {
+    return "An authorized operator stopped this run before its queued Workflow or Queue delivery began processing.";
+  }
   if (execution.status === "completed" && actions.length) {
     return `The AI run completed; ${actions.filter((item) => item.status === "completed").length} of ${actions.length} separately approved external action(s) show provider completion.`;
   }
@@ -294,6 +303,7 @@ function nextAction(execution: ExecutionRow, approvals: ApprovalRow[], invocatio
     return "Review the operating-control reason and retry only when its concurrency, budget, or timing boundary allows the work.";
   }
   if (execution.status === "failed") return "Inspect the terminal timeline, correct the recorded failure condition, then use Replay safely.";
+  if (execution.status === "cancelled") return "No work remains in flight. Start a new run only if the cancelled request is still required.";
   if (["queued", "running"].includes(execution.status)) return "Wait for the terminal event; do not start a duplicate run.";
   return "No corrective action is required. Use this evidence when reviewing value, quality, or a future release.";
 }

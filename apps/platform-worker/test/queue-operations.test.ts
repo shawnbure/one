@@ -106,6 +106,18 @@ describe("Queue lifecycle evidence", () => {
     expect(writes.some((write) => write.bindings.includes("completed"))).toBe(true);
   });
 
+  it("does not claim processing after an operator cancellation latch wins the race", async () => {
+    const DB = { prepare(sql: string) {
+      expect(sql).toContain("cancellation_requested_at IS NULL");
+      const statement = {
+        bind() { return statement; },
+        async run() { return { meta: { changes: 0 } }; },
+      };
+      return statement;
+    } };
+    expect(await markQueueProcessing({ DB } as never, job, 1)).toBe(false);
+  });
+
   it("keeps recovery ownership joins tenant scoped", async () => {
     const { env, queries } = environment();
     await getQueueOperations(env, "tenant-1");
