@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowLeft, Check, ChevronRight, Clock3, FileText, Inbox,
   Pencil, Send, ShieldCheck, UserRound, X } from "lucide-react";
 import { api, type Approval, type ApprovalAssignee, type ApprovalDetail, type ApprovalMessage, type AuditEvent,
   type SessionData, type ToolActionDispatch } from "./api";
+import "./bulk-approvals.css";
 
 interface Props {
   items: Approval[];
@@ -25,21 +26,32 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
   const [editedOutput, setEditedOutput] = useState("");
   const [editedTools, setEditedTools] = useState<Record<string, string>>({});
   const [editReason, setEditReason] = useState("");
+  const [selectedApprovals, setSelectedApprovals] = useState<string[]>([]);
+  const [bulkAssignee, setBulkAssignee] = useState("");
+  const [bulkReason, setBulkReason] = useState("");
   const [busy, setBusy] = useState(false);
   const filtered = useMemo(() => items.filter((item) => filter === "all" || (filter === "pending" ? item.status === "pending" : item.status !== "pending")), [items, filter]);
 
   useEffect(() => {
     if (!selectedId) {
-      setDetail(null); setAudit([]); setActions([]); setMessages([]); setAssignees([]); return;
+      setDetail(null); setAudit([]); setActions([]); setMessages([]); return;
     }
-    void Promise.all([
-      api.approval(selectedId),
-      canAssign(session) ? api.approvalAssignees() : Promise.resolve({ data: [] as ApprovalAssignee[] })
-    ]).then(([result, assignment]) => {
+    void api.approval(selectedId).then((result) => {
       setDetail(result.data); setAudit(result.audit); setActions(result.actions);
-      setMessages(result.messages); setAssignees(assignment.data);
+      setMessages(result.messages);
     }).catch((error: Error) => onNotice(error.message));
   }, [selectedId, session?.user.role]);
+
+  useEffect(() => {
+    if (!canAssign(session)) { setAssignees([]); return; }
+    void api.approvalAssignees().then((result) => setAssignees(result.data))
+      .catch((error: Error) => onNotice(error.message));
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    const pendingIds = new Set(items.filter((item) => item.status === "pending").map((item) => item.id));
+    setSelectedApprovals((current) => current.filter((id) => pendingIds.has(id)));
+  }, [items]);
 
   async function refreshDetail() {
     if (!detail) return;
@@ -88,6 +100,44 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
       await refreshDetail(); await onRefresh();
     } catch (error) { onNotice(error instanceof Error ? error.message : "Assignment failed"); }
     finally { setBusy(false); }
+  }
+
+  function toggleApproval(id: string) {
+    setSelectedApprovals((current) => current.includes(id)
+      ? current.filter((item) => item !== id)
+      : current.length < 25 ? [...current, id] : current);
+  }
+
+  function selectOverdue() {
+    setSelectedApprovals(items.filter((item) => item.status === "pending" && item.overdue)
+      .slice(0, 25).map((item) => item.id));
+  }
+
+  async function bulkAssign() {
+    if (!bulkAssignee || bulkReason.trim().length < 10 || !selectedApprovals.length) {
+      onNotice("Select reviews, an eligible owner, and a reason of at least ten characters.");
+      return;
+    }
+    const selected = new Set(selectedApprovals);
+    const revisions = items.filter((item) => selected.has(item.id) && item.status === "pending")
+      .map((item) => ({ id: item.id, expectedRevision: item.revision }));
+    setBusy(true);
+    try {
+      const result = (await api.bulkAssignApprovals({
+        assignedTo: bulkAssignee, reason: bulkReason.trim(), items: revisions,
+      })).data;
+      const changed = new Set(result.updatedIds);
+      setSelectedApprovals((current) => current.filter((id) => !changed.has(id)));
+      setBulkReason("");
+      await onRefresh();
+      onNotice(result.conflicts
+        ? `${result.updated} review(s) assigned to ${result.displayName}; ${result.conflicts} changed and remain selected for review.`
+        : `${result.updated} review(s) assigned to ${result.displayName} with individual audit evidence.`);
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "Bulk assignment failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function collaborate(kind: ApprovalMessage["kind"]) {
@@ -233,13 +283,47 @@ export function WorkInbox({ items, session, onRefresh, onNotice }: Props) {
 
   return <section className="inbox-page">
     <div className="page-title"><div><span className="eyebrow"><Inbox size={14}/> HUMAN CONTROL</span><h1>Work inbox</h1><p>Review consequential actions with the evidence and context needed to decide safely.</p></div><div className="assignment-chip"><UserRound size={15}/><span><small>VIEWING AS</small><strong>{session?.user.name ?? "Authorized reviewer"}</strong></span></div></div>
-    <div className="inbox-tabs">{(["pending", "resolved", "all"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}<span>{value === "pending" ? items.filter((item) => item.status === "pending").length : value === "resolved" ? items.filter((item) => item.status !== "pending").length : items.length}</span></button>)}</div>
-    <div className="work-list panel">{filtered.length ? filtered.map((item) => <button key={item.id} className={`work-row ${item.overdue ? "overdue" : ""}`} onClick={() => setSelectedId(item.id)}><span className={`work-impact ${item.impact}`}><ShieldCheck size={18}/></span><span className="work-copy"><span><strong>{item.title ?? item.action_name.replaceAll("_", " ")}</strong><span className={`status ${item.status}`}><i/>{item.status}</span>{item.status === "pending" && item.review_state !== "decision_pending" &&
-      <span className={`review-state ${item.review_state}`}>{item.review_state.replaceAll("_", " ")}</span>}</span><small>{item.description ?? "Human authorization requested"}</small><em>{item.action_name.replaceAll("_", " ")} · Execution {item.execution_id.slice(0, 8)}</em></span><span className="work-meta"><small><Clock3 size={13}/>{item.status === "pending" && item.due_at
-        ? `${item.overdue ? "Overdue" : "Due"} ${formatDate(item.due_at)}`
-        : formatDate(item.requested_at)}</small><strong>{item.assigned_to ?? "Unassigned"}</strong>
-        {item.delegated_from_name && <small>Covering for {item.delegated_from_name}</small>}
-        {item.status === "pending" && <em>{formatAge(item.age_minutes)} open</em>}</span><ChevronRight size={18}/></button>) : <div className="work-empty"><Check size={25}/><strong>Nothing waiting here</strong><span>New human checkpoints will be routed into this queue.</span></div>}</div>
+    <div className="inbox-tabs">{(["pending", "resolved", "all"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => {
+      setFilter(value); if (value !== "pending") setSelectedApprovals([]);
+    }}>{value}<span>{value === "pending" ? items.filter((item) => item.status === "pending").length : value === "resolved" ? items.filter((item) => item.status !== "pending").length : items.length}</span></button>)}</div>
+    {filter === "pending" && canAssign(session) && items.some((item) => item.status === "pending") &&
+      <section className="bulk-approval-control">
+        <header><div><strong>Reroute waiting reviews safely</strong>
+          <small>Select up to 25 pending items. Bulk approval and execution are never available.</small></div>
+          <span><b>{selectedApprovals.length}</b> selected
+            <button disabled={!items.some((item) => item.status === "pending" && item.overdue)}
+              onClick={selectOverdue}>Select overdue</button>
+            {selectedApprovals.length > 0 && <button onClick={() => setSelectedApprovals([])}>Clear</button>}</span></header>
+        {selectedApprovals.length > 0 && <div className="bulk-approval-form">
+          <label>Responsible reviewer<select disabled={busy} value={bulkAssignee}
+            onChange={(event) => setBulkAssignee(event.target.value)}>
+            <option value="">Choose an active reviewer…</option>
+            {assignees.map((member) => <option key={member.id} value={member.email}>
+              {member.display_name} · {member.role}
+            </option>)}
+          </select></label>
+          <label>Operational reason<textarea maxLength={500} value={bulkReason}
+            placeholder="Why should these waiting reviews move together?"
+            onChange={(event) => setBulkReason(event.target.value)}/></label>
+          <button disabled={busy || !bulkAssignee || bulkReason.trim().length < 10}
+            onClick={() => void bulkAssign()}>{busy ? "Assigning…" : `Assign ${selectedApprovals.length} review${selectedApprovals.length === 1 ? "" : "s"}`}</button>
+        </div>}
+      </section>}
+    <div className="work-list panel">{filtered.length ? filtered.map((item) => <article key={item.id}
+      className={`work-row ${item.overdue ? "overdue" : ""} ${selectedApprovals.includes(item.id) ? "selected" : ""}`}>
+      {filter === "pending" && canAssign(session) && item.status === "pending" &&
+        <label className="work-select"><input type="checkbox" checked={selectedApprovals.includes(item.id)}
+          disabled={!selectedApprovals.includes(item.id) && selectedApprovals.length >= 25}
+          onChange={() => toggleApproval(item.id)}
+          aria-label={`Select ${item.title ?? item.action_name.replaceAll("_", " ")} for reassignment`}/></label>}
+      <button className="work-open" onClick={() => setSelectedId(item.id)}>
+        <span className={`work-impact ${item.impact}`}><ShieldCheck size={18}/></span><span className="work-copy"><span><strong>{item.title ?? item.action_name.replaceAll("_", " ")}</strong><span className={`status ${item.status}`}><i/>{item.status}</span>{item.status === "pending" && item.review_state !== "decision_pending" &&
+          <span className={`review-state ${item.review_state}`}>{item.review_state.replaceAll("_", " ")}</span>}</span><small>{item.description ?? "Human authorization requested"}</small><em>{item.action_name.replaceAll("_", " ")} · Execution {item.execution_id.slice(0, 8)}</em></span><span className="work-meta"><small><Clock3 size={13}/>{item.status === "pending" && item.due_at
+            ? `${item.overdue ? "Overdue" : "Due"} ${formatDate(item.due_at)}`
+            : formatDate(item.requested_at)}</small><strong>{item.assigned_to ?? "Unassigned"}</strong>
+            {item.delegated_from_name && <small>Covering for {item.delegated_from_name}</small>}
+            {item.status === "pending" && <em>{formatAge(item.age_minutes)} open</em>}</span><ChevronRight size={18}/>
+      </button></article>) : <div className="work-empty"><Check size={25}/><strong>Nothing waiting here</strong><span>New human checkpoints will be routed into this queue.</span></div>}</div>
   </section>;
 }
 

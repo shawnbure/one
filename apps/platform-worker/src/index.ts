@@ -52,7 +52,7 @@ import { listBoundAdapters } from "./tool-adapters";
 import { cancelToolAction, decideApproval, enqueueRecoverableToolActions, markToolActionFailure,
   processToolAction, retryToolAction } from "./tool-actions";
 import { getPrivacyArchitectureReport, renderPrivacyArchitectureHtml } from "./privacy-report";
-import { addApprovalMessage, assignApproval, type ApprovalMessageKind } from "./approval-collaboration";
+import { addApprovalMessage, assignApproval, bulkAssignApprovals, type ApprovalMessageKind } from "./approval-collaboration";
 import { escalateOverdueApprovals } from "./approval-sla";
 import { ApprovalProposalConflict, reviseApprovalProposal } from "./approval-proposals";
 import { emitConnectionExpiryAlerts, markConnectionAttention, markConnectionSuccess,
@@ -1811,6 +1811,17 @@ app.get("/api/approvals", requireRoles("admin", "builder", "owner", "operator", 
       COALESCE(a.last_activity_at, a.requested_at) DESC LIMIT 100`);
   const { results } = await (filter ? statement.bind(c.get("tenantId"), status) : statement.bind(c.get("tenantId"))).all();
   return c.json({ data: results });
+});
+
+app.post("/api/approvals/bulk-assign", requireRoles("admin", "owner", "operator", "reviewer"), async (c) => {
+  try {
+    return c.json({ data: await bulkAssignApprovals(c.env, c.get("tenantId"), c.get("actorId"),
+      await c.req.json()) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Bulk review assignment failed";
+    return c.json({ error: message }, isDlpBlocked(error) ? 422 :
+      message.includes("active administrator") ? 404 : 400);
+  }
 });
 
 app.get("/api/approvals/:id", requireRoles("admin", "builder", "owner", "operator", "reviewer", "viewer"), async (c) => {

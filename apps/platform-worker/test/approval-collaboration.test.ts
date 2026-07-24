@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { addApprovalMessage, assignApproval } from "../src/approval-collaboration";
+import { addApprovalMessage, assignApproval, bulkAssignApprovals,
+  validateBulkAssignment } from "../src/approval-collaboration";
 import { decideApproval } from "../src/tool-actions";
 
 type Write = { sql: string; bindings: unknown[] };
 
-function environment(options?: { member?: Record<string, unknown> | null; approval?: Record<string, unknown> | null }) {
+function environment(options?: { member?: Record<string, unknown> | null; approval?: Record<string, unknown> | null;
+  assignmentChanges?: number[] }) {
   const writes: Write[] = [];
+  let assignmentIndex = 0;
   const member = options?.member === undefined
     ? { id: "member-2", email: "reviewer@example.com", display_name: "Reviewer", role: "reviewer",
       original_member_id: "member-2", delegated: 0 }
@@ -25,13 +28,19 @@ function environment(options?: { member?: Record<string, unknown> | null; approv
           return null;
         },
         async all() { return { results: [] }; },
-        async run() { writes.push({ sql, bindings }); return { meta: { changes: 1 } }; }
+        async run() {
+          writes.push({ sql, bindings });
+          const changes = sql.includes("UPDATE approvals SET assigned_to")
+            ? options?.assignmentChanges?.[assignmentIndex++] ?? 1 : 1;
+          return { meta: { changes } };
+        }
       };
       return statement;
     },
     async batch(statements: Array<{ run(): Promise<unknown> }>) {
-      for (const statement of statements) await statement.run();
-      return [];
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
     }
   };
   return { env: { DB } as never, writes };
@@ -53,6 +62,45 @@ describe("approval collaboration", () => {
     await expect(assignApproval(env, "tenant-1", "actor-1", "approval-1", "outside@example.com"))
       .rejects.toThrow("active administrator");
     expect(writes).toHaveLength(0);
+  });
+
+  it("bulk reassigns a bounded revision-locked set with per-item audit evidence", async () => {
+    const { env, writes } = environment({ assignmentChanges: [1, 0] });
+    const result = await bulkAssignApprovals(env, "tenant-1", "operator-1", {
+      assignedTo: "member-2",
+      reason: "Balance the overdue review workload",
+      items: [
+        { id: "approval-1", expectedRevision: 2 },
+        { id: "approval-stale", expectedRevision: 1 },
+      ],
+    });
+    expect(result).toMatchObject({
+      requested: 2, updated: 1, conflicts: 1,
+      updatedIds: ["approval-1"], conflictIds: ["approval-stale"],
+      assignedTo: "reviewer@example.com",
+    });
+    expect(writes.filter(({ sql }) => sql.includes("UPDATE approvals SET assigned_to"))).toHaveLength(2);
+    expect(writes.filter(({ sql }) => sql.includes("approval.bulk_assigned"))).toHaveLength(2);
+    expect(writes.find(({ sql }) => sql.includes("UPDATE approvals SET assigned_to"))?.sql)
+      .toContain("revision=revision+1");
+    expect(writes.find(({ sql }) => sql.includes("approval.bulk_assigned"))?.bindings)
+      .toContain(3);
+    expect(JSON.stringify(writes)).toContain("Balance the overdue review workload");
+  });
+
+  it("validates bulk bounds, uniqueness, and expected revisions before D1 work", () => {
+    expect(() => validateBulkAssignment({
+      assignedTo: "member-2", reason: "Rebalance these reviews",
+      items: [{ id: "approval-1", expectedRevision: 1 }, { id: "approval-1", expectedRevision: 1 }],
+    })).toThrow("Duplicate");
+    expect(() => validateBulkAssignment({
+      assignedTo: "member-2", reason: "short",
+      items: [{ id: "approval-1", expectedRevision: 1 }],
+    })).toThrow("10 to 500");
+    expect(() => validateBulkAssignment({
+      assignedTo: "member-2", reason: "Rebalance these reviews",
+      items: Array.from({ length: 26 }, (_, index) => ({ id: `approval-${index}`, expectedRevision: 1 })),
+    })).toThrow("1 and 25");
   });
 
   it("pauses a decision for requested information and records an attributable message", async () => {

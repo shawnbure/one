@@ -1371,6 +1371,15 @@ export const api = {
       `/api/approvals/${encodeURIComponent(id)}/assign`,
       { method: "POST", body: JSON.stringify({ assignedTo }) },
     ),
+  bulkAssignApprovals: (body: {
+    assignedTo: string;
+    reason: string;
+    items: Array<{ id: string; expectedRevision: number }>;
+  }) => request<{ data: {
+    batchId: string; requested: number; updated: number; conflicts: number;
+    updatedIds: string[]; conflictIds: string[]; assignedTo: string;
+    displayName: string; delegated: boolean;
+  } }>("/api/approvals/bulk-assign", { method: "POST", body: JSON.stringify(body) }),
   approvalAssignees: () =>
     request<{ data: ApprovalAssignee[] }>("/api/approval-assignees"),
   addApprovalMessage: (id: string, kind: ApprovalMessage["kind"], body: string) =>

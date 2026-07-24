@@ -2,6 +2,7 @@ import type { Role } from "./auth";
 import { emitNotification } from "./notifications";
 import type { Env } from "./types";
 import { resolveRequestedApprovalAssignee } from "./approval-delegations";
+import { applyDlp, DlpBlockedError } from "./dlp";
 
 export type ApprovalMessageKind = "comment" | "information_request" | "information_response" | "escalation";
 
@@ -21,6 +22,79 @@ export async function assignApproval(env: Env, tenantId: string, actorId: string
   }).run();
   return { updated: true, assignedTo: member.email, displayName: member.display_name,
     delegated: Boolean(member.delegated), requestedMemberId: member.original_member_id };
+}
+
+export async function bulkAssignApprovals(env: Env, tenantId: string, actorId: string, raw: {
+  assignedTo?: unknown;
+  reason?: unknown;
+  items?: unknown;
+}) {
+  const input = validateBulkAssignment(raw);
+  const member = await resolveRequestedApprovalAssignee(env, tenantId, input.assignedTo);
+  if (!member) throw new Error("Assignee must be an active administrator, owner, operator, or reviewer in this organization");
+  const protectedReason = await applyDlp(env, tenantId, input.reason, {
+    direction: "input", stage: "approval_bulk_assignment",
+  });
+  if (protectedReason.blocked) throw new DlpBlockedError(protectedReason.blockedDetectors);
+  const now = new Date().toISOString();
+  const batchId = crypto.randomUUID();
+  const statements = input.items.flatMap((item) => [
+    env.DB.prepare(`UPDATE approvals SET assigned_to=?, assigned_via_delegation_from=?, last_activity_at=?,
+      revision=revision+1
+      WHERE id=? AND tenant_id=? AND status='pending' AND revision=?`)
+      .bind(member.email, member.delegated ? member.original_member_id : null, now,
+        item.id, tenantId, item.expectedRevision),
+    env.DB.prepare(`INSERT INTO audit_events
+      (id, tenant_id, actor_id, event_type, target_type, target_id, detail_json, created_at)
+      SELECT ?, ?, ?, 'approval.bulk_assigned', 'approval', ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM approvals WHERE id=? AND tenant_id=? AND status='pending'
+        AND revision=? AND assigned_to=? AND last_activity_at=?)`)
+      .bind(crypto.randomUUID(), tenantId, actorId, item.id, JSON.stringify({
+        batchId, requestedMemberId: member.original_member_id, assignedMemberId: member.id,
+        assignedRole: member.role, delegated: Boolean(member.delegated), reason: protectedReason.safeText,
+      }), now, item.id, tenantId, item.expectedRevision + 1, member.email, now),
+  ]);
+  const results = await env.DB.batch(statements);
+  const updatedIds = input.items.filter((_, index) => results[index * 2]?.meta.changes === 1)
+    .map((item) => item.id);
+  const updated = new Set(updatedIds);
+  return {
+    batchId,
+    requested: input.items.length,
+    updated: updatedIds.length,
+    conflicts: input.items.length - updatedIds.length,
+    updatedIds,
+    conflictIds: input.items.filter((item) => !updated.has(item.id)).map((item) => item.id),
+    assignedTo: member.email,
+    displayName: member.display_name,
+    delegated: Boolean(member.delegated),
+  };
+}
+
+export function validateBulkAssignment(raw: { assignedTo?: unknown; reason?: unknown; items?: unknown }) {
+  const assignedTo = typeof raw.assignedTo === "string" ? raw.assignedTo.trim() : "";
+  if (!assignedTo || assignedTo.length > 320) throw new Error("A valid assignee is required");
+  const reason = typeof raw.reason === "string" ? raw.reason.trim() : "";
+  if (reason.length < 10 || reason.length > 500) {
+    throw new Error("Bulk assignment reason must be 10 to 500 characters");
+  }
+  if (!Array.isArray(raw.items) || raw.items.length < 1 || raw.items.length > 25) {
+    throw new Error("Select between 1 and 25 review items");
+  }
+  const seen = new Set<string>();
+  const items = raw.items.map((value) => {
+    if (!value || typeof value !== "object") throw new Error("Each review item must include an ID and revision");
+    const item = value as { id?: unknown; expectedRevision?: unknown };
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    const expectedRevision = Number(item.expectedRevision);
+    if (!id || id.length > 100 || !Number.isInteger(expectedRevision) || expectedRevision < 1) {
+      throw new Error("Each review item must include a valid ID and revision");
+    }
+    if (seen.has(id)) throw new Error("Duplicate review items are not allowed");
+    seen.add(id);
+    return { id, expectedRevision };
+  });
+  return { assignedTo, reason, items };
 }
 
 export async function addApprovalMessage(env: Env, tenantId: string, actorId: string, actorEmail: string,

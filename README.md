@@ -277,6 +277,8 @@ npm run access:sync -- --manifest ./workrr-access-handoff-development.json
 npm run access:sync -- --manifest ./workrr-access-handoff-development.json --apply
 ```
 
+The sync operation configures Cloudflare itself as the sole application identity provider, restricts authentication to Cloudflare account members, and enables direct identity redirect. It does not enable email one-time PIN. The application policy still limits Workrr membership to the explicit email identities in the reviewed handoff.
+
 The first command is a dry run. The apply command resolves the Access application by both custom domain and audience, then creates or updates only the named Workrr-managed allow policy. It does not delete or replace other customer Access policies.
 
 ### Microsoft 365 OAuth registration
