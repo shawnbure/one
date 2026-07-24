@@ -154,6 +154,16 @@ svg {
   height: 18px;
 }
 
+.shell > aside .aside-bottom > button:hover,
+.shell > aside .aside-bottom > button.active {
+  background: #192721;
+  color: #eef5f1;
+}
+
+.shell > aside .aside-bottom > button.active {
+  box-shadow: inset 2px 0 #58b28f;
+}
+
 .shell > main {
   width: 100%;
   min-width: 0;

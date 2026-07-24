@@ -565,20 +565,24 @@ export function App() {
           </div>
           {!consumerView && <>
             <span className="nav-group-label administration-label">Administration</span>
-            <button onClick={() => { setActive("Settings"); setMobileNavOpen(false); }}>
+            <button className={active === "Settings" ? "active" : ""}
+              onClick={() => { setActive("Settings"); setMobileNavOpen(false); }}>
               <Settings2 size={17} />
               Settings
             </button>
-            <button onClick={() => { setActive("Customer setup"); setMobileNavOpen(false); }}>
-              <Settings2 size={17} />
+            <button className={active === "Customer setup" ? "active" : ""}
+              onClick={() => { setActive("Customer setup"); setMobileNavOpen(false); }}>
+              <Layers3 size={17} />
               Customer setup
             </button>
-            <button onClick={() => { setActive("Team & roles"); setMobileNavOpen(false); }}>
+            <button className={active === "Team & roles" ? "active" : ""}
+              onClick={() => { setActive("Team & roles"); setMobileNavOpen(false); }}>
               <Users size={17} />
               Team & roles
             </button>
           </>}
-          <button onClick={() => { setActive("Help Center"); setMobileNavOpen(false); }}>
+          <button className={active === "Help Center" ? "active" : ""}
+            onClick={() => { setActive("Help Center"); setMobileNavOpen(false); }}>
             <BookOpen size={17} />
             Help Center
           </button>
