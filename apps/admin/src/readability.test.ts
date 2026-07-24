@@ -35,6 +35,17 @@ describe("product readability contract", () => {
     expect(contract).toContain("@media (max-width: 760px)");
     expect(contract).toContain('input:not([type="checkbox"]):not([type="radio"])');
     expect(contract).toContain("min-height: 42px !important");
+    expect(css).toContain(".activity-metrics { grid-template-columns: 1fr; }");
+    expect(css).toContain(".runs-head > :nth-child(5)");
+    expect(css).toContain(".recovery-queue > .section-head");
+    expect(css).toContain(".work-row > svg { display: none; }");
+    expect(css).toContain(".review-main { padding: 18px; }");
+    expect(css).toContain(".decision-context { grid-template-columns: 1fr; }");
+    expect(css).toContain(".content header");
+    expect(css).toContain(".studio-page > .page-title");
+    expect(css).toContain(".portfolio-actions");
+    expect(css).toContain(".connection-workspace-index");
+    expect(css).toContain(".typed-tool-list article > .connection-state");
   });
 
   it("provides a compact mobile navigation state", () => {

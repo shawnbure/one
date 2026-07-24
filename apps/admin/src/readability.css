@@ -30,6 +30,20 @@ select {
 
 body { color: var(--ink); }
 
+/* The application chrome owns the sticky top bar. Semantic headers inside
+   workspaces must size to their content instead of inheriting shell geometry. */
+.content header {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
 .skip-link {
   position: fixed;
   left: 16px;
@@ -1060,7 +1074,7 @@ a:focus-visible {
   aside.mobile-open nav button { min-width: 0; white-space: normal; }
   .aside-bottom { margin-top: 16px; }
   main { grid-column: auto; }
-  header { padding: 0 18px; }
+  main > header { padding: 0 18px; }
   .content { width: 100%; padding: 18px; overflow: hidden; }
   .content > * { min-width: 0; max-width: 100%; }
   .hero { align-items: stretch; flex-direction: column; gap: 16px; }
@@ -1086,6 +1100,81 @@ a:focus-visible {
   main > header .crumb { width: 100%; }
   main > header .header-actions { width: 100%; min-width: 0; }
   main > header .search { width: auto; min-width: 0; flex: 1 1 auto; }
+  .activity-metrics { grid-template-columns: 1fr; }
+  .runs-head,
+  .run-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .runs-head > :nth-child(2),
+  .runs-head > :nth-child(4),
+  .runs-head > :nth-child(5),
+  .run-row > :nth-child(2),
+  .run-row > :nth-child(4),
+  .run-row > :nth-child(5) { display: none; }
+  .recovery-queue > .section-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .recovery-queue > .section-head .queue-badges { justify-content: flex-start; }
+  .inbox-page > .page-title {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .assignment-chip { align-self: flex-start; }
+  .work-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    padding: 16px;
+  }
+  .work-copy { min-width: 0; }
+  .work-copy > span { flex-wrap: wrap; }
+  .work-meta {
+    grid-column: 2;
+    text-align: left;
+  }
+  .work-meta small {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .work-row > svg { display: none; }
+  .review-main,
+  .review-side { min-width: 0; }
+  .review-main { padding: 18px; }
+  .review-side { padding: 18px; }
+  .decision-context { grid-template-columns: 1fr; }
+  .studio-page > .page-title {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .portfolio-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
+  }
+  .portfolio-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+  .connection-workspace-index {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+  }
+  .connection-workspace-index a { min-width: 0; }
+  .typed-tool-list article {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    padding: 15px 18px;
+  }
+  .typed-tool-list article > .connection-state,
+  .typed-tool-list article > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .typed-tool-list article > span:nth-child(2) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
 }
 
 .mcp-catalog { margin-top: 18px; overflow: hidden; }
@@ -1128,8 +1217,12 @@ a:focus-visible {
   .mcp-governance-fields { grid-template-columns: repeat(2,minmax(130px,1fr)); }
 }
 @media (max-width: 700px) {
-  .connection-workspace-index { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
-  .connection-workspace-index a { min-width: 145px; scroll-snap-align: start; }
+  .connection-workspace-index {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+  }
+  .connection-workspace-index a { min-width: 0; }
   .mcp-catalog > .section-head, .mcp-create { grid-template-columns: 1fr; flex-direction: column; }
   .mcp-tools > article { grid-template-columns: auto 1fr; }
   .mcp-tools > article > .connection-state, .mcp-tools > article > button { grid-column: 2; justify-self: start; }
