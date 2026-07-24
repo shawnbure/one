@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 92,
-  "requiredMigrationName": "0092_model_latency_evidence.sql"
+  "requiredMigrationId": 93,
+  "requiredMigrationName": "0093_solution_pack_provenance.sql"
 }

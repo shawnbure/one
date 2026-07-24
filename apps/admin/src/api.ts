@@ -415,6 +415,9 @@ export interface AutonomySafetyData {
 
 export interface StudioData {
   blueprint: Record<string, string>;
+  solutionPackProvenance: {
+    pack_id: string; pack_version: string; installed_by: string; installed_at: string;
+  } | null;
   prompt: {
     system_prompt: string;
     instructions_json: string;

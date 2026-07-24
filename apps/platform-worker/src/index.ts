@@ -825,7 +825,8 @@ app.post("/api/solution-packs/:id/install", requireRoles("admin", "builder", "ow
     const body = await c.req.json<{ version?: string }>();
     if (!id || !body.version) return c.json({ error: "Solution pack and version are required" }, 400);
     const result = await importProcessPackage(
-      c.env, c.get("tenantId"), c.get("actorId"), resolveSolutionPack(id, body.version)
+      c.env, c.get("tenantId"), c.get("actorId"), resolveSolutionPack(id, body.version),
+      { packId: id, packVersion: body.version }
     );
     await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "solution_pack.installed",
       "process", result.id, { packId: id, packVersion: body.version, releaseId: result.release.releaseId,

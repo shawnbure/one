@@ -49,7 +49,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
       WHERE le.rank=1
     )`;
   const [blueprint, prompt, releases, runStats, activations, actorCohorts, recentActors, launchReadiness,
-    approvedModels] = await Promise.all([
+    approvedModels, solutionPackProvenance] = await Promise.all([
     env.DB.prepare("SELECT * FROM agent_blueprints WHERE tenant_id = ? AND id = ?").bind(tenantId, blueprintId).first(),
     env.DB.prepare(`SELECT p.* FROM prompt_releases p WHERE p.blueprint_id = ? ORDER BY
       CASE WHEN p.id = (SELECT prompt_release_id FROM agent_blueprints WHERE tenant_id = ? AND id = ?) THEN 0 ELSE 1 END,
@@ -91,7 +91,10 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     env.DB.prepare(`SELECT p.model_id, m.context_tokens FROM tenant_model_policies p
       JOIN model_catalog m ON m.model_id=p.model_id
       WHERE p.tenant_id=? AND p.enabled=1 AND m.status='active' ORDER BY p.model_id`)
-      .bind(tenantId).all<{ model_id: string; context_tokens: number }>()
+      .bind(tenantId).all<{ model_id: string; context_tokens: number }>(),
+    env.DB.prepare(`SELECT pack_id, pack_version, installed_by, installed_at
+      FROM process_solution_pack_provenance WHERE tenant_id=? AND blueprint_id=?`)
+      .bind(tenantId, blueprintId).first()
   ]);
   if (!blueprint) return null;
   const autonomySafety = await getAutonomySafety(env, tenantId, blueprintId);
@@ -129,6 +132,7 @@ export async function getStudio(env: Env, tenantId: string, blueprintId: string)
     String((item as Record<string, unknown>).status) === "completed") as Record<string, unknown> | undefined;
   return {
     blueprint,
+    solutionPackProvenance,
     prompt,
     releases: releases.results, activations: activations.results,
     runStats: runStats.results,

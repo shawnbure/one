@@ -247,6 +247,7 @@ function Studio({
   const [outputSchema, setOutputSchema] = useState("");
   const [businessSteps, setBusinessSteps] = useState<StudioData["topology"]["businessSteps"]>([]);
   const [busy, setBusy] = useState(false);
+  const [catalogPacks, setCatalogPacks] = useState<SolutionPack[]>([]);
   const [rollbackTarget, setRollbackTarget] = useState<ProcessRelease | null>(null);
   const [rollbackReason, setRollbackReason] = useState("");
   const [rollbackVersion, setRollbackVersion] = useState("");
@@ -303,6 +304,16 @@ function Studio({
   useEffect(() => {
     void load();
   }, [processId]);
+  useEffect(() => {
+    if (!data?.solutionPackProvenance) return;
+    let active = true;
+    api.solutionPacks().then((result) => {
+      if (active) setCatalogPacks(result.data);
+    }).catch(() => {
+      if (active) setCatalogPacks([]);
+    });
+    return () => { active = false; };
+  }, [data?.solutionPackProvenance?.pack_id, data?.solutionPackProvenance?.pack_version]);
   const activeRelease = useMemo(
     () => data?.releases.find((release) => release.status === "published"),
     [data],
@@ -434,6 +445,12 @@ function Studio({
 
   if (!data) return <div className="loading-card">Loading Process Studio…</div>;
   const blueprint = data.blueprint;
+  const packProvenance = data.solutionPackProvenance;
+  const currentPack = packProvenance
+    ? catalogPacks.find((pack) => pack.id === packProvenance.pack_id)
+    : undefined;
+  const packUpdateAvailable = Boolean(currentPack && packProvenance &&
+    compareSemver(currentPack.version, packProvenance.pack_version) > 0);
   const canActivate = Boolean(session && ["admin", "owner"].includes(session.user.role));
   const activeActorRollout = rollouts.find((rollout) => ["queued", "running"].includes(rollout.status));
   const executionProfile = blueprint.execution_profile ?? "instant";
@@ -481,6 +498,16 @@ function Studio({
           </span>
         </div></div>
       </div>
+      {packProvenance ? (
+        <aside className={`solution-pack-provenance panel${packUpdateAvailable ? " update" : ""}`}>
+          <span><Boxes size={17}/></span>
+          <div>
+            <strong>{currentPack?.name ?? packProvenance.pack_id}</strong>
+            <small>Installed from reviewed solution pack v{packProvenance.pack_version} · customer changes remain independent</small>
+          </div>
+          <em>{packUpdateAvailable ? `v${currentPack?.version} available` : "Current catalog version"}</em>
+        </aside>
+      ) : null}
       <nav className="studio-tabs">
         {(["design", "behavior", "schedules", "releases", "retirement"] as const).map((value) => (
           <button
@@ -1057,6 +1084,16 @@ function Studio({
         onReload={load} onNotice={onNotice}/>}
     </section>
   );
+}
+
+function compareSemver(left: string, right: string) {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference) return difference;
+  }
+  return 0;
 }
 
 function RetirementStudio({ processId, data, session, busy, setBusy, onReload, onNotice }: {

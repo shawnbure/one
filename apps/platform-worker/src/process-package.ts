@@ -50,7 +50,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
   };
 }
 
-export async function importProcessPackage(env: Env, tenantId: string, actorId: string, value: unknown) {
+export async function importProcessPackage(env: Env, tenantId: string, actorId: string, value: unknown,
+  provenance?: { packId: string; packVersion: string }) {
   const pkg = validateProcessPackage(value);
   const id = `${slug(pkg.process.name)}-${crypto.randomUUID().slice(0, 6)}`;
   const now = new Date().toISOString();
@@ -101,8 +102,16 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
       dataClassification: pkg.process.dataClassification ?? "internal",
       topology: pkg.behavior.topology,
       releaseNotes: `Imported package${pkg.provenance?.checksum ? ` · source ${pkg.provenance.checksum.slice(0, 12)}` : ""}` });
+    if (provenance) {
+      await env.DB.prepare(`INSERT INTO process_solution_pack_provenance
+        (blueprint_id, tenant_id, pack_id, pack_version, installed_by)
+        VALUES (?, ?, ?, ?, ?)`)
+        .bind(id, tenantId, provenance.packId, provenance.packVersion, actorId).run();
+    }
     return { id, status: "draft", release, source: pkg.provenance ?? null };
   } catch (error) {
+    await env.DB.prepare("DELETE FROM process_solution_pack_provenance WHERE blueprint_id = ? AND tenant_id = ?")
+      .bind(id, tenantId).run();
     await env.DB.prepare(`DELETE FROM evaluation_cases WHERE tenant_id = ? AND scenario_id IN
       (SELECT id FROM evaluation_scenarios WHERE blueprint_id = ? AND tenant_id = ?)`).bind(tenantId, id, tenantId).run();
     await env.DB.prepare("DELETE FROM evaluation_scenarios WHERE blueprint_id = ? AND tenant_id = ?").bind(id, tenantId).run();

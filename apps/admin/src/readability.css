@@ -381,6 +381,14 @@ a:focus-visible {
 .solution-pack-requirement small { overflow-wrap: anywhere; color: #5b6f65; font-size: 12px; line-height: 1.45; }
 .solution-pack-grid button { justify-self: start; }
 .solution-pack-error { margin: 16px 22px 0; color: #944737; font-size: 13px; }
+.solution-pack-provenance { display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 12px; margin: -3px 0 17px; padding: 13px 16px; }
+.solution-pack-provenance > span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; background: #e8f3ee; color: #2f7257; }
+.solution-pack-provenance strong,.solution-pack-provenance small { display: block; }
+.solution-pack-provenance strong { color: #29483a; font-size: 14px; }
+.solution-pack-provenance small { margin-top: 3px; color: #5a6e64; font-size: 13px; line-height: 1.45; }
+.solution-pack-provenance em { padding: 6px 9px; border-radius: 13px; background: #edf5f1; color: #31694f; font-size: 12px; font-style: normal; font-weight: 750; white-space: nowrap; }
+.solution-pack-provenance.update { border-color: #e5c98e; background: #fffaf0; }
+.solution-pack-provenance.update em { background: #fff0cf; color: #815c20; }
 @media(max-width:900px) { .solution-pack-grid { grid-template-columns: 1fr; } }
 @media(max-width:620px) {
   .solution-pack-library > header { display: grid; }
@@ -388,6 +396,8 @@ a:focus-visible {
   .solution-pack-grid dl { grid-template-columns: repeat(2,1fr); }
   .solution-pack-grid dl div:nth-child(3) { border-left: 0; border-top: 1px solid #e3eae6; }
   .solution-pack-grid dl div:nth-child(4) { border-top: 1px solid #e3eae6; }
+  .solution-pack-provenance { grid-template-columns: 38px minmax(0,1fr); }
+  .solution-pack-provenance em { grid-column: 2; justify-self: start; }
 }
 .prompt-budget-card h3 { margin: 0 0 5px; font-size: 15px; color: #26362f; }
 .prompt-budget-card header p { margin: 0; max-width: 690px; color: #62716a; font-size: 13px; line-height: 1.55; }

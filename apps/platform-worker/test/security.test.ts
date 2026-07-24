@@ -17,7 +17,7 @@ function environment(role = "admin") {
           if (sql.includes("FROM tenant_members")) return member as T;
           if (sql.includes("FROM tenants t")) return { name: "Customer One", accent_color: "#1f7a5b" } as T;
           if (sql.includes("FROM d1_migrations")) return {
-            id: 92, name: "0092_model_latency_evidence.sql", applied_at: "2026-07-23 23:00:00"
+            id: 93, name: "0093_solution_pack_provenance.sql", applied_at: "2026-07-24 00:20:00"
           } as T;
           if (sql.includes("FROM agent_blueprints")) return {
             id: "process-1", tenant_id: "demo", name: "Customer response", autonomy: "autonomous",

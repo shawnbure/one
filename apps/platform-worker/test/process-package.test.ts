@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateProcessPackage } from "../src/process-package";
+import { importProcessPackage, validateProcessPackage } from "../src/process-package";
 
 function packageData() {
   return {
@@ -52,5 +52,49 @@ describe("portable process package", () => {
     const oversized = packageData();
     oversized.behavior.acceptanceCases[0]!.maxChars = 50_000;
     expect(() => validateProcessPackage(oversized)).toThrow("acceptance case 1");
+  });
+
+  it("persists exact tenant-scoped provenance for a reviewed pack installation", async () => {
+    const statements: Array<{ sql: string; bindings: unknown[] }> = [];
+    const env = {
+      DB: {
+        prepare(sql: string) {
+          const record = { sql, bindings: [] as unknown[] };
+          statements.push(record);
+          const statement = {
+            bind(...bindings: unknown[]) { record.bindings = bindings; return statement; },
+            async first() {
+              if (sql.includes("SELECT p.enabled FROM model_catalog")) return { enabled: 1 };
+              if (sql.includes("SELECT execution_profile, data_classification")) {
+                return { execution_profile: "conversation", data_classification: "confidential" };
+              }
+              if (sql.includes("SELECT context_tokens FROM model_catalog")) return { context_tokens: 131_072 };
+              if (sql.includes("SELECT COALESCE(MAX(version)")) return { version: 1 };
+              return null;
+            },
+            async all() { return { results: [] }; },
+            async run() { return { meta: { changes: 1 } }; }
+          };
+          return statement;
+        },
+        async batch() { return []; }
+      }
+    };
+    const input = packageData() as ReturnType<typeof packageData> & {
+      process: ReturnType<typeof packageData>["process"] & { toolDefinitions?: unknown[] };
+    };
+    input.process.tools = [];
+    delete input.process.toolDefinitions;
+    const result = await importProcessPackage(env as never, "tenant-a", "member-a", input, {
+      packId: "customer-operations", packVersion: "1.0.0"
+    });
+    expect(result.status).toBe("draft");
+    const provenance = statements.find((item) =>
+      item.sql.includes("INSERT INTO process_solution_pack_provenance"));
+    expect(provenance?.bindings.slice(1)).toEqual([
+      "tenant-a", "customer-operations", "1.0.0", "member-a"
+    ]);
+    expect(statements.some((item) =>
+      item.sql.includes("DELETE FROM process_solution_pack_provenance"))).toBe(false);
   });
 });

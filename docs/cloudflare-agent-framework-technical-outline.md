@@ -1003,6 +1003,10 @@ server resolves its own bundled artifact instead of trusting a browser-supplied
 package. Viewers can assess fit and connection requirements but cannot install.
 Unknown IDs and versions fail closed, and every successful installation remains a
 disconnected, paused draft until the normal release controls are satisfied.
+The installed process retains tenant-scoped pack ID/version, installer, and
+timestamp provenance. Studio may compare this evidence with the deployed catalog
+and flag a newer reviewed version, but it never merges or upgrades customer
+configuration automatically.
 
 ### Phase 3 — Scale and governance
 
