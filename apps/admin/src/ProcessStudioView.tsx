@@ -33,7 +33,7 @@ import {
   type AgentBlueprint,
   type SupportedInferenceModel,
 } from "@workrr/contracts";
-import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type StudioData } from "./api";
+import { api, type ActorReleaseRollout, type ProcessRelease, type ProcessRetirementData, type ScheduleData, type SessionData, type SolutionPack, type StudioData } from "./api";
 import "./schedule-studio.css";
 import "./autonomy-safety.css";
 import "./launch-readiness.css";
@@ -58,7 +58,7 @@ export function ProcessStudioView({
   onRefresh,
 }: Props) {
   if (!processId)
-    return <ProcessPortfolio processes={processes} onSelect={onSelect} onCreate={onCreate} onNotice={onNotice} onRefresh={onRefresh} />;
+    return <ProcessPortfolio processes={processes} session={session} onSelect={onSelect} onCreate={onCreate} onNotice={onNotice} onRefresh={onRefresh} />;
   return (
     <Studio
       processId={processId}
@@ -71,18 +71,41 @@ export function ProcessStudioView({
 
 function ProcessPortfolio({
   processes,
+  session,
   onSelect,
   onCreate,
   onNotice,
   onRefresh,
 }: {
   processes: AgentBlueprint[];
+  session: SessionData | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
   onNotice: (message: string) => void;
   onRefresh: () => Promise<void>;
 }) {
   const [importing, setImporting] = useState(false);
+  const [packs, setPacks] = useState<SolutionPack[]>([]);
+  const [packError, setPackError] = useState("");
+  const [installingPack, setInstallingPack] = useState("");
+  const canInstall = ["admin", "builder", "owner"].includes(session?.user.role ?? "");
+  useEffect(() => {
+    let active = true;
+    api.solutionPacks()
+      .then((result) => { if (active) setPacks(result.data); })
+      .catch((error: unknown) => { if (active) setPackError(error instanceof Error ? error.message : "Solution packs could not load"); });
+    return () => { active = false; };
+  }, []);
+  async function installPack(pack: SolutionPack) {
+    setInstallingPack(pack.id);
+    try {
+      const result = await api.installSolutionPack(pack.id, pack.version);
+      await onRefresh();
+      onNotice(`Installed ${pack.name} as a paused draft. Connect its tools and run the release gate before publishing.`);
+      onSelect(result.data.id);
+    } catch (error) { onNotice(error instanceof Error ? error.message : "Solution pack could not be installed"); }
+    finally { setInstallingPack(""); }
+  }
   async function importFile(file: File | undefined) {
     if (!file) return;
     setImporting(true);
@@ -115,6 +138,43 @@ function ProcessPortfolio({
             onChange={(event) => { void importFile(event.target.files?.[0]); event.target.value = ""; }}/></label>
           <button className="primary" onClick={onCreate}><Plus size={16} />Create process</button></div>
       </div>
+      <section className="solution-pack-library panel" aria-labelledby="solution-pack-heading">
+        <header>
+          <div>
+            <span className="eyebrow"><Boxes size={14}/> SOLUTION PACK LIBRARY</span>
+            <h2 id="solution-pack-heading">Start with a governed customer pattern</h2>
+            <p>Installs a paused draft with disconnected tools and release-gate examples. Credentials, schedules, and publication authority never transfer.</p>
+          </div>
+          <span className="private-boundary"><LockKeyhole size={14}/> Safe by default</span>
+        </header>
+        {packError ? <p className="solution-pack-error" role="alert">{packError}</p> : null}
+        <div className="solution-pack-grid">
+          {packs.map((pack) => (
+            <article key={`${pack.id}@${pack.version}`}>
+              <div className="solution-pack-title">
+                <span><Sparkles size={17}/></span>
+                <div><h3>{pack.name}</h3><small>Version {pack.version}</small></div>
+              </div>
+              <p>{pack.summary}</p>
+              <dl>
+                <div><dt>Runtime</dt><dd>{pack.process.executionProfile.replaceAll("_", " ")}</dd></div>
+                <div><dt>Control</dt><dd>{pack.process.autonomy}</dd></div>
+                <div><dt>Data</dt><dd>{pack.process.dataClassification}</dd></div>
+                <div><dt>Proof</dt><dd>{pack.process.acceptanceCaseCount} cases</dd></div>
+              </dl>
+              <div className="solution-pack-requirement">
+                <strong>{pack.requiredConnections.length} connection {pack.requiredConnections.length === 1 ? "handoff" : "handoffs"}</strong>
+                <small>{pack.requiredConnections.map((item) => `${item.tool} · ${item.access}`).join(" · ") || "No external connection required"}</small>
+              </div>
+              <button className="secondary" disabled={!canInstall || Boolean(installingPack)}
+                title={canInstall ? "Install this solution as a paused process draft" : "Builder, owner, or administrator role required"}
+                onClick={() => { void installPack(pack); }}>
+                <Plus size={15}/>{installingPack === pack.id ? "Installing…" : "Install paused draft"}
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
       <div className="portfolio-grid">
         {processes.map((process) => (
           <button

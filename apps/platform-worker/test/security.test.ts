@@ -569,6 +569,40 @@ describe("control-plane security boundary", () => {
     expect(queries.some((sql) => sql.includes("INSERT INTO agent_blueprints"))).toBe(false);
   });
 
+  it("allows catalog discovery but prevents viewers from installing solution packs", async () => {
+    const { env, queries } = environment("viewer");
+    const catalog = await app.fetch(new Request("http://localhost/api/solution-packs", {
+      headers: { "x-workrr-user": "operator@example.com" }
+    }), env as never, executionCtx as never);
+    expect(catalog.status).toBe(200);
+    expect(catalog.headers.get("cache-control")).toContain("no-store");
+    const payload = await catalog.json() as { data: Array<{ id: string }> };
+    expect(payload.data.map((item) => item.id)).toContain("customer-operations");
+
+    const install = await app.fetch(new Request(
+      "http://localhost/api/solution-packs/customer-operations/install", {
+        method: "POST",
+        headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ version: "1.0.0" })
+      }), env as never, executionCtx as never);
+    expect(install.status).toBe(403);
+    expect(queries.some((sql) => sql.includes("INSERT INTO agent_blueprints"))).toBe(false);
+  });
+
+  it("rejects unknown solution pack versions before creating tenant data", async () => {
+    const { env, queries } = environment("builder");
+    const response = await app.fetch(new Request(
+      "http://localhost/api/solution-packs/customer-operations/install", {
+        method: "POST",
+        headers: { origin: "http://localhost", "content-type": "application/json",
+          "x-workrr-user": "operator@example.com" },
+        body: JSON.stringify({ version: "99.0.0" })
+      }), env as never, executionCtx as never);
+    expect(response.status).toBe(404);
+    expect(queries.some((sql) => sql.includes("INSERT INTO agent_blueprints"))).toBe(false);
+  });
+
   it("does not enable external delivery when its Cloudflare credential is absent", async () => {
     const { env, queries } = environment("admin");
     const response = await app.fetch(new Request("http://localhost/api/notifications/policies/notify-webhook", {

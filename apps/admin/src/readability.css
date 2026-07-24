@@ -359,6 +359,36 @@ a:focus-visible {
   background: #f8fbf9;
 }
 .prompt-budget-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+
+.solution-pack-library { margin-bottom: 18px; overflow: hidden; }
+.solution-pack-library > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 22px; border-bottom: 1px solid #dfe7e3; }
+.solution-pack-library > header h2 { margin: 7px 0 4px; font-size: 19px; }
+.solution-pack-library > header p { max-width: 760px; margin: 0; color: #53675d; font-size: 14px; line-height: 1.55; }
+.solution-pack-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; padding: 18px 22px 22px; background: #f7faf8; }
+.solution-pack-grid article { display: grid; align-content: start; gap: 13px; padding: 18px; border: 1px solid #d9e4de; border-radius: 11px; background: #fff; }
+.solution-pack-title { display: flex; align-items: center; gap: 11px; }
+.solution-pack-title > span { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 9px; background: #e6f3ed; color: #276c51; }
+.solution-pack-title h3 { margin: 0; color: #233c31; font-size: 16px; }
+.solution-pack-title small { display: block; margin-top: 2px; color: #61736a; font-size: 12px; }
+.solution-pack-grid article > p { min-height: 44px; margin: 0; color: #4f6259; font-size: 14px; line-height: 1.55; }
+.solution-pack-grid dl { display: grid; grid-template-columns: repeat(4,1fr); margin: 0; border: 1px solid #e3eae6; border-radius: 8px; }
+.solution-pack-grid dl div { min-width: 0; padding: 9px; border-left: 1px solid #e3eae6; }
+.solution-pack-grid dl div:first-child { border-left: 0; }
+.solution-pack-grid dt { color: #6a7b73; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.solution-pack-grid dd { margin: 3px 0 0; overflow: hidden; color: #304a3e; font-size: 13px; font-weight: 750; text-overflow: ellipsis; text-transform: capitalize; }
+.solution-pack-requirement { display: grid; gap: 3px; padding: 11px 12px; border-radius: 8px; background: #f2f6f4; }
+.solution-pack-requirement strong { color: #365447; font-size: 13px; }
+.solution-pack-requirement small { overflow-wrap: anywhere; color: #5b6f65; font-size: 12px; line-height: 1.45; }
+.solution-pack-grid button { justify-self: start; }
+.solution-pack-error { margin: 16px 22px 0; color: #944737; font-size: 13px; }
+@media(max-width:900px) { .solution-pack-grid { grid-template-columns: 1fr; } }
+@media(max-width:620px) {
+  .solution-pack-library > header { display: grid; }
+  .solution-pack-grid { padding: 14px; }
+  .solution-pack-grid dl { grid-template-columns: repeat(2,1fr); }
+  .solution-pack-grid dl div:nth-child(3) { border-left: 0; border-top: 1px solid #e3eae6; }
+  .solution-pack-grid dl div:nth-child(4) { border-top: 1px solid #e3eae6; }
+}
 .prompt-budget-card h3 { margin: 0 0 5px; font-size: 15px; color: #26362f; }
 .prompt-budget-card header p { margin: 0; max-width: 690px; color: #62716a; font-size: 13px; line-height: 1.55; }
 .prompt-budget-card header > span { flex: none; padding: 5px 9px; border-radius: 999px; background: #dff1e7; color: #286344; font-size: 12px; font-weight: 750; }

@@ -87,6 +87,7 @@ import { completeMcpOAuthCallback, connectMcpConnector, createMcpConnector, disc
   discoverMcpTools, governMcpTool, listMcpConnectors } from "./mcp-connectors";
 import { checkMcpConnectorHealth } from "./mcp-connector-health";
 import { updateDataEgressPolicy } from "./data-governance";
+import { listSolutionPacks, resolveSolutionPack } from "./solution-pack-catalog";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -811,6 +812,29 @@ app.get("/api/process-templates", requireRoles("admin", "builder", "owner", "ope
   const { results } = await c.env.DB.prepare(`SELECT id, name, description, execution_profile, model_profile, autonomy,
     tools_json, category, starter_json FROM process_templates ORDER BY category, name`).all();
   return c.json({ data: results });
+});
+
+app.get("/api/solution-packs", requireRoles("admin", "builder", "owner", "operator", "viewer"), (c) => {
+  c.header("cache-control", "private, no-store");
+  return c.json({ data: listSolutionPacks() });
+});
+
+app.post("/api/solution-packs/:id/install", requireRoles("admin", "builder", "owner"), async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json<{ version?: string }>();
+    if (!id || !body.version) return c.json({ error: "Solution pack and version are required" }, 400);
+    const result = await importProcessPackage(
+      c.env, c.get("tenantId"), c.get("actorId"), resolveSolutionPack(id, body.version)
+    );
+    await writeAudit(c.env, c.get("tenantId"), c.get("actorId"), "solution_pack.installed",
+      "process", result.id, { packId: id, packVersion: body.version, releaseId: result.release.releaseId,
+        status: "draft", operatingMode: "paused" });
+    return c.json({ data: { ...result, packId: id, packVersion: body.version } }, 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Solution pack could not be installed";
+    return c.json({ error: message }, message.includes("not found") ? 404 : 400);
+  }
 });
 
 app.get("/api/opportunities", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>

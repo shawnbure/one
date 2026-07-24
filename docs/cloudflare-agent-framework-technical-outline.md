@@ -996,6 +996,14 @@ requires at least two complete packs, follows only local artifact references,
 rejects credential-bearing fields, and ensures every tool and acceptance case is
 complete.
 
+The admin application presents the compiled, repository-reviewed packs in Process
+Studio. Its catalog API deliberately returns delivery metadata rather than prompt
+content. Authorized builders install by exact pack ID and semantic version; the
+server resolves its own bundled artifact instead of trusting a browser-supplied
+package. Viewers can assess fit and connection requirements but cannot install.
+Unknown IDs and versions fail closed, and every successful installation remains a
+disconnected, paused draft until the normal release controls are satisfied.
+
 ### Phase 3 — Scale and governance
 
 Deliverables:

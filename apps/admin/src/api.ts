@@ -63,6 +63,25 @@ export interface SessionData {
   appDomain: string;
 }
 
+export interface SolutionPack {
+  id: string;
+  version: string;
+  name: string;
+  summary: string;
+  audience: string;
+  process: {
+    name: string; executionProfile: string; modelProfile: string; modelId: string | null;
+    autonomy: string; riskLevel: string; dataClassification: string;
+    toolCount: number; acceptanceCaseCount: number;
+  };
+  requiredConnections: Array<{ tool: string; access: string; minimumScope: string; owner: string }>;
+  handoffChecks: string[];
+  installBehavior: {
+    status: "draft"; operatingMode: "paused"; credentialsImported: false;
+    schedulesEnabled: false; publicationGranted: false;
+  };
+}
+
 export interface LaunchpadThread {
   id: string;
   blueprint_id: string;
@@ -1525,6 +1544,7 @@ export const api = {
     request<{ data: EmailReceipt[] }>(`/api/email-routes/${encodeURIComponent(id)}/receipts`),
   processTemplates: () =>
     request<{ data: ProcessTemplate[] }>("/api/process-templates"),
+  solutionPacks: () => request<{ data: SolutionPack[] }>("/api/solution-packs"),
   opportunities: () => request<{ data: ProcessOpportunity[] }>("/api/opportunities"),
   createOpportunity: (body: Record<string, unknown>) =>
     request<{ data: { id: string; status: string; impactScore: number; feasibilityScore: number; priorityScore: number } }>(
@@ -1819,6 +1839,10 @@ export const api = {
       `/api/notifications/events/${encodeURIComponent(id)}/acknowledge`,
       { method: "POST", body: JSON.stringify({ note }) }),
   importProcessPackage: (body: unknown) => request<{ data: { id: string; status: string } }>("/api/process-packages/import", { method: "POST", body: JSON.stringify(body) }),
+  installSolutionPack: (id: string, version: string) =>
+    request<{ data: { id: string; status: string; packId: string; packVersion: string } }>(
+      `/api/solution-packs/${encodeURIComponent(id)}/install`,
+      { method: "POST", body: JSON.stringify({ version }) }),
   usage: () => request<{ data: UsageData }>("/api/usage"),
   importBillingEvidence: (body: {
     periodStart: string; periodEnd: string; source: string; sourceReference: string;
