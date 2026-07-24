@@ -21,11 +21,11 @@
     }
   ],
   "handoffChecks": [
-    "Confirm the period, time zone, match key, and material variance threshold.",
-    "Connect both record tools with fixed read-only endpoints and bounded result sizes.",
-    "Replace example evaluation facts with customer-approved reconciliation cases.",
-    "Create the schedule disabled, then have the process owner verify its next occurrence.",
-    "Run in suggest mode until exception precision and late-arrival behavior are measured."
+    { "description": "Confirm the period, time zone, match key, and material variance threshold.", "gate": "publication" },
+    { "description": "Connect both record tools with fixed read-only endpoints and bounded result sizes.", "gate": "publication" },
+    { "description": "Replace example evaluation facts with customer-approved reconciliation cases.", "gate": "publication" },
+    { "description": "Create the schedule disabled, then have the process owner verify its next occurrence.", "gate": "handoff" },
+    { "description": "Run in suggest mode until exception precision and late-arrival behavior are measured.", "gate": "handoff" }
   ],
   "secrets": "excluded"
 }

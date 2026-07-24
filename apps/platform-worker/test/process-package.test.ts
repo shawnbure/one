@@ -87,7 +87,7 @@ describe("portable process package", () => {
     delete input.process.toolDefinitions;
     const result = await importProcessPackage(env as never, "tenant-a", "member-a", input, {
       packId: "customer-operations", packVersion: "1.0.0",
-      handoffChecks: ["Connect the approved customer records source."]
+      handoffChecks: [{ description: "Connect the approved customer records source.", gate: "publication" }]
     });
     expect(result.status).toBe("draft");
     const provenance = statements.find((item) =>
@@ -100,7 +100,7 @@ describe("portable process package", () => {
     const handoff = statements.find((item) =>
       item.sql.includes("INSERT INTO process_solution_pack_handoff_checks"));
     expect(handoff?.bindings.slice(1)).toEqual([
-      "tenant-a", result.id, 1, "Connect the approved customer records source."
+      "tenant-a", result.id, 1, "Connect the approved customer records source.", "publication"
     ]);
   });
 
@@ -108,7 +108,8 @@ describe("portable process package", () => {
     const statements: string[] = [];
     const env = { DB: { prepare(sql: string) { statements.push(sql); throw new Error("unexpected write"); } } };
     await expect(importProcessPackage(env as never, "tenant-a", "member-a", packageData(), {
-      packId: "../unsafe", packVersion: "latest", handoffChecks: ["short"]
+      packId: "../unsafe", packVersion: "latest",
+      handoffChecks: [{ description: "short", gate: "handoff" }]
     })).rejects.toThrow("installation provenance");
     expect(statements).toHaveLength(0);
   });

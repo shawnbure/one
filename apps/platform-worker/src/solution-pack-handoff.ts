@@ -3,7 +3,7 @@ import type { Env } from "./types";
 export class SolutionPackHandoffConflict extends Error {}
 
 export async function listSolutionPackHandoffChecks(env: Env, tenantId: string, blueprintId: string) {
-  const { results } = await env.DB.prepare(`SELECT h.id, h.check_order, h.description, h.status, h.evidence,
+  const { results } = await env.DB.prepare(`SELECT h.id, h.check_order, h.description, h.gate_type, h.status, h.evidence,
     h.revision, h.completed_by, h.completed_at, h.created_at, h.updated_at, m.display_name completed_by_name
     FROM process_solution_pack_handoff_checks h
     LEFT JOIN tenant_members m ON m.id=h.completed_by AND m.tenant_id=h.tenant_id

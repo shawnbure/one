@@ -13,8 +13,13 @@ interface SolutionPackManifest {
   audience: string;
   processArtifact: string;
   requiredConnections: Array<{ tool: string; access: string; minimumScope: string; owner: string }>;
-  handoffChecks: string[];
+  handoffChecks: SolutionPackHandoffDefinition[];
   secrets: "excluded";
+}
+
+export interface SolutionPackHandoffDefinition {
+  description: string;
+  gate: "publication" | "handoff";
 }
 
 export interface SolutionPackCatalogItem {
@@ -35,7 +40,7 @@ export interface SolutionPackCatalogItem {
     acceptanceCaseCount: number;
   };
   requiredConnections: SolutionPackManifest["requiredConnections"];
-  handoffChecks: string[];
+  handoffChecks: SolutionPackHandoffDefinition[];
   installBehavior: {
     status: "draft";
     operatingMode: "paused";
@@ -75,7 +80,7 @@ export function listSolutionPacks(): SolutionPackCatalogItem[] {
       acceptanceCaseCount: process.behavior.acceptanceCases?.length ?? 0
     },
     requiredConnections: manifest.requiredConnections.map((item) => ({ ...item })),
-    handoffChecks: [...manifest.handoffChecks],
+    handoffChecks: manifest.handoffChecks.map((item) => ({ ...item })),
     installBehavior: {
       status: "draft",
       operatingMode: "paused",
@@ -92,10 +97,10 @@ export function resolveSolutionPack(id: string, version: string): PortableProces
   return structuredClone(match.process);
 }
 
-export function resolveSolutionPackHandoffChecks(id: string, version: string): string[] {
+export function resolveSolutionPackHandoffChecks(id: string, version: string): SolutionPackHandoffDefinition[] {
   const match = packs.find((item) => item.manifest.id === id && item.manifest.version === version);
   if (!match) throw new Error("Solution pack or version was not found");
-  return [...match.manifest.handoffChecks];
+  return match.manifest.handoffChecks.map((item) => ({ ...item }));
 }
 
 function validateManifest(value: unknown): SolutionPackManifest {
@@ -107,8 +112,13 @@ function validateManifest(value: unknown): SolutionPackManifest {
       manifest.processArtifact !== "process.json" || manifest.secrets !== "excluded" ||
       !Array.isArray(manifest.requiredConnections) || !Array.isArray(manifest.handoffChecks) ||
       manifest.handoffChecks.length === 0 || manifest.handoffChecks.length > 20 ||
-      !manifest.handoffChecks.every((item) =>
-        typeof item === "string" && item.trim().length >= 10 && item.trim().length <= 500)) {
+      !manifest.handoffChecks.every((item) => {
+        if (!item || typeof item !== "object") return false;
+        const check = item as Partial<SolutionPackHandoffDefinition>;
+        return typeof check.description === "string" && check.description.trim().length >= 10 &&
+          check.description.trim().length <= 500 &&
+          (check.gate === "publication" || check.gate === "handoff");
+      })) {
     throw new Error("Solution pack manifest is incomplete");
   }
   return manifest as SolutionPackManifest;

@@ -534,7 +534,7 @@ function Studio({
             <div>
               <span className="eyebrow">CUSTOMER HANDOFF</span>
               <h2 id="pack-handoff-heading">Make this solution customer-ready</h2>
-              <p>Each decision is tenant-scoped, attributable, and separate from publication authority.</p>
+              <p>Publication checks are server-enforced. Remaining checks guide the accountable customer handoff.</p>
             </div>
             <strong>{data.solutionPackHandoffChecks.filter((check) => check.status !== "open").length}
               /{data.solutionPackHandoffChecks.length} resolved</strong>
@@ -548,6 +548,9 @@ function Studio({
                 </span>
                 <div>
                   <strong>{check.description}</strong>
+                  <em className={`solution-handoff-gate ${check.gate_type}`}>
+                    {check.gate_type === "publication" ? "Required before publication" : "Customer handoff"}
+                  </em>
                   {check.evidence ? <small>{check.evidence}</small> : <small>Evidence is still required.</small>}
                   {check.completed_by_name ? <em>{check.completed_by_name} · {check.status.replace("_", " ")}</em> : null}
                 </div>
@@ -998,9 +1001,18 @@ function Studio({
                   ? `Review ${formatDate(data.launchReadiness.targetReviewDueAt ?? "")}`
                   : "Review expired"}</small>
             </span>
+            {data.launchReadiness.packPublicationChecks > 0 && <span
+              className={data.launchReadiness.packPublicationChecksResolved === data.launchReadiness.packPublicationChecks
+                ? "complete" : "missing"}>
+              {data.launchReadiness.packPublicationChecksResolved === data.launchReadiness.packPublicationChecks
+                ? <Check size={15}/> : <AlertTriangle size={15}/>}
+              <strong>Solution pack evidence</strong>
+              <small>{data.launchReadiness.packPublicationChecksResolved}/{data.launchReadiness.packPublicationChecks} resolved</small>
+            </span>}
           </div>
           {!data.launchReadiness.ready && <footer>
-            Open <strong>Value &amp; Decisions</strong> to approve or renew the target. Publication remains server-blocked.
+            Resolve the missing evidence in <strong>Value &amp; Decisions</strong> or the
+            <strong> Customer handoff</strong> panel. Publication remains server-blocked.
           </footer>}
         </section>
         {data.actorAdoption.supported && <section className="actor-adoption panel">

@@ -403,6 +403,8 @@ a:focus-visible {
 .solution-handoff-list article > div > strong { color: #2c4439; font-size: 14px; line-height: 1.45; }
 .solution-handoff-list article > div > small { margin-top: 4px; color: #5c6e66; font-size: 13px; line-height: 1.5; }
 .solution-handoff-list article > div > em { margin-top: 5px; color: #397058; font-size: 11px; font-style: normal; font-weight: 750; text-transform: capitalize; }
+.solution-handoff-list article > div > .solution-handoff-gate { display: inline-block; margin: 5px 0 0; padding: 4px 8px; border-radius: 11px; background: #eef3f0; color: #53675d; font-size: 13px; line-height: 1.3; letter-spacing: .01em; text-transform: none; }
+.solution-handoff-list article > div > .solution-handoff-gate.publication { background: #fff2d9; color: #79591e; }
 .solution-handoff-list article > button { width: auto; margin: 0; }
 .solution-handoff-editor { grid-column: 2 / -1; display: grid !important; grid-template-columns: 180px minmax(0,1fr); gap: 10px 12px; margin-top: 4px; padding: 13px; border-radius: 9px; background: #f5f8f6; }
 .solution-handoff-editor label { display: grid; gap: 5px; color: #40564b; font-size: 12px; font-weight: 750; }

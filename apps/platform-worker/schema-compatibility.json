@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 94,
-  "requiredMigrationName": "0094_solution_pack_handoff.sql"
+  "requiredMigrationId": 95,
+  "requiredMigrationName": "0095_solution_pack_handoff_gates.sql"
 }

@@ -51,7 +51,8 @@ export async function exportProcessPackage(env: Env, tenantId: string, blueprint
 }
 
 export async function importProcessPackage(env: Env, tenantId: string, actorId: string, value: unknown,
-  provenance?: { packId: string; packVersion: string; handoffChecks: string[] }) {
+  provenance?: { packId: string; packVersion: string;
+    handoffChecks: Array<{ description: string; gate: "publication" | "handoff" }> }) {
   const pkg = validateProcessPackage(value);
   const installProvenance = provenance ? validateInstallProvenance(provenance) : null;
   const id = `${slug(pkg.process.name)}-${crypto.randomUUID().slice(0, 6)}`;
@@ -108,11 +109,12 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
         (blueprint_id, tenant_id, pack_id, pack_version, installed_by)
         VALUES (?, ?, ?, ?, ?)`)
         .bind(id, tenantId, installProvenance.packId, installProvenance.packVersion, actorId).run();
-      for (const [index, description] of installProvenance.handoffChecks.entries()) {
+      for (const [index, check] of installProvenance.handoffChecks.entries()) {
         await env.DB.prepare(`INSERT INTO process_solution_pack_handoff_checks
-          (id, tenant_id, blueprint_id, check_order, description)
-          VALUES (?, ?, ?, ?, ?)`)
-          .bind(`pack-check-${crypto.randomUUID()}`, tenantId, id, index + 1, description).run();
+          (id, tenant_id, blueprint_id, check_order, description, gate_type)
+          VALUES (?, ?, ?, ?, ?, ?)`)
+          .bind(`pack-check-${crypto.randomUUID()}`, tenantId, id, index + 1,
+            check.description, check.gate).run();
       }
     }
     return { id, status: "draft", release, source: pkg.provenance ?? null };
@@ -130,15 +132,22 @@ export async function importProcessPackage(env: Env, tenantId: string, actorId: 
   }
 }
 
-function validateInstallProvenance(value: { packId: string; packVersion: string; handoffChecks: string[] }) {
+function validateInstallProvenance(value: { packId: string; packVersion: string;
+  handoffChecks: Array<{ description: string; gate: "publication" | "handoff" }> }) {
   const packId = value.packId.trim();
   const packVersion = value.packVersion.trim();
   if (!/^[a-z0-9][a-z0-9-]{2,79}$/.test(packId) || !/^\d+\.\d+\.\d+$/.test(packVersion) ||
       !Array.isArray(value.handoffChecks) || value.handoffChecks.length < 1 || value.handoffChecks.length > 20) {
     throw new Error("Solution pack installation provenance is invalid");
   }
-  const handoffChecks = value.handoffChecks.map((item) => boundedText(item, 10, 500));
-  if (!handoffChecks.every(Boolean)) throw new Error("Solution pack handoff checks are invalid");
+  const handoffChecks = value.handoffChecks.map((item) => ({
+    description: boundedText(item?.description, 10, 500),
+    gate: item?.gate
+  }));
+  if (!handoffChecks.every((item) => item.description &&
+      (item.gate === "publication" || item.gate === "handoff"))) {
+    throw new Error("Solution pack handoff checks are invalid");
+  }
   return { packId, packVersion, handoffChecks };
 }
 

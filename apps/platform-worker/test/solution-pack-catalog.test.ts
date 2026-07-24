@@ -37,7 +37,7 @@ describe("code-owned solution pack catalog", () => {
     expect(resolveSolutionPack("scheduled-reconciliation", "1.0.0").process.name).not.toBe("Mutated");
     const checks = resolveSolutionPackHandoffChecks("scheduled-reconciliation", "1.0.0");
     expect(checks.length).toBeGreaterThanOrEqual(3);
-    checks[0] = "Mutated";
-    expect(resolveSolutionPackHandoffChecks("scheduled-reconciliation", "1.0.0")[0]).not.toBe("Mutated");
+    checks[0]!.description = "Mutated";
+    expect(resolveSolutionPackHandoffChecks("scheduled-reconciliation", "1.0.0")[0]?.description).not.toBe("Mutated");
   });
 });

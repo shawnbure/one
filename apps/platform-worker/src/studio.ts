@@ -282,6 +282,8 @@ export interface ProcessLaunchReadiness {
   targetConfigured: boolean;
   targetCurrent: boolean;
   targetReviewDueAt: string | null;
+  packPublicationChecks: number;
+  packPublicationChecksResolved: number;
   blockers: string[];
 }
 
@@ -297,7 +299,13 @@ export async function getProcessLaunchReadiness(
   const row = await env.DB.prepare(`SELECT b.id,
       CASE WHEN d.blueprint_id IS NULL THEN 0 ELSE 1 END baseline_configured,
       CASE WHEN t.blueprint_id IS NULL THEN 0 ELSE 1 END target_configured,
-      t.review_due_at target_review_due_at
+      t.review_due_at target_review_due_at,
+      (SELECT COUNT(*) FROM process_solution_pack_handoff_checks h
+        WHERE h.blueprint_id=b.id AND h.tenant_id=b.tenant_id AND h.gate_type='publication')
+        pack_publication_checks,
+      (SELECT COUNT(*) FROM process_solution_pack_handoff_checks h
+        WHERE h.blueprint_id=b.id AND h.tenant_id=b.tenant_id AND h.gate_type='publication'
+          AND h.status IN ('complete', 'not_applicable')) pack_publication_checks_resolved
     FROM agent_blueprints b
     LEFT JOIN process_discovery d ON d.blueprint_id=b.id AND d.tenant_id=b.tenant_id
     LEFT JOIN process_value_targets t ON t.blueprint_id=b.id AND t.tenant_id=b.tenant_id
@@ -308,13 +316,19 @@ export async function getProcessLaunchReadiness(
   const targetConfigured = Number(row.target_configured) === 1;
   const targetReviewDueAt = targetConfigured ? String(row.target_review_due_at ?? "") || null : null;
   const targetCurrent = Boolean(targetReviewDueAt && new Date(targetReviewDueAt).getTime() > Date.now());
+  const packPublicationChecks = Number(row.pack_publication_checks ?? 0);
+  const packPublicationChecksResolved = Number(row.pack_publication_checks_resolved ?? 0);
   const blockers: string[] = [];
   if (!baselineConfigured) blockers.push("complete the discovery baseline");
   if (!targetConfigured) blockers.push("have an owner approve a 30-day value target");
   else if (!targetCurrent) blockers.push("renew the expired value target review");
+  if (packPublicationChecksResolved < packPublicationChecks) {
+    const unresolved = packPublicationChecks - packPublicationChecksResolved;
+    blockers.push(`resolve ${unresolved} required solution pack publication check${unresolved === 1 ? "" : "s"}`);
+  }
   return {
     ready: blockers.length === 0, baselineConfigured, targetConfigured, targetCurrent,
-    targetReviewDueAt, blockers
+    targetReviewDueAt, packPublicationChecks, packPublicationChecksResolved, blockers
   };
 }
 

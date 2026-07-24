@@ -15,11 +15,11 @@
     }
   ],
   "handoffChecks": [
-    "Confirm the authoritative customer identifier and escalation categories.",
-    "Connect customer_record_lookup to a fixed, read-only provider adapter.",
-    "Replace example evaluation facts with customer-approved cases.",
-    "Run the release gate and begin in shadow or approval mode.",
-    "Record a 30-day value target before publication."
+    { "description": "Confirm the authoritative customer identifier and escalation categories.", "gate": "publication" },
+    { "description": "Connect customer_record_lookup to a fixed, read-only provider adapter.", "gate": "publication" },
+    { "description": "Replace example evaluation facts with customer-approved cases.", "gate": "publication" },
+    { "description": "Run the release gate and begin in shadow or approval mode.", "gate": "handoff" },
+    { "description": "Record a 30-day value target before publication.", "gate": "publication" }
   ],
   "secrets": "excluded"
 }

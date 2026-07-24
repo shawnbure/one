@@ -33,6 +33,8 @@ describe("process launch readiness", () => {
       targetConfigured: false,
       targetCurrent: false,
       targetReviewDueAt: null,
+      packPublicationChecks: 0,
+      packPublicationChecksResolved: 0,
       blockers: [
         "complete the discovery baseline",
         "have an owner approve a 30-day value target"
@@ -65,6 +67,23 @@ describe("process launch readiness", () => {
         targetCurrent: false,
         blockers: ["renew the expired value target review"]
       });
+  });
+
+  it("blocks only explicitly required solution-pack publication evidence", async () => {
+    const env = environment({
+      id: "process-1", baseline_configured: 1, target_configured: 1,
+      target_review_due_at: new Date(Date.now() + 86_400_000).toISOString(),
+      pack_publication_checks: 3, pack_publication_checks_resolved: 2
+    });
+    await expect(getProcessLaunchReadiness(env.env, "tenant-1", "process-1"))
+      .resolves.toMatchObject({
+        ready: false,
+        packPublicationChecks: 3,
+        packPublicationChecksResolved: 2,
+        blockers: ["resolve 1 required solution pack publication check"]
+      });
+    expect(env.calls[0]?.sql).toContain("h.gate_type='publication'");
+    expect(env.calls[0]?.sql).toContain("h.tenant_id=b.tenant_id");
   });
 
   it("does not disclose a process from another tenant", async () => {

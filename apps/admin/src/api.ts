@@ -420,6 +420,7 @@ export interface StudioData {
   } | null;
   solutionPackHandoffChecks: Array<{
     id: string; check_order: number; description: string;
+    gate_type: "publication" | "handoff";
     status: "open" | "complete" | "not_applicable"; evidence: string | null;
     revision: number; completed_by: string | null; completed_at: string | null;
     completed_by_name: string | null;
@@ -464,6 +465,8 @@ export interface StudioData {
     targetConfigured: boolean;
     targetCurrent: boolean;
     targetReviewDueAt: string | null;
+    packPublicationChecks: number;
+    packPublicationChecksResolved: number;
     blockers: string[];
   };
   autonomySafety: AutonomySafetyData;
