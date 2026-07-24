@@ -157,4 +157,11 @@ describe("product readability contract", () => {
     expect(css).toContain(".gateway-check");
     expect(css).toContain(".ai-gateway-form { grid-template-columns: 1fr; }");
   });
+
+  it("keeps retirement scope checkboxes compact and attached to their labels", () => {
+    expect(css).toContain('.retirement-request input:not([type="checkbox"])');
+    expect(css).toContain('.retirement-scope input[type="checkbox"]');
+    expect(css).toContain("width: 18px");
+    expect(css).toContain("accent-color: #2f7b5e");
+  });
 });

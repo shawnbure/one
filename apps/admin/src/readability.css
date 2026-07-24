@@ -1354,8 +1354,8 @@ a:focus-visible {
 .retirement-request > label,
 .retirement-governance label { display: grid; gap: 5px; color: #405149; font-weight: 700; }
 .retirement-request textarea,
-.retirement-request input,
-.retirement-governance input {
+.retirement-request input:not([type="checkbox"]),
+.retirement-governance input:not([type="checkbox"]) {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid #ccd8d2;
@@ -1378,7 +1378,34 @@ a:focus-visible {
 .retirement-warning small { display: block; }
 .retirement-scope { display: grid; gap: 8px; padding: 12px; border-radius: 9px; background: #f6f8f7; }
 .retirement-scope label,
-.retirement-scope span { display: flex; align-items: center; gap: 8px; color: #45584f; }
+.retirement-scope span { display: flex; align-items: center; gap: 10px; color: #45584f; }
+.retirement-scope label {
+  min-height: 36px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.retirement-scope label:hover { background: #edf3f0; }
+.retirement-scope input[type="checkbox"] {
+  appearance: auto;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #2f7b5e;
+  border: 0;
+  border-radius: 4px;
+}
+.retirement-scope > span {
+  min-height: 36px;
+  margin-top: 3px;
+  padding: 8px;
+  border-top: 1px solid #dfe7e3;
+  color: #5a6e64;
+  font-size: 12px;
+}
 .danger-action {
   justify-self: start;
   padding: 9px 12px;

@@ -459,6 +459,214 @@ export const productGuide: GuideSection[] = [
     ]
   },
   {
+    id: "roles",
+    title: "What Each Role Does",
+    summary: "A practical guide to responsibilities, daily routines, and handoffs for every kind of Workrr user.",
+    topics: [
+      {
+        title: "Employee or Consumer",
+        plain: "A consumer uses approved processes to complete real work without needing to understand the platform underneath.",
+        details: [
+          "Begin in Launchpad, choose the process assigned to the job, and provide only the information the process needs.",
+          "Read citations and warnings. Treat a draft or recommendation differently from a confirmed completed action.",
+          "Use the Work Inbox only when a process assigns you a question or decision. Ask the process owner for help when evidence is missing."
+        ]
+      },
+      {
+        title: "Reviewer",
+        plain: "A reviewer is the human control point for an important action proposed by AI.",
+        details: [
+          "Check the source facts, exact proposed action, affected system, policy, and possible impact.",
+          "Approve only what is displayed. Reject unsafe work, request missing information, or escalate uncertainty.",
+          "Write a short decision note that another person could understand months later."
+        ]
+      },
+      {
+        title: "Process Owner",
+        plain: "The process owner is accountable for whether an AI process creates value and stays acceptable to the business.",
+        details: [
+          "Own the purpose, target outcome, autonomy boundary, reviewers, acceptance criteria, and decision to expand or retire.",
+          "Review value, quality, exceptions, cost, and user feedback on a regular schedule.",
+          "The owner does not need to write code, but must understand the business behavior and accept the remaining risk."
+        ]
+      },
+      {
+        title: "Builder or Forward-Deployed Engineer",
+        plain: "A builder translates business work into a controlled process and helps the customer adopt it.",
+        details: [
+          "Run discovery, define contracts, configure tools and knowledge, create evaluations, and prepare releases.",
+          "Design for Cloudflare's ephemeral Workers, explicit durable state, repeat-safe workflows, and bounded database reads.",
+          "Teach the owner and operators how the process works, then leave runbooks and evidence that do not depend on the builder staying forever."
+        ]
+      },
+      {
+        title: "Operator and Administrator",
+        plain: "Operators keep work healthy; administrators keep the customer environment healthy.",
+        details: [
+          "Operators begin with Work Inbox, Activity, notifications, failures, and recovery. Administrators own identity, customer setup, policy, retention, budgets, and deployment readiness.",
+          "Use the least disruptive control that restores safety: retry when repeat-safe, pause one process, drain a tenant, or emergency-stop only when necessary.",
+          "Close incidents and support requests with verification evidence, not only a statement that the problem seems fixed."
+        ]
+      }
+    ]
+  },
+  {
+    id: "implementation",
+    title: "Customer Implementation Playbook",
+    summary: "How a company with limited development staff can move from first conversation to a dependable AI operating program.",
+    topics: [
+      {
+        title: "Phase 1: Align and Select",
+        plain: "Agree on one valuable problem, one accountable owner, and one safe pilot group before configuring technology.",
+        details: [
+          "Interview the people doing the work and observe the real process, including exceptions and unofficial workarounds.",
+          "Choose a bounded use case with available data, measurable volume, and a result that can be reviewed.",
+          "Define success, unacceptable outcomes, timeline, stakeholders, and the decision that will end or expand the pilot."
+        ]
+      },
+      {
+        title: "Phase 2: Prepare the Environment",
+        plain: "Set up identity, roles, data boundaries, support ownership, and operating defaults before production work arrives.",
+        details: [
+          "Confirm the customer domain, Cloudflare account resources, Access identity, administrator, business owner, and support owner.",
+          "Configure retention, privacy contacts, budgets, notifications, model policy, and allowed connection patterns.",
+          "Keep development and production isolated, including databases, queues, actors, storage, domains, audiences, and secrets."
+        ]
+      },
+      {
+        title: "Phase 3: Build and Validate",
+        plain: "Create the smallest process that proves the business result while keeping authority low.",
+        details: [
+          "Start with read-only knowledge and tools where possible. Use representative test cases and deliberately difficult exceptions.",
+          "Validate data contracts, citations, prohibited output, tool inputs, idempotency, failure handling, and approval presentation.",
+          "Have the real business owner accept the output; a technically successful model response is not automatically useful work."
+        ]
+      },
+      {
+        title: "Phase 4: Pilot and Adopt",
+        plain: "A pilot is a controlled period for real users to learn the process and reveal problems before broad rollout.",
+        details: [
+          "Name pilot users, support hours, escalation paths, expected volume, review frequency, and stop conditions.",
+          "Train users on what to enter, what the process remembers, what output means, and when a human must take over.",
+          "Collect adoption, time returned, quality, exceptions, review burden, and qualitative feedback."
+        ]
+      },
+      {
+        title: "Phase 5: Operate and Expand",
+        plain: "Turn the successful pilot into a maintained business capability rather than an abandoned experiment.",
+        details: [
+          "Establish weekly operational review and monthly value review. Assign ownership for failures, knowledge freshness, connections, and evaluations.",
+          "Increase volume or autonomy one bounded step at a time. Test each meaningful change as a new release.",
+          "Package proven process patterns for reuse while keeping each customer's data, policy, and environment isolated."
+        ]
+      }
+    ]
+  },
+  {
+    id: "troubleshooting",
+    title: "Troubleshooting Guide",
+    summary: "What to check when a result, integration, workflow, conversation, or cost does not look right.",
+    topics: [
+      {
+        title: "The Answer Is Wrong or Weak",
+        plain: "First determine whether the problem came from missing facts, unclear instructions, the selected model, or an invalid expectation.",
+        details: [
+          "Open Activity and inspect the release, model, retrieved citations, tool results, and output contract.",
+          "Reproduce the case as an evaluation. Correct the source document, retrieval rule, instruction, tool, or model through a new release.",
+          "Do not solve a repeatable production problem by manually editing one output and leaving the process unchanged."
+        ]
+      },
+      {
+        title: "A Conversation Forgot or Mixed Context",
+        plain: "Check the identity key before assuming the model forgot something.",
+        details: [
+          "Confirm the process uses a durable profile and that later requests use the same thread, consumer, or entity ID.",
+          "Verify another consumer or business entity did not reuse a shared key accidentally.",
+          "Inspect context budget, summarization, expiry, and memory policy. Old content may have been intentionally omitted."
+        ]
+      },
+      {
+        title: "A Tool or Connection Failed",
+        plain: "Separate connection health, permissions, input validation, external service failure, and process policy.",
+        details: [
+          "Check connection status, OAuth expiry, scopes, acceptance test, and the external provider's availability.",
+          "Use Activity and API Logs to find the correlation and error class without copying secrets or full sensitive bodies.",
+          "Retry only when safe. A write action needs idempotency or provider proof that the first attempt did not complete."
+        ]
+      },
+      {
+        title: "Work Is Stuck, Repeating, or Expensive",
+        plain: "Find which durable boundary owns the wait and whether repeated attempts are making progress.",
+        details: [
+          "Queued work may be retrying or dead-lettered. A workflow may be waiting for time or approval. An actor may be blocked by policy or dependency.",
+          "Look for repeated model calls, oversized context, broad retrieval, rapid schedules, or a poison queue message.",
+          "Pause the source when cost or side effects can continue. Preserve the execution ID and evidence before changing state."
+        ]
+      },
+      {
+        title: "A User Cannot Access Work",
+        plain: "Access requires both successful Cloudflare identity and an active tenant membership with the correct role.",
+        details: [
+          "Confirm the user is entering through the correct customer domain and Access application.",
+          "Check membership status, email identity, role, process visibility, and whether the process is paused.",
+          "Do not broaden a role simply to clear an error. Grant the smallest role that matches the person's responsibility."
+        ]
+      }
+    ]
+  },
+  {
+    id: "faq",
+    title: "Frequently Asked Questions",
+    summary: "Direct answers to the questions customers and implementation teams are likely to ask first.",
+    topics: [
+      {
+        title: "Is Workrr a Chatbot?",
+        plain: "No. Chat can be one interface, but Workrr is a controlled platform for running, governing, and measuring business processes.",
+        details: [
+          "Some processes are conversations. Others are instant classifications, scheduled workflows, queue consumers, evaluations, or background maintenance.",
+          "Each process has business ownership, versioned behavior, tools, data policy, evidence, and value measurement.",
+          "The important product is the governed business capability, not the chat box."
+        ]
+      },
+      {
+        title: "Is Our Data Used to Train Public Models?",
+        plain: "Workrr is designed around private customer environments and Cloudflare-hosted inference, but the exact handling depends on the configured provider and contract.",
+        details: [
+          "The model policy should state which providers and models are allowed and whether gateway handoff is permitted.",
+          "Customer data should be minimized, classified, retained only as required, and kept out of credentials and diagnostic exports.",
+          "A customer should review the current provider terms and its own legal requirements before enabling a model path."
+        ]
+      },
+      {
+        title: "Can the AI Take Actions by Itself?",
+        plain: "Only when a published process, allowed tool, autonomy policy, and business owner explicitly permit that bounded action.",
+        details: [
+          "New work should begin with observe, suggest, or human approval.",
+          "Automatic actions need stronger evaluation, idempotency, monitoring, containment, and rollback evidence.",
+          "A model deciding that an action is useful does not grant permission by itself."
+        ]
+      },
+      {
+        title: "Does a Durable Agent Run All the Time?",
+        plain: "No. Durability means its identity and state survive; it does not mean a Worker continuously consumes compute.",
+        details: [
+          "Cloudflare Workers wake for requests and events. Durable Objects coordinate strongly consistent state for one actor identity.",
+          "Workflows and alarms resume work at the correct time. Queues deliver accepted asynchronous work.",
+          "This design scales to many actors without keeping one traditional server process alive for every customer or conversation."
+        ]
+      },
+      {
+        title: "How Do We Know It Is Creating Value?",
+        plain: "Compare measured production outcomes with the manual baseline and the target agreed before the build.",
+        details: [
+          "Track volume, completion, time returned, error or rework, turnaround time, human review, escalation, cost, and business outcome.",
+          "Use Value & Decisions to record whether the evidence supports expansion, correction, observation, or retirement.",
+          "An impressive demo is not value evidence. Repeated accepted outcomes are."
+        ]
+      }
+    ]
+  },
+  {
     id: "glossary",
     title: "Plain-Language Glossary",
     summary: "Short definitions for words used throughout Workrr.",
