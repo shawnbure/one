@@ -4,6 +4,7 @@ import { assertAsyncExecutionAdmission, executeRequest } from "../src/execution"
 function executionEnvironment(tenantMode: string, processMode: string, processStatus = "active",
   inputSchemaJson: string | null = null, autonomy = "suggest", existingExecution?: {
     id: string; status: string; output_preview: string | null; model: string | null;
+    idempotency_fingerprint?: string | null;
   }) {
   const writes: Array<{ sql: string; values: unknown[] }> = [];
   const DB = {
@@ -35,7 +36,8 @@ function executionEnvironment(tenantMode: string, processMode: string, processSt
       return statement;
     }
   };
-  return { env: { DB } as never, writes };
+  return { env: { DB, OAUTH_TOKEN_ENCRYPTION_KEY:
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } as never, writes };
 }
 
 describe("execution admission controls", () => {
@@ -115,5 +117,15 @@ describe("execution admission controls", () => {
       blueprintId: "process-1", input: "input", idempotencyKey: "x".repeat(201)
     })).rejects.toThrow("limited to 200");
     expect(writes).toHaveLength(0);
+  });
+
+  it("rejects reuse of an execution key for changed protected content", async () => {
+    const { env } = executionEnvironment("active", "active", "active", null, "suggest", {
+      id: "execution-original", status: "completed", output_preview: "Original",
+      model: "model-1", idempotency_fingerprint: "a-different-fingerprint"
+    });
+    await expect(executeRequest(env, "tenant-1", {
+      blueprintId: "process-1", input: "Changed request", idempotencyKey: "customer-job-42"
+    }, "execution-retry")).rejects.toThrow("different execution content");
   });
 });

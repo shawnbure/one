@@ -31,7 +31,9 @@ export async function receiveWebhook(c: Context<{ Bindings: Env }>): Promise<Res
   const accepted = JSON.parse(endpoint.accepted_events_json) as string[];
   if (accepted.length && (!payload.event || !accepted.includes(payload.event))) return c.json({ error: "Event type is not accepted" }, 422);
   const executionId = crypto.randomUUID();
-  const request: ExecutionRequest = { blueprintId: endpoint.blueprint_id, input: payload.input ?? JSON.stringify(payload.data ?? payload), idempotencyKey };
+  const request: ExecutionRequest = { blueprintId: endpoint.blueprint_id,
+    input: payload.input ?? JSON.stringify(payload.data ?? payload),
+    idempotencyKey: `webhook:${endpoint.id}:${idempotencyKey}` };
   try { await assertAsyncExecutionAdmission(c.env, endpoint.tenant_id, endpoint.blueprint_id); }
   catch (error) { return c.json({ error: error instanceof Error ? error.message : "Execution admission failed" }, 409); }
   let protectedRequest: ExecutionRequest;

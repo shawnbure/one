@@ -32,7 +32,9 @@ function environment(claimChanges = 1) {
       return [];
     },
   };
-  return { env: { DB, PROCESS_QUEUE: { async send(job: unknown) { sent.push(job); } } } as never, sent, writes };
+  return { env: { DB, OAUTH_TOKEN_ENCRYPTION_KEY:
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  PROCESS_QUEUE: { async send(job: unknown) { sent.push(job); } } } as never, sent, writes };
 }
 
 describe("recurring process schedules", () => {

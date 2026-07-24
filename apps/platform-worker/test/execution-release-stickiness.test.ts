@@ -46,7 +46,8 @@ function environment() {
       return statement;
     }
   };
-  return { env: { DB, PROCESS_AGENT: {} } as never, writes };
+  return { env: { DB, PROCESS_AGENT: {}, OAUTH_TOKEN_ENCRYPTION_KEY:
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } as never, writes };
 }
 
 describe("durable actor release stickiness", () => {

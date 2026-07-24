@@ -1,5 +1,5 @@
 {
   "applicationRelease": "0.1.0",
-  "requiredMigrationId": 97,
-  "requiredMigrationName": "0097_tenant_scoped_actor_identity.sql"
+  "requiredMigrationId": 98,
+  "requiredMigrationName": "0098_execution_idempotency_fingerprint.sql"
 }

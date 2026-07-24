@@ -37,7 +37,9 @@ function webhookEnvironment(rules: unknown[] = []) {
     },
     async batch() { return []; }
   };
-  return { env: { DB, WEBHOOK_INBOX_SECRET: secret, PROCESS_QUEUE: { async send(job: unknown) { jobs.push(job); } } }, jobs };
+  return { env: { DB, WEBHOOK_INBOX_SECRET: secret,
+    OAUTH_TOKEN_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    PROCESS_QUEUE: { async send(job: unknown) { jobs.push(job); } } }, jobs };
 }
 
 async function signature(body: string) {
@@ -65,7 +67,8 @@ describe("signed webhook intake", () => {
     const response = await deliver(env, '{"event":"request.created","input":"hello"}', "event-2");
     expect(response.status).toBe(202);
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ tenantId: "tenant-1", blueprintId: "inbox-triage", idempotencyKey: "event-2" });
+    expect(jobs[0]).toMatchObject({ tenantId: "tenant-1", blueprintId: "inbox-triage",
+      idempotencyKey: "webhook:inbox-intake:event-2" });
   });
 
   it("returns the original execution for a duplicate without queuing twice", async () => {

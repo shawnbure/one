@@ -1,5 +1,6 @@
 import type { QueueJob } from "@workrr/contracts";
 import type { Env } from "./types";
+import { assertMatchingFingerprint, executionFingerprint, IdempotencyConflictError } from "./execution-idempotency";
 
 export type QueueSource = "api" | "webhook" | "email" | "schedule" | "replay";
 
@@ -10,24 +11,31 @@ export async function enqueueProcessJob(
   replayedFrom?: string,
 ) {
   const tenantId = job.tenantId ?? "demo";
+  const idempotencyFingerprint = job.idempotencyKey
+    ? await executionFingerprint(env, tenantId, job)
+    : null;
   const reservation = await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
-     started_at, process_release_id)
-    SELECT ?, b.tenant_id, b.id, NULL, b.execution_profile, 'queued', ?, ?, CURRENT_TIMESTAMP, b.active_release_id
+     started_at, process_release_id, idempotency_fingerprint)
+    SELECT ?, b.tenant_id, b.id, NULL, b.execution_profile, 'queued', ?, ?, CURRENT_TIMESTAMP,
+      b.active_release_id, ?
     FROM agent_blueprints b WHERE b.id=? AND b.tenant_id=?`)
-    .bind(job.executionId, job.input.slice(0, 500), job.idempotencyKey ?? null,
+    .bind(job.executionId, job.input.slice(0, 500), job.idempotencyKey ?? null, idempotencyFingerprint,
       job.blueprintId, tenantId).run();
   if (reservation.meta.changes !== 1) {
     const existing = await (job.idempotencyKey
-      ? env.DB.prepare("SELECT id, blueprint_id FROM executions WHERE tenant_id=? AND idempotency_key=?")
+      ? env.DB.prepare(`SELECT id, blueprint_id, idempotency_fingerprint
+          FROM executions WHERE tenant_id=? AND idempotency_key=?`)
         .bind(tenantId, job.idempotencyKey)
-      : env.DB.prepare("SELECT id, blueprint_id FROM executions WHERE tenant_id=? AND id=?")
+      : env.DB.prepare(`SELECT id, blueprint_id, idempotency_fingerprint
+          FROM executions WHERE tenant_id=? AND id=?`)
         .bind(tenantId, job.executionId)
-    ).first<{ id: string; blueprint_id: string }>();
+    ).first<{ id: string; blueprint_id: string; idempotency_fingerprint: string | null }>();
     if (!existing) throw new Error("Process not found or execution reservation could not be resolved");
     if (existing.blueprint_id !== job.blueprintId) {
-      throw new Error("Idempotency key is already assigned to a different process");
+      throw new IdempotencyConflictError("Idempotency key is already assigned to a different process");
     }
+    assertMatchingFingerprint(existing.idempotency_fingerprint, idempotencyFingerprint ?? "");
     if (existing.id !== job.executionId) {
       return { queueJobId: null, executionId: existing.id, duplicate: true };
     }

@@ -92,6 +92,7 @@ import { updateDataEgressPolicy } from "./data-governance";
 import { listSolutionPacks, resolveSolutionPack, resolveSolutionPackHandoffChecks } from "./solution-pack-catalog";
 import { SolutionPackHandoffConflict, updateSolutionPackHandoffCheck } from "./solution-pack-handoff";
 import { decideProcessRelease } from "./release-governance";
+import { isIdempotencyConflict } from "./execution-idempotency";
 
 export { ProcessAgent } from "./agent";
 export { McpConnectorAgent } from "./mcp-connector-agent";
@@ -1628,7 +1629,7 @@ app.post("/api/execute", requireRoles("admin", "builder", "owner", "operator", "
     ), 202);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Execution failed" },
-      isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
+      isIdempotencyConflict(error) ? 409 : isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
   }
 });
 
@@ -1654,9 +1655,14 @@ app.post("/api/execute/async", requireRoles("admin", "builder", "owner", "operat
       isDlpBlocked(error) || isContractViolation(error) ? 422 : 400);
   }
   const job: QueueJob = { ...protectedRequest, executionId, attempt: 0, tenantId: c.get("tenantId") };
-  const queued = await enqueueProcessJob(c.env, job, "api");
-  return c.json({ executionId: queued.executionId, status: "queued",
-    ...(queued.duplicate ? { idempotentReplay: true } : {}) }, 202);
+  try {
+    const queued = await enqueueProcessJob(c.env, job, "api");
+    return c.json({ executionId: queued.executionId, status: "queued",
+      ...(queued.duplicate ? { idempotentReplay: true } : {}) }, 202);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Queue admission failed" },
+      isIdempotencyConflict(error) ? 409 : 503);
+  }
 });
 
 app.get("/api/queue-operations", requireRoles("admin", "builder", "owner", "operator", "viewer"), async (c) =>

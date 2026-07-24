@@ -13,7 +13,7 @@ function environment(sendError?: Error, existingExecutionId?: string) {
         bind(...values: unknown[]) { bindings = values; return statement; },
         async first() {
           return sql.includes("FROM executions WHERE") && existingExecutionId
-            ? { id: existingExecutionId, blueprint_id: "process-1" }
+            ? { id: existingExecutionId, blueprint_id: "process-1", idempotency_fingerprint: null }
             : null;
         },
         async run() {
@@ -34,7 +34,8 @@ function environment(sendError?: Error, existingExecutionId?: string) {
     if (sendError) throw sendError;
     sent.push(job);
   } };
-  return { env: { DB, PROCESS_QUEUE } as never, writes, queries, sent };
+  return { env: { DB, PROCESS_QUEUE, OAUTH_TOKEN_ENCRYPTION_KEY:
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } as never, writes, queries, sent };
 }
 
 const job = { blueprintId: "process-1", input: "safe input", executionId: "execution-1",

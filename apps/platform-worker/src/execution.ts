@@ -11,6 +11,7 @@ import { isContractViolation, outputContractInstruction, parseContracts,
   validateContractInput, validateContractOutput } from "./contracts";
 import { autonomyPlan, routeApproval } from "./autonomy";
 import { recordShadowReview } from "./shadow";
+import { assertMatchingFingerprint, executionFingerprint, IdempotencyConflictError } from "./execution-idempotency";
 
 export async function executeRequest(env: Env, tenantId: string, request: ExecutionRequest, executionId: string = crypto.randomUUID()): Promise<ExecutionResult> {
   validateIdempotencyKey(request.idempotencyKey);
@@ -57,6 +58,9 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
     direction: "input", stage: "execution", executionId, blueprintId: blueprint.id
   });
   if (inputDlp.blocked) throw new DlpBlockedError(inputDlp.blockedDetectors);
+  const idempotencyFingerprint = request.idempotencyKey
+    ? await executionFingerprint(env, tenantId, request, inputDlp.modelText)
+    : null;
   const contracts = parseContracts(blueprint.inputSchemaJson, blueprint.outputSchemaJson);
   const autonomy = autonomyPlan(blueprint);
   const startedAt = new Date().toISOString();
@@ -68,31 +72,34 @@ export async function executeRequest(env: Env, tenantId: string, request: Execut
       await env.DB.prepare(`INSERT OR IGNORE INTO executions
         (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview,
          idempotency_key, started_at, completed_at, process_release_id, input_contract_status,
-         output_contract_status, contract_error, error, autonomy_level, autonomy_disposition, tool_policy_json)
-        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, 'blocked', ?)`)
+         output_contract_status, contract_error, error, autonomy_level, autonomy_disposition, tool_policy_json,
+         idempotency_fingerprint)
+        VALUES (?, ?, ?, ?, ?, 'blocked', ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, 'blocked', ?, ?)`)
         .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
           inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null, startedAt, startedAt,
           blueprint.activeReleaseId ?? null, contracts.outputSchema ? "pending" : "not_configured",
           error.message.slice(0, 1000), error.message.slice(0, 1000), autonomy.effective,
-          JSON.stringify(blueprint.toolPolicies ?? [])).run();
+          JSON.stringify(blueprint.toolPolicies ?? []), idempotencyFingerprint).run();
     }
     throw error;
   }
   const claim = await env.DB.prepare(`INSERT OR IGNORE INTO executions
     (id, tenant_id, blueprint_id, instance_key, execution_profile, status, input_preview, idempotency_key,
      started_at, process_release_id, input_contract_status, output_contract_status, autonomy_level,
-     autonomy_disposition, tool_policy_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+     autonomy_disposition, tool_policy_json, idempotency_fingerprint)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(executionId, tenantId, blueprint.id, instanceKey, blueprint.executionProfile,
       admission.deferred ? "deferred" : "running", inputDlp.safeText.slice(0, 500), request.idempotencyKey ?? null,
       startedAt, blueprint.activeReleaseId ?? null, contractedInput.status,
       contracts.outputSchema ? "pending" : "not_configured", autonomy.effective,
-      admission.deferred ? "deferred" : autonomy.disposition, JSON.stringify(blueprint.toolPolicies ?? [])).run();
+      admission.deferred ? "deferred" : autonomy.disposition, JSON.stringify(blueprint.toolPolicies ?? []),
+      idempotencyFingerprint).run();
   if (claim.meta.changes !== 1) {
     const existing = await existingExecution(env, tenantId, blueprint.id, executionId, request.idempotencyKey);
     if (!existing) throw new Error("Execution idempotency claim could not be resolved");
-    if (existing.executionId !== executionId || existing.status !== "queued") {
-      return { ...existing, idempotentReplay: true };
+    assertMatchingFingerprint(existing.fingerprint, idempotencyFingerprint ?? "");
+    if (existing.result.executionId !== executionId || existing.result.status !== "queued") {
+      return { ...existing.result, idempotentReplay: true };
     }
     await env.DB.prepare(`UPDATE executions SET instance_key=?, execution_profile=?, status=?, input_preview=?,
       process_release_id=?, input_contract_status=?, output_contract_status=?, autonomy_level=?,
@@ -203,27 +210,33 @@ export async function sanitizeAsyncExecutionInput(env: Env, tenantId: string, re
 async function existingExecution(env: Env, tenantId: string, blueprintId: string,
   executionId: string, idempotencyKey?: string) {
   const row = await (idempotencyKey
-    ? env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status, output_preview, model, started_at
+    ? env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status, output_preview, model,
+        started_at, idempotency_fingerprint
         FROM executions WHERE tenant_id=? AND idempotency_key=?`).bind(tenantId, idempotencyKey)
-    : env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status, output_preview, model, started_at
+    : env.DB.prepare(`SELECT id, blueprint_id, instance_key, execution_profile, status, output_preview, model,
+        started_at, idempotency_fingerprint
         FROM executions WHERE tenant_id=? AND id=?`).bind(tenantId, executionId)
   ).first<{
     id: string; blueprint_id: string; instance_key: string | null; execution_profile: ExecutionResult["profile"];
     status: ExecutionResult["status"]; output_preview: string | null; model: string | null; started_at: string;
+    idempotency_fingerprint: string | null;
   }>();
   if (!row) return null;
   if (row.blueprint_id !== blueprintId) {
-    throw new Error("Idempotency key is already assigned to a different process");
+    throw new IdempotencyConflictError("Idempotency key is already assigned to a different process");
   }
   return {
-    executionId: row.id,
-    instanceKey: row.instance_key,
-    profile: row.execution_profile,
-    status: row.status,
-    ...(row.output_preview ? { output: row.output_preview } : {}),
-    ...(row.model ? { model: row.model } : {}),
-    startedAt: row.started_at,
-  } satisfies ExecutionResult;
+    fingerprint: row.idempotency_fingerprint,
+    result: {
+      executionId: row.id,
+      instanceKey: row.instance_key,
+      profile: row.execution_profile,
+      status: row.status,
+      ...(row.output_preview ? { output: row.output_preview } : {}),
+      ...(row.model ? { model: row.model } : {}),
+      startedAt: row.started_at,
+    } satisfies ExecutionResult,
+  };
 }
 
 function validateIdempotencyKey(value?: string) {
