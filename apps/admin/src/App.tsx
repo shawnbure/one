@@ -4,6 +4,7 @@ import {
   lazy,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ErrorInfo,
   type ReactNode,
@@ -277,6 +278,9 @@ export function App() {
   const [active, setActive] = useState<string>(startup.workspace);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selected, setSelected] = useState<AgentBlueprint | null>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const [search, setSearch] = useState("");
   const [processes, setProcesses] =
     useState<AgentBlueprint[]>(previewProcesses);
@@ -377,6 +381,36 @@ export function App() {
     return () => window.removeEventListener("keydown", shortcut);
   }, []);
 
+  useEffect(() => {
+    if (!selected) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    queueMicrotask(() => drawerCloseRef.current?.focus());
+    const closeDrawer = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelected(null);
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(drawerRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]',
+      ) ?? []).filter((element) => element.tabIndex !== -1);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", closeDrawer);
+    return () => {
+      window.removeEventListener("keydown", closeDrawer);
+      previousFocus?.focus();
+    };
+  }, [selected]);
+
   function chooseCommand(item: CommandSearchItem) {
     if (item.kind === "workspace") {
       setActive(item.target);
@@ -449,9 +483,13 @@ export function App() {
 
   return (
     <div className={`shell${focusedLaunchpad ? " focused-launchpad" : ""}`}>
+      <a className="skip-link" href="#main-content" onClick={(event) => {
+        event.preventDefault();
+        mainRef.current?.focus();
+      }}>Skip to main content</a>
       <CommandCenter open={commandOpen} items={commandItems}
         onClose={() => setCommandOpen(false)} onChoose={chooseCommand}/>
-      <aside className={mobileNavOpen ? "mobile-open" : ""}>
+      <aside className={mobileNavOpen ? "mobile-open" : ""} aria-label="Application navigation">
         <div className="brand">
           <span className="brandmark">
             <Command size={18} />
@@ -474,7 +512,7 @@ export function App() {
           </div>
           <ChevronDown size={15} />
         </div>
-        <nav>
+        <nav aria-label="Primary">
           {visibleNav.map(([label, Icon]) => (
             <button
               key={label}
@@ -523,7 +561,7 @@ export function App() {
         </div>
       </aside>
 
-      <main>
+      <main ref={mainRef} id="main-content" tabIndex={-1}>
         <header>
           <div className="crumb">
             OPERATIONS <span>/</span> {active.toUpperCase()}
@@ -535,6 +573,7 @@ export function App() {
             </button>
             {!consumerView && <button
               className="icon-button"
+              aria-label="Open work inbox"
               onClick={() => setActive("Work inbox")}
             >
               <Inbox size={17} />
@@ -902,16 +941,18 @@ export function App() {
       )}
 
       {selected && (
-        <div className="drawer-backdrop" onClick={() => setSelected(null)}>
-          <aside className="drawer" onClick={(e) => e.stopPropagation()}>
-            <button className="close" onClick={() => setSelected(null)}>
+        <div className="drawer-backdrop" role="presentation" onClick={() => setSelected(null)}>
+          <section ref={drawerRef} className="drawer" role="dialog" aria-modal="true"
+            aria-labelledby="process-drawer-title" onClick={(e) => e.stopPropagation()}>
+            <button ref={drawerCloseRef} className="close" aria-label="Close process details"
+              onClick={() => setSelected(null)}>
               <X />
             </button>
             <span className={`process-icon large ${selected.executionProfile}`}>
               <Workflow />
             </span>
             <Status value={selected.status} />
-            <h2>{selected.name}</h2>
+            <h2 id="process-drawer-title">{selected.name}</h2>
             <p>{selected.description}</p>
             <div className="detail-grid">
               <span>
@@ -985,7 +1026,7 @@ export function App() {
             >
               Open Process Studio
             </button>
-          </aside>
+          </section>
         </div>
       )}
     </div>
