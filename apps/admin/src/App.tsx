@@ -16,6 +16,7 @@ import {
   Bell,
   Boxes,
   Check,
+  ChevronDown,
   CircleGauge,
   Clock3,
   Command,
@@ -30,7 +31,6 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
-  Users,
   Workflow,
   X,
   Code2,
@@ -231,33 +231,39 @@ const previewProcesses: AgentBlueprint[] = [
 
 type NavItem = readonly [string, LucideIcon];
 const navGroups: ReadonlyArray<{ label: string; items: readonly NavItem[] }> = [
-  { label: "Work", items: [
+  { label: "Start Here", items: [
     ["Overview", CircleGauge],
     ["Launchpad", Sparkles],
     ["Work inbox", Inbox],
   ] },
-  { label: "Build", items: [
+  { label: "Create", items: [
     ["Opportunities", Lightbulb],
     ["Processes", Workflow],
+  ] },
+  { label: "Trust", items: [
+    ["Activity", Activity],
+    ["Governance", ShieldCheck],
+  ] },
+];
+const advancedNav: readonly NavItem[] = [
     ["Knowledge", Database],
     ["Connections", Boxes],
     ["Evaluations", FileCheck2],
-  ] },
-  { label: "Operate", items: [
-    ["Activity", Activity],
     ["API logs", Code2],
     ["Notifications", Bell],
-  ] },
-  { label: "Govern", items: [
-    ["Governance", ShieldCheck],
     ["Value & decisions", TrendingUp],
     ["Usage & budgets", CircleDollarSign],
-  ] },
 ];
-const nav = navGroups.flatMap((group) => group.items);
+const nav = [...navGroups.flatMap((group) => group.items), ...advancedNav];
 
 const workspaceDisplayLabels: Record<string, string> = {
-  "Work inbox": "Work Inbox",
+  Overview: "Home",
+  Launchpad: "Use AI",
+  "Work inbox": "Decisions",
+  Opportunities: "Find Opportunities",
+  Processes: "Build Processes",
+  Activity: "What Happened",
+  Governance: "Safety & Controls",
   "API logs": "API Logs",
   "Value & decisions": "Value & Decisions",
   "Usage & budgets": "Usage & Budgets",
@@ -304,6 +310,7 @@ export function App() {
   const focusedLaunchpad = startup.focusedLaunchpad;
   const [active, setActive] = useState<string>(startup.workspace);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selected, setSelected] = useState<AgentBlueprint | null>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -339,6 +346,7 @@ export function App() {
     ? nav.filter(([label]) => label === "Overview" || label === "Launchpad")
     : nav;
   const visibleNavLabels = new Set(visibleNav.map(([label]) => label));
+  const advancedActive = advancedNav.some(([label]) => label === active);
   const commandItems = useMemo<CommandSearchItem[]>(() => {
     const workspaceLabels = authorizedWorkspaceLabels(consumerView);
     const workspaces = workspaceLabels.map((label) => ({
@@ -557,24 +565,29 @@ export function App() {
               ))}
             </div> : null;
           })}
+          {!consumerView && <div className="nav-group advanced-nav-group">
+            <button className={`advanced-toggle${advancedOpen || advancedActive ? " open" : ""}`}
+              type="button" aria-expanded={advancedOpen || advancedActive}
+              onClick={() => setAdvancedOpen((open) => !open)}>
+              <Settings2 size={18}/>
+              Advanced Tools
+              <ChevronDown className="advanced-chevron" size={16}/>
+            </button>
+            {(advancedOpen || advancedActive) && <div className="advanced-nav-items">
+              {advancedNav.filter(([label]) => visibleNavLabels.has(label)).map(([label, Icon]) =>
+                <button key={label} className={active === label ? "active" : ""}
+                  onClick={() => { setActive(label); setMobileNavOpen(false); }}>
+                  <Icon size={18}/>{workspaceDisplayLabel(label)}
+                </button>)}
+            </div>}
+          </div>}
         </nav>
         <div className="aside-bottom">
           {!consumerView && <>
-            <span className="nav-group-label administration-label">Administration</span>
             <button className={active === "Settings" ? "active" : ""}
               onClick={() => { setActive("Settings"); setMobileNavOpen(false); }}>
               <Settings2 size={17} />
               Settings
-            </button>
-            <button className={active === "Customer setup" ? "active" : ""}
-              onClick={() => { setActive("Customer setup"); setMobileNavOpen(false); }}>
-              <Layers3 size={17} />
-              Customer Setup
-            </button>
-            <button className={active === "Team & roles" ? "active" : ""}
-              onClick={() => { setActive("Team & roles"); setMobileNavOpen(false); }}>
-              <Users size={17} />
-              Team & Roles
             </button>
           </>}
           <button className={active === "Help Center" ? "active" : ""}
@@ -702,15 +715,13 @@ export function App() {
               <section className="hero">
                 <div>
                   <div className="eyebrow">
-                    <Sparkles size={14} /> YOUR AI OPERATIONS
+                    <Sparkles size={14} /> YOUR WORKRR HOME
                   </div>
                   <h1>
                     Good morning, {session?.user.name.split(" ")[0] ?? "there"}.
                   </h1>
                   <p>
-                    {processes.length} processes are configured across your
-                    organization. {overview?.pendingApprovals ?? 0} item needs
-                    review.
+                    Here is what is moving, what needs you, and the clearest next step.
                   </p>
                 </div>
                 <button
@@ -718,8 +729,30 @@ export function App() {
                   onClick={() => setCreatingProcess(true)}
                 >
                   <Plus size={17} />
-                  Create process
+                  Build a Process
                 </button>
+              </section>
+
+              <section className="getting-started panel" aria-labelledby="journey-title">
+                <div className="journey-intro">
+                  <span className="eyebrow">YOUR AI JOURNEY</span>
+                  <h2 id="journey-title">From a manual task to trusted AI</h2>
+                  <p>Workrr guides the business through four understandable steps. Start small, prove the value, and add control only when it is useful.</p>
+                </div>
+                <div className="journey-steps">
+                  <button onClick={() => setActive("Opportunities")}>
+                    <span>1</span><strong>Find the right work</strong><small>Choose a repeated task worth improving.</small>
+                  </button>
+                  <button onClick={() => { setStudioProcessId(null); setActive("Processes"); }}>
+                    <span>2</span><strong>Build it safely</strong><small>Define the outcome, knowledge, tools, and owner.</small>
+                  </button>
+                  <button onClick={() => setActive("Launchpad")}>
+                    <span>3</span><strong>Put it to work</strong><small>Let people use approved AI with human decisions.</small>
+                  </button>
+                  <button onClick={() => setActive("Activity")}>
+                    <span>4</span><strong>Learn and improve</strong><small>See what happened, measure value, and refine.</small>
+                  </button>
+                </div>
               </section>
 
               <section className="metrics">

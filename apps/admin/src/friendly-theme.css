@@ -1,0 +1,193 @@
+/*
+ * Friendly-by-default product layer.
+ * Workrr keeps its enterprise controls, but the everyday experience should
+ * feel like a calm guide rather than an infrastructure console.
+ */
+:root {
+  --font-body: "DM Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: Manrope, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --surface: #fffdf9;
+  --surface-subtle: #f7f4ed;
+  --canvas: #f7f4ee;
+  --ink: #2a342e;
+  --muted: #6f786f;
+  --line: #e4dfd5;
+  --line-strong: #d6d0c4;
+  --green: #4f806b;
+  --green-hover: #406d5b;
+  --focus-ring: rgb(88 132 112 / 24%);
+  --radius-sm: 11px;
+  --radius-md: 17px;
+  --radius-lg: 22px;
+  --shadow-panel: 0 1px 2px rgb(55 48 36 / 3%), 0 12px 34px rgb(55 48 36 / 5%);
+}
+
+body { background: var(--canvas); color: var(--ink); }
+
+.shell { grid-template-columns: 250px minmax(0, 1fr); background: var(--canvas); }
+
+.shell > aside {
+  width: 250px;
+  padding: 24px 17px 18px;
+  border-right: 1px solid #ded9ce;
+  background: #f0ede5;
+  color: #34443b;
+}
+
+.shell > aside .brand { padding: 0 8px 28px; }
+.shell > aside .brandmark {
+  background: #dceae2;
+  color: #365f4e;
+  box-shadow: inset 0 0 0 1px rgb(72 111 93 / 10%);
+}
+.shell > aside .brand strong { color: #26372f; }
+.shell > aside .brand-tagline { color: #78857d; letter-spacing: .1em; }
+
+.shell > aside nav { gap: 17px; }
+.shell > aside .nav-group { gap: 4px; }
+.shell > aside .nav-group-label {
+  padding: 0 12px 7px;
+  color: #8a8b82;
+  font-size: 9px !important;
+  letter-spacing: .12em !important;
+}
+
+.shell > aside nav button,
+.shell > aside .aside-bottom > button {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #5f6b64;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.shell > aside nav button:hover,
+.shell > aside nav button.active,
+.shell > aside .aside-bottom > button:hover,
+.shell > aside .aside-bottom > button.active {
+  border-color: #ded9ce;
+  background: rgb(255 253 249 / 88%);
+  color: #315b49;
+  box-shadow: 0 5px 16px rgb(67 59 44 / 5%);
+}
+
+.shell > aside nav button.active,
+.shell > aside .aside-bottom > button.active {
+  box-shadow: inset 3px 0 #75a18c, 0 5px 16px rgb(67 59 44 / 5%);
+}
+
+.shell > aside nav em { background: #dce9e2; color: #37644f; }
+.advanced-nav-group { padding-top: 2px; border-top: 1px solid #dfdacf; }
+.shell > aside nav .advanced-toggle { margin-top: 10px; }
+.advanced-toggle .advanced-chevron { margin-left: auto; transition: transform .18s ease; }
+.advanced-toggle.open .advanced-chevron { transform: rotate(180deg); }
+.advanced-nav-items { display: grid; gap: 3px; padding-top: 4px; }
+.advanced-nav-items button { min-height: 39px !important; padding-block: 8px !important; font-size: 12.5px !important; }
+
+.aside-bottom { border-color: #ded9ce; }
+
+.shell > main > header {
+  height: 72px;
+  min-height: 72px;
+  border-color: #e3ded4;
+  background: rgb(250 248 243 / 91%);
+  box-shadow: 0 1px 12px rgb(69 61 47 / 3%);
+}
+.tenant-header-title { color: #42584d; }
+.crumb { color: #7a817b; letter-spacing: .035em; text-transform: none; }
+.search, .icon-button, .user { border-color: #dfdbd1; background: #fffdfa; }
+
+.content { max-width: 1460px; padding: clamp(28px, 3vw, 46px); }
+.hero { align-items: center; margin-bottom: 22px; }
+.hero h1, .page-title h1 { color: #27362f; letter-spacing: -.025em; }
+.hero p, .page-title p, .panel-head p { color: #747c75; }
+.eyebrow { color: #628371; letter-spacing: .09em; }
+
+.panel,
+.metrics article {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.primary {
+  border-radius: 12px;
+  background: #56836f;
+  box-shadow: 0 7px 18px rgb(65 105 86 / 16%);
+}
+.primary:hover { background: #47725f; }
+
+.getting-started {
+  display: grid;
+  grid-template-columns: minmax(230px, .75fr) minmax(0, 2fr);
+  gap: 24px;
+  margin-bottom: 20px;
+  padding: 24px;
+  overflow: hidden;
+  background: linear-gradient(125deg, #fffdf9 0%, #f5f1e8 100%);
+}
+.journey-intro h2 { margin: 6px 0 7px; color: #30433a; font-size: 19px; }
+.journey-intro p { margin: 0; color: #717970; font-size: 13px; line-height: 1.6; }
+.journey-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.journey-steps button {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2ddd2;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 70%);
+  color: #4d5e55;
+  text-align: left;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.journey-steps button:hover {
+  transform: translateY(-2px);
+  border-color: #b9ccbf;
+  box-shadow: 0 9px 20px rgb(76 69 53 / 7%);
+}
+.journey-steps button > span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #dfece5;
+  color: #3f6b57;
+  font-size: 11px;
+  font-weight: 800;
+}
+.journey-steps strong { color: #35483f; font-size: 12.5px; line-height: 1.35; }
+.journey-steps small { color: #7a817b; font-size: 11px; line-height: 1.45; }
+
+.metrics { gap: 12px; }
+.metrics article { min-height: 118px; }
+.metric-icon { border-radius: 11px; }
+.filter { border-radius: 12px; background: #fbfaf6; }
+.process-row { border-radius: 13px; }
+.process-row:hover { background: #f8f5ee; }
+.tags i { border-radius: 8px; background: #f0eee8; color: #737970; }
+
+@media (max-width: 1200px) {
+  .shell { grid-template-columns: 224px minmax(0, 1fr); }
+  .shell > aside { width: 224px; }
+  .getting-started { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .journey-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .shell > aside { width: 100%; background: #f0ede5; }
+  .shell > main > header { min-height: 134px; }
+  .getting-started { padding: 19px; }
+}
+
+@media (max-width: 520px) {
+  .journey-steps { grid-template-columns: 1fr; }
+}

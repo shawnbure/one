@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./readability.css", import.meta.url), "utf8");
 const shellCss = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 const visualPolishCss = readFileSync(new URL("./visual-polish.css", import.meta.url), "utf8");
+const friendlyThemeCss = readFileSync(new URL("./friendly-theme.css", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 const activityPolishCss = readFileSync(new URL("./activity-polish.css", import.meta.url), "utf8");
 const settingsCss = readFileSync(new URL("./settings-view.css", import.meta.url), "utf8");
 const wizardCss = readFileSync(new URL("./wizard-readability.css", import.meta.url), "utf8");
@@ -163,5 +165,16 @@ describe("product readability contract", () => {
     expect(css).toContain('.retirement-scope input[type="checkbox"]');
     expect(css).toContain("width: 18px");
     expect(css).toContain("accent-color: #2f7b5e");
+  });
+
+  it("presents a friendly guided journey while keeping advanced tools available", () => {
+    expect(appSource).toContain('label: "Start Here"');
+    expect(appSource).toContain('label: "Create"');
+    expect(appSource).toContain('label: "Trust"');
+    expect(appSource).toContain("Advanced Tools");
+    expect(appSource).toContain("From a manual task to trusted AI");
+    expect(friendlyThemeCss).toContain("Friendly-by-default");
+    expect(friendlyThemeCss).toContain(".journey-steps");
+    expect(friendlyThemeCss).toContain("#f7f4ee");
   });
 });
