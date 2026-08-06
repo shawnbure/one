@@ -715,85 +715,96 @@ export function App() {
               <section className="hero">
                 <div>
                   <div className="eyebrow">
-                    <Sparkles size={14} /> YOUR WORKRR HOME
+                    <Sparkles size={14} /> TODAY IN WORKRR
                   </div>
                   <h1>
                     Good morning, {session?.user.name.split(" ")[0] ?? "there"}.
                   </h1>
                   <p>
-                    Here is what is moving, what needs you, and the clearest next step.
+                    Here is what your AI operations accomplished, what needs your judgment, and what to do next.
                   </p>
                 </div>
                 <button
                   className="primary"
-                  onClick={() => setCreatingProcess(true)}
+                  onClick={() => setActive("Launchpad")}
                 >
-                  <Plus size={17} />
-                  Build a Process
+                  <Play size={17} />
+                  Start AI Work
                 </button>
               </section>
 
-              <section className="getting-started panel" aria-labelledby="journey-title">
-                <div className="journey-intro">
-                  <span className="eyebrow">YOUR AI JOURNEY</span>
-                  <h2 id="journey-title">From a manual task to trusted AI</h2>
-                  <p>Workrr guides the business through four understandable steps. Start small, prove the value, and add control only when it is useful.</p>
+              <button className="workrr-command" onClick={() => setActive("Launchpad")}
+                aria-label="Open Workrr to ask a question or start approved AI work">
+                <span className="workrr-command-icon"><Sparkles size={19}/></span>
+                <span>
+                  <strong>Ask Workrr or start approved AI work</strong>
+                  <small>Use a trusted process, continue a conversation, or begin a new request.</small>
+                </span>
+                <ArrowUpRight size={18}/>
+              </button>
+
+              <section className="operations-briefing panel" aria-labelledby="briefing-title">
+                <div className="briefing-heading">
+                  <span className="metric-icon green"><Bot size={18}/></span>
+                  <div>
+                    <span className="eyebrow">WORKRR BRIEFING</span>
+                    <h2 id="briefing-title">What matters right now</h2>
+                  </div>
                 </div>
-                <div className="journey-steps">
-                  <button onClick={() => setActive("Opportunities")}>
-                    <span>1</span><strong>Find the right work</strong><small>Choose a repeated task worth improving.</small>
-                  </button>
-                  <button onClick={() => { setStudioProcessId(null); setActive("Processes"); }}>
-                    <span>2</span><strong>Build it safely</strong><small>Define the outcome, knowledge, tools, and owner.</small>
-                  </button>
-                  <button onClick={() => setActive("Launchpad")}>
-                    <span>3</span><strong>Put it to work</strong><small>Let people use approved AI with human decisions.</small>
-                  </button>
-                  <button onClick={() => setActive("Activity")}>
-                    <span>4</span><strong>Learn and improve</strong><small>See what happened, measure value, and refine.</small>
-                  </button>
+                <p className="briefing-copy">
+                  {overview ? <>
+                    Your AI processes completed <strong>{overview.completed7d.toLocaleString()} {overview.completed7d === 1 ? "run" : "runs"}</strong> in the last seven days.
+                    {overview.pendingApprovals > 0
+                      ? <> <strong>{overview.pendingApprovals} {overview.pendingApprovals === 1 ? "decision needs" : "decisions need"} your review.</strong></>
+                      : <> Nothing is waiting for approval.</>}
+                    {overview.failed7d > 0
+                      ? <> <strong> {overview.failed7d} {overview.failed7d === 1 ? "exception needs" : "exceptions need"} attention.</strong></>
+                      : <> No failed work needs attention.</>}
+                    {value && value.totals.human_minutes_saved > 0
+                      ? <> Workrr has returned an estimated <strong>{(value.totals.human_minutes_saved / 60).toFixed(1)} hours</strong> to the team.</>
+                      : null}
+                  </> : "Workrr is gathering current operational evidence for your briefing."}
+                </p>
+                <div className="briefing-actions" aria-label="Recommended next actions">
+                  {(overview?.pendingApprovals ?? 0) > 0 &&
+                    <button onClick={() => setActive("Work inbox")}><FileCheck2 size={15}/>Review decisions</button>}
+                  {(overview?.failed7d ?? 0) > 0 &&
+                    <button onClick={() => setActive("Activity")}><Activity size={15}/>Investigate exceptions</button>}
+                  <button onClick={() => setActive("Launchpad")}><Play size={15}/>Start approved work</button>
+                  <button onClick={() => setActive("Opportunities")}><Lightbulb size={15}/>Find an opportunity</button>
                 </div>
               </section>
 
               <section className="metrics">
                 <article>
                   <div>
+                    <span className="metric-icon amber">
+                      <FileCheck2 size={18} />
+                    </span>
+                    <small>DECISIONS WAITING</small>
+                  </div>
+                  <strong>{overview?.pendingApprovals ?? "—"}</strong>
+                  <p>{pending ? "Your judgment is required" : "Nothing needs you now"}</p>
+                </article>
+                <article>
+                  <div>
                     <span className="metric-icon green">
+                      <Check size={18} />
+                    </span>
+                    <small>WORK COMPLETED · 7 DAYS</small>
+                  </div>
+                  <strong>{overview?.completed7d.toLocaleString() ?? "—"}</strong>
+                  <p>Audited AI process runs</p>
+                </article>
+                <article>
+                  <div>
+                    <span className="metric-icon blue">
                       <Bot size={18} />
                     </span>
                     <small>ACTIVE PROCESSES</small>
                   </div>
                   <strong>{overview?.activeProcesses ?? "—"}</strong>
-                  <p>
-                    <b>{processes.length}</b> configured
-                  </p>
-                </article>
-                <article>
-                  <div>
-                    <span className="metric-icon amber">
-                      <Clock3 size={18} />
-                    </span>
-                    <small>NEEDS REVIEW</small>
-                  </div>
-                  <strong>{overview?.pendingApprovals ?? "—"}</strong>
-                  <p>
-                    {pending ? "Human decision required" : "Queue is clear"}
-                  </p>
-                </article>
-                <article>
-                  <div>
-                    <span className="metric-icon blue">
-                      <Activity size={18} />
-                    </span>
-                    <small>RUNS · 7 DAYS</small>
-                  </div>
-                  <strong>{overview ? overview.runs7d.toLocaleString() : "—"}</strong>
-                  <p>
-                    <b>
-                      {overview ? `${overview.completed7d} completed` : "Loading evidence"}
-                    </b>
-                      {overview ? ` · ${overview.failed7d} failed` : ""}
-                  </p>
+                  <p>{processes.length} configured capabilities</p>
                 </article>
                 <article>
                   <div>
@@ -811,11 +822,11 @@ export function App() {
                 <div className="panel processes">
                   <div className="panel-head">
                     <div>
-                      <h2>AI processes</h2>
-                      <p>Live operational capabilities, not generic bots.</p>
+                      <h2>AI work at a glance</h2>
+                      <p>Approved capabilities and the work they handled this week.</p>
                     </div>
-                    <button className="quiet">
-                      View all <ArrowUpRight size={15} />
+                    <button className="quiet" onClick={() => setActive("Activity")}>
+                      See what happened <ArrowUpRight size={15} />
                     </button>
                   </div>
                   <div className="filter">
@@ -856,7 +867,7 @@ export function App() {
                           </span>
                         </span>
                         <span className="process-stat">
-                          <small>RUNS · 7D</small>
+                          <small>WORK · 7 DAYS</small>
                           <strong>
                             {overview ? (overview.processRuns[process.id] ?? 0).toLocaleString() : "—"}
                           </strong>
@@ -871,8 +882,8 @@ export function App() {
                   <div className="panel approval-card">
                     <div className="panel-head">
                       <div>
-                        <h2>Review queue</h2>
-                        <p>Human control points</p>
+                        <h2>Your decisions</h2>
+                        <p>AI pauses here when judgment matters.</p>
                       </div>
                       <span className="count">
                         {overview?.pendingApprovals ?? "—"}
@@ -928,15 +939,15 @@ export function App() {
                         <span>Human checkpoints will appear here.</span>
                       </div>
                     )}
-                    <button className="full-link">
-                      Open work inbox <ArrowUpRight size={15} />
+                    <button className="full-link" onClick={() => setActive("Work inbox")}>
+                      Open decisions <ArrowUpRight size={15} />
                     </button>
                   </div>
                   <div className="panel health">
                     <div className="panel-head">
                       <div>
-                        <h2>Platform health</h2>
-                        <p>Dedicated Cloudflare environment</p>
+                        <h2>Trust status</h2>
+                        <p>Safety, execution, and delivery evidence.</p>
                       </div>
                       <span className={overview?.operationalHealth.status === "attention" ? "attention-badge" : "healthy"}>
                         <i />
@@ -975,7 +986,24 @@ export function App() {
                         ? `${overview.operationalHealth.queueAttention} action needed`
                         : `${overview.operationalHealth.activeQueueJobs} active · clear` : "—"}</strong>
                     </div>
+                    <button className="full-link" onClick={() => setActive("Governance")}>
+                      Open safety and controls <ArrowUpRight size={15}/>
+                    </button>
                   </div>
+                </div>
+              </section>
+
+              <section className="home-journey" aria-labelledby="journey-title">
+                <div>
+                  <span className="eyebrow">WHEN YOU ARE READY TO EXPAND</span>
+                  <h2 id="journey-title">From a manual task to trusted AI</h2>
+                  <p>Start small, prove the value, and add control only when it is useful.</p>
+                </div>
+                <div className="journey-links">
+                  <button onClick={() => setActive("Opportunities")}><span>1</span>Find the right work</button>
+                  <button onClick={() => { setStudioProcessId(null); setActive("Processes"); }}><span>2</span>Build it safely</button>
+                  <button onClick={() => setActive("Launchpad")}><span>3</span>Put it to work</button>
+                  <button onClick={() => setActive("Activity")}><span>4</span>Learn and improve</button>
                 </div>
               </section>
             </>

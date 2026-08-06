@@ -167,14 +167,19 @@ describe("product readability contract", () => {
     expect(css).toContain("accent-color: #2f7b5e");
   });
 
-  it("presents a friendly guided journey while keeping advanced tools available", () => {
+  it("presents an evidence-led daily briefing while keeping the guided journey and advanced tools", () => {
     expect(appSource).toContain('label: "Start Here"');
     expect(appSource).toContain('label: "Create"');
     expect(appSource).toContain('label: "Trust"');
     expect(appSource).toContain("Advanced Tools");
+    expect(appSource).toContain("What matters right now");
+    expect(appSource).toContain("Ask Workrr or start approved AI work");
+    expect(appSource).toContain("Your decisions");
+    expect(appSource).toContain("Trust status");
     expect(appSource).toContain("From a manual task to trusted AI");
     expect(friendlyThemeCss).toContain("Friendly-by-default");
-    expect(friendlyThemeCss).toContain(".journey-steps");
+    expect(friendlyThemeCss).toContain(".operations-briefing");
+    expect(friendlyThemeCss).toContain(".journey-links");
     expect(friendlyThemeCss).toContain("#f7f4ee");
   });
 });
