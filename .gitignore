@@ -5,3 +5,10 @@ dist/
 worker-configuration.d.ts
 *.log
 .DS_Store
+
+# Local scratch / agent output — not for version control
+output/
+outputs/
+tmp/
+.artifacts/
+*.tsbuildinfo
