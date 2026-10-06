@@ -1,5 +1,0 @@
-{
-  "applicationRelease": "0.1.0",
-  "requiredMigrationId": 101,
-  "requiredMigrationName": "0101_execution_cancellation.sql"
-}

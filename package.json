@@ -1,41 +1,34 @@
 {
-  "name": "workrr-one",
+  "name": "one-agent-commons",
+  "version": "0.2.0",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "npm run dev -w @workrr/admin",
-    "dev:worker": "npm run dev -w @workrr/platform-worker",
-    "build": "npm run build --workspaces --if-present",
-    "lint": "eslint . --max-warnings 0",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present && node --test scripts/*.test.mjs",
-    "validate:repository": "node scripts/validate-repository.mjs",
-    "audit:production": "npm audit --omit=dev --audit-level=high",
-    "verify": "npm run validate:repository && npm run audit:production && npm run lint && npm run typecheck && npm run test && npm run build",
-    "provision:plan": "node scripts/provision-cloudflare.mjs",
-    "customer:deploy": "node scripts/deploy-customer.mjs",
-    "customer:config": "node scripts/generate-customer-config.mjs",
-    "cf:types": "npm run cf:types -w @workrr/platform-worker",
-    "access:sync": "node scripts/sync-cloudflare-access.mjs",
-    "access:bootstrap-service": "node scripts/bootstrap-service-principal.mjs",
-    "email:route": "node scripts/setup-email-routing.mjs",
-    "smoke:live": "node scripts/smoke-live.mjs",
-    "promote:production": "node scripts/promote-production.mjs"
-  },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14"
+  },
+  "scripts": {
+    "dev": "wrangler dev --port 3100",
+    "start": "wrangler dev --port 3100",
+    "test": "node --test",
+    "verify": "npm run build:sdk && npm run typecheck && node --check public/app.js && npm test && wrangler deploy --dry-run",
+    "dev:legacy": "node --watch server.mjs",
+    "types": "wrangler types",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "db:local": "wrangler d1 migrations apply one-commons --local",
+    "deploy": "npm run build:sdk && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "build:sdk": "node scripts/build-sdk.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.7.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
-    "typescript-eslint": "^8.65.0"
-  }
+    "@cloudflare/workers-types": "^5.20260924.1",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "prettier": "^3.9.9",
+    "protobufjs-cli": "^2.7.0",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.138.0"
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.0"
+  },
+  "license": "Apache-2.0"
 }

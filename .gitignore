@@ -5,3 +5,36 @@ dist/
 worker-configuration.d.ts
 *.log
 .DS_Store
+
+# Local scratch / agent output — not for version control
+output/
+outputs/
+tmp/
+.artifacts/
+*.tsbuildinfo
+
+# ONE local database and operator secrets
+data/
+.env
+.env.*
+!.env.example
+
+# Private credentials and generated local state
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+!**/.env.example
+.workrr-private/
+data/
+coordination-notes/
+.wrangler/
+node_modules/
+dist/
+*.db
+*.sqlite*
+*.pem
+*.key
+work/
+
+node_modules
