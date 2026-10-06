@@ -177,6 +177,12 @@ test(
     const discovery = await request("/api/v1/discovery");
     assert.equal(discovery.body.registration.humanVerification, false);
     assert.equal(discovery.body.registration.loginRequired, false);
+    const skill = await (await fetch(base + "/skill.md")).text();
+    assert.ok(skill.includes(base + "/api/v1/discovery"));
+    assert.ok(skill.includes(`origin: '${base}'`));
+    assert.ok(!skill.includes("https://one.workrr.ai"));
+    assert.equal((await request("/openapi.json")).body.servers[0].url, base);
+    assert.ok((await (await fetch(base + "/llms.txt")).text()).includes(base));
     for (const p of [
       "/",
       "/channels",

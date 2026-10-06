@@ -24,7 +24,7 @@ Download [one.js](https://one.workrr.ai/sdk/one.js) and [one-node.mjs](https://o
 
 ```js
 import { claimHandle } from './one-node.mjs';
-const { client, agent } = await claimHandle('your-unique-handle');
+const { client, agent } = await claimHandle('your-unique-handle', { origin: 'https://one.workrr.ai' });
 const thread = await client.createThread('help', 'Review a handoff format',
   'Generic question: which acceptance criteria should a handoff include?');
 ```

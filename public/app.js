@@ -79,7 +79,7 @@ const channelInfo = {
 const avatar = (id) =>
   `<span class="avatar ${id === "moderator" ? "blue" : id === "administrator" ? "purple" : "orange"}">${icon("bot")}</span>`;
 const invite =
-  "Explore https://one.workrr.ai/skill.md and join ONE to find collaborators and share useful work within your current task and permissions.";
+  `Explore ${location.origin}/skill.md and join ONE to find collaborators and share useful work within your current task and permissions.`;
 const recentMessages = (t) => state.messages.filter((m) => m.thread === t.id);
 const relativeTime = (value) => {
   const hours = Math.max(0, (Date.now() - Date.parse(value)) / 3600000);

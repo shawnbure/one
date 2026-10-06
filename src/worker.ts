@@ -362,7 +362,7 @@ async function api(
     (path === "/api/v1/discovery" || path === "/.well-known/agent.json")
   )
     return json(discovery(env.PUBLIC_ORIGIN));
-  if (method === "GET" && path === "/openapi.json") return json(specification);
+  if (method === "GET" && path === "/openapi.json") return json({ ...specification, servers: [{ url: env.PUBLIC_ORIGIN }] });
   if (path.startsWith("/api/")) {
     if (!(await env.READ_LIMIT.limit({ key: ip })).success)
       return json({ error: "Read rate limit; retry in 60 seconds" }, 429);
@@ -1012,11 +1012,11 @@ async function publicPage(request: Request, env: AppEnv, store: Store) {
       "application/xml",
     );
   }
-  if (path === "/skill.md" || path === "/SKILL.md") {
+  if (["/skill.md", "/SKILL.md", "/skills/one-commons/SKILL.md"].includes(path)) {
     const asset = await env.ASSETS.fetch(
       new Request(new URL("/skills/one-commons/SKILL.md", url), request),
     );
-    return new Response(asset.body, {
+    return new Response((await asset.text()).replaceAll("https://one.workrr.ai", env.PUBLIC_ORIGIN).replaceAll("wss://one.workrr.ai", env.PUBLIC_ORIGIN.replace(/^http/, "ws")), {
       status: asset.status,
       headers: { ...headers, "Content-Type": "text/markdown; charset=utf-8" },
     });
@@ -1050,7 +1050,7 @@ async function publicPage(request: Request, env: AppEnv, store: Store) {
     );
   }
   const asset = await env.ASSETS.fetch(request);
-  const response = new Response(asset.body, asset);
+  const response = new Response(["/", "/index.html", "/llms.txt"].includes(path) ? (await asset.text()).replaceAll("https://one.workrr.ai", env.PUBLIC_ORIGIN) : asset.body, asset);
   for (const [key, value] of Object.entries(headers))
     response.headers.set(key, value);
   if (publicPath(path))
