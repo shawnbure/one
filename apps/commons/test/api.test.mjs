@@ -1,0 +1,53 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp } from '../server.mjs';
+
+test('agent collaboration, governance, privacy, and moderation',async t=>{
+ const app=createApp({secretKey:'11'.repeat(32),adminToken:'a'.repeat(32),moderatorToken:'m'.repeat(32)});
+ await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+ const base=`http://127.0.0.1:${app.address().port}`;
+ const request=async(path,body,token,method)=>{const r=await fetch(base+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};};
+ const register=name=>request('/api/v1/agents',{name,bio:'Tests distributed systems',expertise:['testing'],acceptConduct:true});
+ const a=await register('Alpha'),b=await register('Beta'),c=await register('Gamma');assert.equal(a.status,201);
+ assert.equal((await register('ONE Administrator')).status,400);
+ assert.equal((await request('/api/v1/threads',{title:'Unauthorized',channel:'build',body:'x'})).status,401);
+ const thread=await request('/api/v1/threads',{title:'Measure handoff efficiency',channel:'build',body:'Baseline: 10 requests.'},a.body.token);assert.equal(thread.status,201);
+ assert.equal((await request(`/api/v1/threads/${thread.body.id}/messages`,{body:'Target: 5 requests.'},b.body.token)).status,201);
+ const log=await request(`/api/v1/threads/${thread.body.id}/log`);assert.equal(log.body.summary.messageCount,2);
+ const proposal=await request('/api/v1/proposals',{title:'Concise handoffs',body:'Use a measured budget.',category:'Efficiency'},a.body.token);
+ const p=`/api/v1/proposals/${proposal.body.id}`;
+ assert.equal((await request(p+'/publish',{},'a'.repeat(32))).status,409);
+ for(const agent of [a,b,c]) assert.equal((await request(p+'/votes',{choice:'yes'},agent.body.token)).status,201);
+ assert.equal((await request(p+'/votes',{choice:'yes'},a.body.token)).body.yes,3);
+ assert.equal((await request(p+'/publish',{},a.body.token)).status,403);
+ assert.equal((await request(p+'/publish',{},'a'.repeat(32))).status,201);
+ assert.equal((await request(p+'/publish',{},'a'.repeat(32))).status,409);
+ assert.equal((await request(p+'/votes',{choice:'no'},a.body.token)).status,409);
+ const secret=await request('/api/v1/secrets',{recipient:b.body.agent.id,value:'private-test-password'},a.body.token);
+ assert.equal(secret.status,201);
+ assert.equal((await request(`/api/v1/secrets/${secret.body.id}/claim`,{},a.body.token)).status,403);
+ const snapshot=await request('/api/v1/snapshot');assert.ok(!JSON.stringify(snapshot.body).includes('private-test-password'));assert.ok(!JSON.stringify(snapshot.body).includes(a.body.token));
+ assert.equal((await request(`/api/v1/secrets/${secret.body.id}/claim`,{},b.body.token)).body.value,'private-test-password');
+ assert.equal((await request(`/api/v1/secrets/${secret.body.id}/claim`,{},b.body.token)).status,410);
+ await request('/api/v1/handoffs',{recipient:b.body.agent.id,content:'Private task'},a.body.token);
+ assert.equal((await request('/api/v1/handoffs',null,c.body.token)).body.length,0);
+ assert.equal((await request('/api/v1/handoffs',null,b.body.token)).body.length,1);
+ const file=await request('/api/v1/files',{name:'plan.txt',content:'A reusable plan'},a.body.token);
+ assert.equal((await request(`/api/v1/files/${file.body.id}`,null,b.body.token)).body.content,'A reusable plan');
+ assert.equal((await request(`/api/v1/files/${file.body.id}`)).status,401);
+ assert.equal((await request('/api/v1/moderation',{thread:thread.body.id,status:'hidden',reason:'Test moderation'},a.body.token)).status,403);
+ assert.equal((await request('/api/v1/moderation',{thread:thread.body.id,status:'hidden',reason:'Test moderation'},'m'.repeat(32))).status,201);
+ assert.equal((await request(`/api/v1/threads/${thread.body.id}/log`)).status,404);
+ assert.ok(!(await request('/api/v1/snapshot')).body.messages.some(m=>m.thread===thread.body.id));
+});
+
+test('durable membership and disabled secret exchange',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');const dir=mkdtempSync(tmpdir()+'/one-test-');t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ let app=createApp({database:dir+'/one.db'});await new Promise(r=>app.listen(0,'127.0.0.1',r));
+ let base=`http://127.0.0.1:${app.address().port}`;
+ const response=await fetch(base+'/api/v1/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Persistent',bio:'Persistence test',expertise:['storage'],acceptConduct:true})});const {token,agent}=await response.json();
+ await new Promise(r=>app.close(r));app=createApp({database:dir+'/one.db'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));base=`http://127.0.0.1:${app.address().port}`;
+ const agents=await (await fetch(base+'/api/v1/agents')).json();assert.ok(agents.some(a=>a.id===agent.id));
+ assert.equal((await fetch(base+'/api/v1/secrets',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({recipient:agent.id,value:'secret'})})).status,503);
+ const patch=await fetch(base+'/api/v1/me',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({available:false})});assert.equal(patch.status,200);
+});

@@ -1,0 +1,33 @@
+syntax = "proto3";
+package one.discussion.v1;
+// Append fields only. Never reuse field numbers or enum values.
+enum Kind { UNSPECIFIED = 0; NOTE = 1; QUESTION = 2; PROPOSAL = 3; CLAIM = 4; EVIDENCE = 5; OBJECTION = 6; COMMITMENT = 7; VOTE = 8; RESOLUTION = 9; }
+enum Signal { NONE = 0; READY = 1; CHANGED = 2; RESET = 3; }
+message DiscussionEvent {
+  uint32 version = 1;
+  string id = 2;
+  string thread = 3;
+  string actor = 4;
+  Kind kind = 5;
+  string text = 6;
+  string ref = 7;
+  repeated string evidence_refs = 8;
+  repeated string artifact_refs = 9;
+  string scope = 10;
+  string deadline = 11;
+  string stance = 12;
+  string created_at = 13;
+  string client_id = 14;
+  uint64 sequence = 15;
+  string actor_name = 16;
+  string thread_title = 17;
+}
+message Frame {
+  uint32 version = 1;
+  Signal signal = 2;
+  uint64 revision = 3;
+  repeated DiscussionEvent events = 4;
+  uint64 cursor = 5;
+  bool has_more = 6;
+  string channel = 7;
+}

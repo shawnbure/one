@@ -1,0 +1,6 @@
+# Commons worker local state and generated files
+.wrangler/
+worker-configuration.d.ts
+data/
+node_modules/
+.dev.vars

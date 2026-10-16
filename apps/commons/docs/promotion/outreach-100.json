@@ -1,0 +1,3267 @@
+[
+  {
+    "name": "AIChief",
+    "url": "https://aichief.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 403: Forbidden",
+    "id": 1,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Tools Explore",
+    "url": "https://aiex.me",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aiex.me",
+    "page_title": "",
+    "submission_links": [],
+    "id": 2,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI For Developers",
+    "url": "https://aifordevelopers.org",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted public tool-suggestion issue; listing decision pending",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aifordevelopers.org",
+    "page_title": "AI for Developers — Best AI Coding Dev Tools, AI Agents, Skills & SDKs (2026)",
+    "submission_links": [
+      {
+        "label": "Contribute",
+        "url": "https://aifordevelopers.org/page/contribute"
+      }
+    ],
+    "submission_url": "https://github.com/ai-for-developers/awesome-ai-coding-tools/issues/774",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aifordevelopers.org/page/contribute",
+    "policy_excerpts": [
+      "Contribute on AI For Developers — AI for Developers AI for Developers Login / Register Contribute on AI For Developers Help us build the AI toolbox developers deserve. We’re building a living, growing directory of the best AI tools for developers — but we",
+      "te on AI For Developers — AI for Developers AI for Developers Login / Register Contribute on AI For Developers Help us build the AI toolbox developers deserve. We’re building a living, growing directory of the best AI tools for developers — but we know we mi"
+    ],
+    "submission_title": "Contribute on AI For Developers — AI for Developers",
+    "id": 3,
+    "checked_at": "2026-10-14",
+    "outcome": "public_suggestion",
+    "verification": "GitHub API: OPEN, zero comments October 14. No reply needed.",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "AI Hubs",
+    "url": "https://aihubs.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; login required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aihubs.ai",
+    "page_title": "AiHubs - Discover The Best AI Tools, You Don't Want to Miss",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://aihubs.ai/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://aihubs.ai/submit"
+      }
+    ],
+    "submission_url": "https://aihubs.ai/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aihubs.ai/auth/login",
+    "policy_excerpts": [
+      "Login - AiHubs - Discover The Best AI Tools, You Don't Want to Miss Welcome back Email Password Forgot password? Login Google Login with Google Don't have an account? Sign up",
+      ", You Don't Want to Miss Welcome back Email Password Forgot password? Login Google Login with Google Don't have an account? Sign up",
+      "ant to Miss Welcome back Email Password Forgot password? Login Google Login with Google Don't have an account? Sign up"
+    ],
+    "submission_title": "Login - AiHubs - Discover The Best AI Tools, You Don&#x27;t Want to Miss",
+    "id": 4,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "ainave",
+    "url": "https://www.ainave.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://ainave.com/",
+    "page_title": "AINave - The OS for AI builders",
+    "submission_links": [],
+    "id": 5,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Parabellum",
+    "url": "https://aiparabellum.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aiparabellum.com",
+    "page_title": "AI Parabellum | The Best AI Tools Directory on the Web",
+    "submission_links": [
+      {
+        "label": "Submit AI",
+        "url": "https://aiparabellum.com/submit-your-ai-tool/"
+      },
+      {
+        "label": "Submit AI",
+        "url": "https://aiparabellum.com/submit-your-ai-tool/"
+      },
+      {
+        "label": "Submit AI",
+        "url": "https://aiparabellum.com/submit-your-ai-tool/"
+      },
+      {
+        "label": "Submit AI",
+        "url": "https://aiparabellum.com/submit-your-ai-tool/"
+      },
+      {
+        "label": "Submit AI",
+        "url": "https://aiparabellum.com/submit-your-ai-tool/"
+      }
+    ],
+    "submission_url": "https://aiparabellum.com/submit-your-ai-tool/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aiparabellum.com/submit-your-ai-tool/",
+    "policy_excerpts": [
+      "ntent AI Parabellum Search for: Search Featured Free Index Tasks Blog Login Submit AI Submit AI AI Parabellum Search for: Search AI Parabellum Featured Free Index Tasks Blog Submit AI Submit AI Login Submit Your AI Tool to Our Directory ⚡ Limited-time off",
+      "arch AI Parabellum Featured Free Index Tasks Blog Submit AI Submit AI Login Submit Your AI Tool to Our Directory ⚡ Limited-time offer — save up to $110 on your listing Get Your AI Tool Discovered by Thousands of Users Submit once, stay listed forever. You",
+      "Features All Basic listing features plus: Newsletter Mention Verified Badge Featured on Every Page Get Featured — $89 100% risk-free: every submission is reviewed within 24 hours — if your tool isn’t approved, you get a full refund. Prefer a different che"
+    ],
+    "submission_title": "Submit Your AI Tool: Get Featured in Our Directory | AI Parabellum",
+    "id": 6,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Pulse",
+    "url": "https://www.aipulse.fyi",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Prepared; CAPTCHA confirmation pending",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.aipulse.fyi",
+    "page_title": "AI Pulse",
+    "submission_links": [
+      {
+        "label": "Submit App",
+        "url": "https://www.aipulse.fyi/submit"
+      }
+    ],
+    "submission_url": "https://www.aipulse.fyi/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.aipulse.fyi/submit",
+    "policy_excerpts": [],
+    "submission_title": "Submit Your App - AI Pulse | AI Pulse",
+    "id": 7,
+    "checked_at": "2026-09-25",
+    "outcome": "prepared",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Tools Guru",
+    "url": "https://aitoolguru.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "The read operation timed out",
+    "id": 8,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Tool List",
+    "url": "https://www.aitoollist.org",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Closed without merge by submitting account; not accepted",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.aitoollist.org",
+    "page_title": "AI Tool List - An awesome list of AI-powered tools",
+    "submission_links": [
+      {
+        "label": "Submit a Tool",
+        "url": "https://www.aitoollist.org/submit-a-tool"
+      },
+      {
+        "label": "Submit a Tool",
+        "url": "https://www.aitoollist.org/submit-a-tool"
+      }
+    ],
+    "submission_url": "https://github.com/aitoollist/awesome-ai-tool-list/pull/176",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.aitoollist.org/submit-a-tool",
+    "policy_excerpts": [],
+    "submission_title": "AI Tool List - Submit a Tool",
+    "id": 9,
+    "checked_at": "2026-10-07",
+    "outcome": "closed_unmerged",
+    "verification": "GitHub API confirms merged=false; timeline records shawnbure closing October 6 at 21:47 UTC; no comments or editorial reason.",
+    "next_action": "Leave closed; do not reopen or resubmit automatically"
+  },
+  {
+    "name": "AI Tools Arena",
+    "url": "https://aitoolsarena.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aitoolsarena.com",
+    "page_title": "AI Tools List - AI Tools Arena",
+    "submission_links": [],
+    "id": 10,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Tools List",
+    "url": "https://aitoolslist.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted; Tally confirmation shown",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aitoolslist.io",
+    "page_title": "aitoolslist.io | Best AI Tools List",
+    "submission_links": [
+      {
+        "label": "Submit an AI tool",
+        "url": "https://aitoolslist.io/submit-ai-tool/"
+      }
+    ],
+    "submission_url": "https://aitoolslist.io/submit-ai-tool/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aitoolslist.io/submit-ai-tool/",
+    "policy_excerpts": [],
+    "submission_title": "Submit AI Tool | aitoolslist.io",
+    "id": 11,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "AI Tools Marketer",
+    "url": "https://aitoolsmarketer.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; marketing-specific fit weak; free listing requires badge",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aitoolsmarketer.com",
+    "page_title": "AI Tools for Marketers Directory | 59 Tools, Published Pricing, No Rankings",
+    "submission_links": [
+      {
+        "label": "Submit a Tool",
+        "url": "https://aitoolsmarketer.com/submit/"
+      },
+      {
+        "label": "Submit a tool",
+        "url": "https://aitoolsmarketer.com/submit/"
+      }
+    ],
+    "submission_url": "https://aitoolsmarketer.com/submit/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aitoolsmarketer.com/submit/",
+    "policy_excerpts": [
+      " Tool Free or Featured Five fields. Submit an AI tool for free with a badge on your site, or pay once and skip the badge. Every submission is read by a person. Tool URL * Tool name * What it does * 0/60 Marketing job * Choose one AI Search and GEO Content",
+      " AI tool for free with a badge on your site, or pay once and skip the badge. Every submission is read by a person. Tool URL * Tool name * What it does * 0/60 Marketing job * Choose one AI Search and GEO Content and Copy Ad Creative Media Buying Video and ",
+      "uld be published somewhere we can link to. Choose a listing Free Free badge required The full entry here, identical on every tier A badge or text link on your site, kept live Featured $75 one-time No badge needed Profiles on zplatform.ai, everyany.one and",
+      "ee Free badge required The full entry here, identical on every tier A badge or text link on your site, kept live Featured $75 one-time No badge needed Profiles on zplatform.ai, everyany.one and saasaffiliate.net (if you run an affiliate program) A written",
+      "A badge or text link on your site, kept live Featured $75 one-time No badge needed Profiles on zplatform.ai, everyany.one and saasaffiliate.net (if you run an affiliate program) A written review and a founder interview Written up within two working days F",
+      "e Everything in Featured A YouTube review on the zPlatform AI channel Submit for free Every outbound link is nofollow, on every tier. Paying changes where and how fast a tool is written up, never what the entry says. Corrections are free and same-day, forever. What"
+    ],
+    "submission_title": "Submit Your AI Tool Free or Featured | AI Tools for Marketers",
+    "id": 12,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Tool Trek",
+    "url": "https://aitooltrek.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; free listing requires reciprocal link",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aitooltrek.com",
+    "page_title": "Explore AI Tool Trek – The Ultimate AI Tools Directory in Sep 2026",
+    "submission_links": [
+      {
+        "label": "Submit Your Tool",
+        "url": "https://aitooltrek.com/submit"
+      },
+      {
+        "label": "Submit Your Tool",
+        "url": "https://aitooltrek.com/submit"
+      },
+      {
+        "label": "Submit Your Tool",
+        "url": "https://aitooltrek.com/submit"
+      }
+    ],
+    "submission_url": "https://aitooltrek.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aitooltrek.com/submit",
+    "policy_excerpts": [
+      " transcriber for audio & vide. ❤️ sponsored Discover Category AI News login EN Submit Your Tool Submit Your Tool menu Discover Discover Category Category AI News AI News Submit Your AI Tool to AI Tool Trek List your AI tool in our curated directory to imp",
+      "itooltrek.com CERTIFIED DOMAIN RATING Free Pack $ 0 List free, earn a backlink Add our partner's link to your home page for submission approval. Copy <a href='https://aitooltrek.com'>AI Tool Trek</a> Reviewed within 72 hours and listed within 15 days Build a",
+      "> Reviewed within 72 hours and listed within 15 days Build a dofollow backlink foundation Your submission will be removed once the backlink is removed Most popular Fast Track $ 29.9 $ 19.9 Skip the queue. Live in 24 hrs. Skip the queue — a featured spotlight",
+      "dofollow backlink foundation Your submission will be removed once the backlink is removed Most popular Fast Track $ 29.9 $ 19.9 Skip the queue. Live in 24 hrs. Skip the queue — a featured spotlight and do-follow backlinks that drive organic clicks from day o",
+      "kip the queue 🔗 5+ dofollow backlinks for visibility boost ✨ Featured badge drives organic clicks ✏️ One update within 7 days 🔒 Lifetime listing, one-time payment Unlimited Unlimited Pack $ 79.9 $ 39.9 / mo Unlimited submissions, one simple subscription O",
+      "g multiple products. Unlimited normal submissions while subscribed No backlink required — ever Cancel subscription anytime Priority email support Submission lane Fast Track Skip the queue. Live in 24 hrs. Website Name Website URL Submit FAQ: Submitting and L"
+    ],
+    "submission_title": "Submit Your AI Tool for Listing and SEO Exposure | AI Tool Trek",
+    "id": 13,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Top Tools",
+    "url": "https://aitoptools.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aitoptools.com",
+    "page_title": "AITopTools | AI Tools Directory | AI Tools Updated Daily",
+    "submission_links": [
+      {
+        "label": "Submit Tool",
+        "url": "https://aitoptools.com/claim-your-tool/"
+      },
+      {
+        "label": "Submit Tool Submit",
+        "url": "https://aitoptools.com/claim-your-tool/"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://aitoptools.com/claim-your-tool/"
+      },
+      {
+        "label": "🚀 Want more exposure? We’ll submit your tool to 100+ AI directories for you. Get Distributed to 100+ Directories →",
+        "url": "https://aitoptools.com/claim-your-tool/?plan=package"
+      },
+      {
+        "label": "List your tool",
+        "url": "https://aitoptools.com/sponsorships/"
+      }
+    ],
+    "submission_url": "https://aitoptools.com/claim-your-tool/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aitoptools.com/claim-your-tool/",
+    "policy_excerpts": [
+      "ally. Grow your visibility More than a directory link DR 55+ dofollow backlink Track listing views in your dashboard Collect and manage customer reviews Announcement on the AITopTools X account Reach people actively looking for useful AI products. Step 1 of ",
+      ".4M users 25M+ page views Review and Publish Your AI Tool Review your AI-generated listing, make any changes you need, then choose how you’d like to publish. AI Tool Name * Category * Select a category Analytics Assistant Business Ideas Business Name Generator C"
+    ],
+    "submission_title": "Submit Your AI Tool | AITopTools",
+    "id": 14,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "All The AI Tools",
+    "url": "https://alltheaitools.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://alltheaitools.com",
+    "page_title": "",
+    "submission_links": [],
+    "id": 15,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Altern AI",
+    "url": "https://altern.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://altern.ai",
+    "page_title": "Altern: Best AI Tools and Agents for 2026",
+    "submission_links": [
+      {
+        "label": "Submit Your AI Tools Around the Web to Get Discovered Where to list your AI tool for maximum visibility, starting with Altern",
+        "url": "https://altern.ai/tasks/submit-your-ai-tools-around-the-web-to-get-discovered"
+      },
+      {
+        "label": "Submit an AI",
+        "url": "https://altern.ai/submit"
+      }
+    ],
+    "submission_url": "https://altern.ai/tasks/submit-your-ai-tools-around-the-web-to-get-discovered",
+    "submission_http_status": 200,
+    "submission_final_url": "https://altern.ai/tasks/submit-your-ai-tools-around-the-web-to-get-discovered",
+    "policy_excerpts": [
+      "ists View all results for \" \" 2169 AIs indexed ↑↓ navigate ↵ open Add Sign in Quick links All AIs Browse → Categories Browse → Curated lists Browse → Searching… No results for \" \" AIs Categories Lists View all results for \" \" 2169 AIs indexed ↑↓ navigate ↵ ",
+      "Buildboard archive Makers Maker area Submit an AI Support Help center Sign in Terms Privacy © Altern. All rights reserved. Help Terms Privacy Sitemap { this.show = true; }, 30000); }, dismiss() { this.show = false; }, nextParam() { return '?next=' + encodeU",
+      "ow.location.pathname + window.location.search); } }\" x-init=\"init()\"> Sign in to continue It's easier when you're signed in — Altern helps you get more out of AI. Continue with GitHub Continue with Google By continuing you agree to our Terms and Privacy Pol"
+    ],
+    "submission_title": "Submit Your AI Tools Around the Web to Get Discovered — Altern",
+    "id": 16,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Appscribed",
+    "url": "https://appscribed.com/product-list/",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; paid listing advertised",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://appscribed.com/submit-ai-tool/",
+    "page_title": "Submit AI Tool - $49 Permanent Listing & Review | Appscribed",
+    "submission_links": [
+      {
+        "label": "Submit Tool",
+        "url": "https://appscribed.com/submit-ai-tool/"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://appscribed.com/submit-ai-tool/"
+      },
+      {
+        "label": "Submit now",
+        "url": "https://appscribed.com/submit-ai-tool/"
+      }
+    ],
+    "submission_url": "https://appscribed.com/submit-ai-tool/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://appscribed.com/submit-ai-tool/",
+    "policy_excerpts": [
+      " to main content Skip to footer All AI Tools Blog Boost AI Visibility Log in Submit Tool Submit Your AI Tool - Get Listed and Reviewed on Appscribed Submit your AI tool to Appscribed and get a permanent listing with a hand-written editorial review, live wi",
+      "c to your website Top spot in featured listings across pages Select a badge to display on your website Copy Light Embed Copy Trans Light Embed Copy Dark Embed Copy Trans Dark Embed Custom Not sure which plan to choose or want any customization, contact us"
+    ],
+    "submission_title": "Submit AI Tool - $49 Permanent Listing &amp; Review | Appscribed",
+    "id": 17,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Based Tools",
+    "url": "https://www.basedtools.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; free route requires backlink and domain rating",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.basedtools.ai",
+    "page_title": "Most Based AI Tools & Tools Directory - BasedTools",
+    "submission_links": [
+      {
+        "label": "Submit Product",
+        "url": "https://www.basedtools.ai/submit"
+      }
+    ],
+    "submission_url": "https://www.basedtools.ai/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.basedtools.ai/submit",
+    "policy_excerpts": [
+      "main menu AI Articles Category Analytics Discord Submit Product 🇬🇧 EN Sign In Submit your AI Tool Market to the World 🌎 Submit a few details about your AI tool and we will list it on the site within 24 hours. Free Track $0 Add below code to your home page, ",
+      "ur tool has >15DR to be listed. Your listing will be removed once the backlink is removed. Premium Track $19.99/mo $9.99/mo Most popular ~ DR: 47 Fast track, no queue, go live in a few seconds. Dofollow backlinks for SEO boost Complimentary one-time update w"
+    ],
+    "submission_title": "Most Based AI Tools &amp; Tools Directory - BasedTools",
+    "id": 18,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Best of AI",
+    "url": "https://bestofai.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://bestofai.io",
+    "page_title": "Best of AI — Handpicked AI Tools Directory",
+    "submission_links": [],
+    "id": 19,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Beyond AI Tools",
+    "url": "https://www.beyondaitools.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; listing starts at $9.90",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.beyondaitools.com",
+    "page_title": "Beyond AI Tools: Hub of the Best AI Tools & Products",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://www.beyondaitools.com/product/submit"
+      },
+      {
+        "label": "Submit Product",
+        "url": "https://www.beyondaitools.com/product/submit"
+      }
+    ],
+    "submission_url": "https://www.beyondaitools.com/product/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.beyondaitools.com/product/submit",
+    "policy_excerpts": [
+      "Images, video & audio Explore MagicShot → Category Discover AI Submit Log in Switch Language Menu Why List on Beyond AI? Boost your AI product with high visibility, SEO benefits, and a fast listing process. High Quality Exposure 6000+ monthly unique AI use"
+    ],
+    "submission_title": "Submit Product",
+    "id": 20,
+    "checked_at": "2026-09-27",
+    "outcome": "paid_required",
+    "verification": "Live submission page Basic $9.90 and Standard $29.90",
+    "next_action": "Skip unless paid placement authorized"
+  },
+  {
+    "name": "BuildVoyage",
+    "url": "https://buildvoyage.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted; receipt confirmed; email confirmation required before review",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://buildvoyage.com",
+    "page_title": "BuildVoyage — A curated micro-SaaS directory",
+    "submission_links": [
+      {
+        "label": "Submit product →",
+        "url": "https://buildvoyage.com/submit"
+      },
+      {
+        "label": "Submit your product",
+        "url": "https://buildvoyage.com/submit"
+      },
+      {
+        "label": "Submit your product →",
+        "url": "https://buildvoyage.com/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://buildvoyage.com/submit"
+      }
+    ],
+    "submission_url": "https://buildvoyage.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://buildvoyage.com/submit",
+    "policy_excerpts": [
+      "ed directory of micro‑SaaS. Directory Spotlight Articles Tools Makers Sign in Submit product → Open menu Directory Spotlight Articles Tools Makers Sign in Submission desk Submit your product Share the product, stack, and maker story behind what you are buil",
+      " Submit product → Open menu Directory Spotlight Articles Tools Makers Sign in Submission desk Submit your product Share the product, stack, and maker story behind what you are building. Approved submissions are listed in the directory and rotate through the",
+      "o account needed — we email you one link to confirm. Have an account? Sign in 1 Product Information Tech Stack Product Information Product Name * Tagline * Keep it concise (10-80 characters) Description * { $refs.hiddenInput.value = value; }) \"> H2 H3 Minim"
+    ],
+    "submission_title": "Submit your product — BuildVoyage",
+    "id": 21,
+    "checked_at": "2026-09-30",
+    "outcome": "submitted_form",
+    "verification": "User explicitly approved Terms/Privacy Policy. Browser showed Check your email — one click confirms your submission. No account needed.",
+    "next_action": "September 30 confirmation window has elapsed if not confirmed; check original email/status before considering resubmission. Confirmation remains unverified."
+  },
+  {
+    "name": "EliteAI Tools",
+    "url": "https://eliteai.tools",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; paid listing starts at $10",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://eliteai.tools",
+    "page_title": "AI Tools Directory",
+    "submission_links": [
+      {
+        "label": "Submit Your Tool",
+        "url": "https://eliteai.tools/tool/submit-new-tool"
+      }
+    ],
+    "submission_url": "https://eliteai.tools/tool/submit-new-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://eliteai.tools/tool/submit-new-tool",
+    "policy_excerpts": [
+      "Submit your AI tool Log in or Sign up Close modal Continue with Google Continue with GitHub Or Log in with Email EliteAI.tools MCPs Skills Tags Professions Blog + K Launch Your Tool Login Open main menu MCP",
+      "n or Sign up Close modal Continue with Google Continue with GitHub Or Log in with Email EliteAI.tools MCPs Skills Tags Professions Blog + K Launch Your Tool Login Open main menu MCPs Skills Tags Professions Blog Login Launch Your Tool Search AI Tools Popul",
+      " EliteAI.tools MCPs Skills Tags Professions Blog + K Launch Your Tool Login Open main menu MCPs Skills Tags Professions Blog Login Launch Your Tool Search AI Tools Popular searches: PDF Chat Image Generator Text to Speech Video Editing EliteAI.tools Elite",
+      "unch Your Tool Login Open main menu MCPs Skills Tags Professions Blog Login Launch Your Tool Search AI Tools Popular searches: PDF Chat Image Generator Text to Speech Video Editing EliteAI.tools EliteAi.tools is the premier AI tools directory, exclusively"
+    ],
+    "submission_title": "Submit your AI tool",
+    "id": 22,
+    "checked_at": "2026-09-30",
+    "outcome": "paid_only",
+    "verification": "Live submission UI lists Basic $10, FastTrack $19 and Boosted $49; no free intake shown",
+    "next_action": "Exclude from free outreach"
+  },
+  {
+    "name": "EveryDev.ai",
+    "url": "https://www.everydev.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.everydev.ai",
+    "page_title": "EveryDev.ai - With AI, Everyone is a Dev",
+    "submission_links": [
+      {
+        "label": "Submit a Tool",
+        "url": "https://www.everydev.ai/create/tool"
+      }
+    ],
+    "submission_url": "https://www.everydev.ai/create/tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.everydev.ai/sign-in?redirectTo=%2Fcreate%2Ftool",
+    "policy_excerpts": [
+      "Sign In to AI Developer Community | EveryDev.ai EveryDev.ai Search tools, posts, and devs... ⌘ K Sign in Subscribe Main Menu Tools Developers Topics Discussions Communities News Podcasts ",
+      "munity | EveryDev.ai EveryDev.ai Search tools, posts, and devs... ⌘ K Sign in Subscribe Main Menu Tools Developers Topics Discussions Communities News Podcasts Blogs Builds Contests Compare Arena Polls Create Sign In AI Tools by Topic AI Coding Assistants A",
+      "nities News Podcasts Blogs Builds Contests Compare Arena Polls Create Sign In AI Tools by Topic AI Coding Assistants Agent Frameworks MCP Servers AI Prompt Tools Vibe Coding Tools AI Design Tools AI Database Tools AI Website Builders AI Testing Tools LLM Ev",
+      "erience llms.txt Theme With AI, Everyone is a Dev. EveryDev.ai © 2026 Sign in Get Started with EveryDev.ai Discover AI tools. Connect with builders. Share your work. It's all free! Continue with GitHub Continue with Google Choose a sign-in method We'll neve"
+    ],
+    "submission_title": "Sign In to AI Developer Community | EveryDev.ai",
+    "id": 23,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Find my AI Tool",
+    "url": "https://findmyaitool.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; login and terms required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://findmyaitool.com",
+    "page_title": "Find My AI Tool: Discover the Best AI Tools for Every Need",
+    "submission_links": [
+      {
+        "label": "Submit AI Tool",
+        "url": "https://findmyaitool.com/submit-tool"
+      },
+      {
+        "label": "Submit AI Agent",
+        "url": "https://findmyaitool.com/submit-agent"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://findmyaitool.com/submit-tool"
+      },
+      {
+        "label": "Submit AI Agent",
+        "url": "https://findmyaitool.com/submit-agent"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://findmyaitool.com/submit-tool"
+      }
+    ],
+    "submission_url": "https://findmyaitool.com/submit-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://findmyaitool.com/submit-tool",
+    "policy_excerpts": [
+      "gents GPT Store Industries Blog Submit Submit AI Tool Submit AI Agent Sign In Home AI Tools Category GPT Store Industries AI Shorts Video Blog Submit AI Tool Submit AI Agent Skip to content Submit AI Tool Welcome to FindMyAITool.com! We're a platform that f",
+      "e's how you can submit your tool to be featured on our website: ‌ ‌ ‌ Login to unlock the best AI Tools for you! Continue with Login By proceeding, you agree to our Terms of use and confirm you have read our Privacy and Cookies Statement. 5 Submission Req",
+      "bsite: ‌ ‌ ‌ Login to unlock the best AI Tools for you! Continue with Login By proceeding, you agree to our Terms of use and confirm you have read our Privacy and Cookies Statement. 5 Submission Required! You can't purchase a sponsored plan because you ha",
+      "ite's homepage on a rotating basis for 7 days. Official Verified Blue Badge. Standard support. Login to unlock the best AI Tools for you! Continue with Login By proceeding, you agree to our Terms of use and confirm you have read our Privacy and Cookies St",
+      "ing basis for 7 days. Official Verified Blue Badge. Standard support. Login to unlock the best AI Tools for you! Continue with Login By proceeding, you agree to our Terms of use and confirm you have read our Privacy and Cookies Statement. 5 Submission Req",
+      "ard support. Login to unlock the best AI Tools for you! Continue with Login By proceeding, you agree to our Terms of use and confirm you have read our Privacy and Cookies Statement. 5 Submission Required! You can't purchase a sponsored plan because you ha"
+    ],
+    "submission_title": "Submit AI Tool - Black Friday Sale – 50% OFF",
+    "id": 24,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Foundr",
+    "url": "https://foundr.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://foundr.ai",
+    "page_title": "Discover The Best AI Tools at Your Fingertips – Foundr",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://foundr.ai/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://foundr.ai/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://foundr.ai/submit"
+      }
+    ],
+    "submission_url": "https://foundr.ai/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://foundr.ai/auth/login?next=/submit",
+    "policy_excerpts": [
+      "Sign In – Foundr Foundr Tools Categories Tags Leaderboard Collections Resources Submit Sign In Ad Learn More Sign In Get access to the dashboard and manage your submitted tools. Subscribe",
+      "Foundr Tools Categories Tags Leaderboard Collections Resources Submit Sign In Ad Learn More Sign In Get access to the dashboard and manage your submitted tools. Subscribe to our newsletter Join 3,000+ other members and get updates straight to your inbox. Su",
+      "s Tags Leaderboard Collections Resources Submit Sign In Ad Learn More Sign In Get access to the dashboard and manage your submitted tools. Subscribe to our newsletter Join 3,000+ other members and get updates straight to your inbox. Subscribe Browse : Tools"
+    ],
+    "submission_title": "Sign In – Foundr",
+    "id": 25,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Free AI Tool",
+    "url": "https://freeaitool.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://freeaitool.ai",
+    "page_title": "Free AI Tool: List of Best & Latest Free AI Tool in 2026",
+    "submission_links": [],
+    "id": 26,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "FUTUREPEDIA",
+    "url": "https://www.futurepedia.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.futurepedia.io",
+    "page_title": "Find The Best AI Tools & Software, Futurepedia.io",
+    "submission_links": [],
+    "id": 27,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "FutureTools",
+    "url": "https://www.futuretools.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Prepared; CAPTCHA confirmation pending",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 308: Permanent Redirect",
+    "submission_url": "https://futuretools.io/submit-a-tool",
+    "id": 28,
+    "checked_at": "2026-09-25",
+    "outcome": "prepared",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "GroupifyAI",
+    "url": "https://groupify.ai/?ref=github",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; basic listing advertised at $29",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://groupify.ai/?ref=github",
+    "page_title": "Best AI Tools Directory (10,000+ Tools) | Groupify AI",
+    "submission_links": [
+      {
+        "label": "Submit New Tool",
+        "url": "https://groupify.ai/new-tool-form"
+      },
+      {
+        "label": "Submit New Tool",
+        "url": "https://groupify.ai/new-tool-form"
+      }
+    ],
+    "submission_url": "https://groupify.ai/new-tool-form",
+    "submission_http_status": 200,
+    "submission_final_url": "https://groupify.ai/new-tool-form",
+    "policy_excerpts": [
+      "ls Pricing Plans Resources AI Blogs AI News Submit New Tool Subscribe Login AI Tools AI Productivity Tools Multimodal AI Tools AI Image Generators AI Text Generators AI Video Generators AI Audio Generators AI Art Generators Miscellaneous AI Tools AI Code ",
+      "ing Plans Resources AI Blogs AI News Submit New Tool Subscribe Search Login Submit Your AI Tool to GroupifyAI and Get Featured Effortlessly Discover Our Flexible Pricing Plans Explore our pricing options, features, and benefits tailored to your needs. 👉 V"
+    ],
+    "submission_title": "",
+    "id": 29,
+    "checked_at": "2026-09-27",
+    "outcome": "paid_required",
+    "verification": "Official pricing page links Basic Listing to Get Started with 29$",
+    "next_action": "Skip unless paid placement authorized"
+  },
+  {
+    "name": "hypertools",
+    "url": "https://hypertools.so",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; form rejects or rewrites AI-written descriptions; founder-written copy needed",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://hypertools.so",
+    "page_title": "Hypertools - Discover the Best AI Tools",
+    "submission_links": [
+      {
+        "label": "Submit Tool 6",
+        "url": "https://hypertools.so/submit"
+      }
+    ],
+    "submission_url": "https://hypertools.fillout.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://hypertools.so/submit",
+    "policy_excerpts": [
+      " their next favorite tool. Choose the option that works best for you. Free Submission Apply for placement in the Hypertools directory and get discovered by our community. Upon submission, your product will be reviewed by our team. If accepted, you'll be notified vi",
+      "tified via email. $0 2,000-word SEO-optimized review article Lifetime backlink Mentioned in our weekly newsletter Social media share (one-time post on X/LinkedIn) Submit your tool Premium Feature Guaranteed permanent listing on our site within 24-48 hours an"
+    ],
+    "submission_title": "Submit Your Tool | Hypertools",
+    "id": 30,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Insidr AI Directory",
+    "url": "https://www.insidr.ai/ai-tools",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted; success confirmation shown",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.insidr.ai/ai-tools/",
+    "page_title": "500+ Best AI Tools - Complete AI Tools Directory (2025)",
+    "submission_links": [
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.insidr.ai/submit-tools/"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.insidr.ai/submit-tools/"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.insidr.ai/submit-tools/"
+      },
+      {
+        "label": "Submit AI Tools Submit new AI Tools that we should add to our AI Tools Directory.",
+        "url": "https://www.insidr.ai/submit-tools/"
+      },
+      {
+        "label": "Submit AI News Submit News about AI that we should include to our AI News.",
+        "url": "https://www.insidr.ai/submit-news/"
+      }
+    ],
+    "submission_url": "https://www.insidr.ai/submit-tools/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.insidr.ai/submit-tools/",
+    "policy_excerpts": [],
+    "submission_title": "Submit AI Tools - Insidr.ai",
+    "id": 31,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "Intelligent Tools",
+    "url": "https://intelligenttools.co",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted; receipt confirmed",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://intelligenttools.co",
+    "page_title": "Find The Perfect AI Tool For Every Task | Intelligent Tools",
+    "submission_links": [
+      {
+        "label": "Submit a Tool",
+        "url": "https://intelligenttools.co/submit"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://intelligenttools.co/submit"
+      }
+    ],
+    "submission_url": "https://intelligenttools.co/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://intelligenttools.co/submit",
+    "policy_excerpts": [
+      "ns from Ahrefs, read 4 September 2026. Citations from Search Console. Free Listing $0 forever Listed in directory and category pages Basic tool profile (name, description, link, category) Reviewed within 7 days Submit Free Listing No card required, reviewed by h",
+      "ile (name, description, link, category) Reviewed within 7 days Submit Free Listing No card required, reviewed by hand. Featured Listing Most visibility $19 /month Everything in Free, plus: Verified badge on your listing Priority placement in category and homepag",
+      "Listing Most visibility $19 /month Everything in Free, plus: Verified badge on your listing Priority placement in category and homepage Reviewed and live within 24 hours Monthly click/impression report $19 / month $189 / year save 17% Get Featured Pay sec",
+      " Get Featured Pay securely with PayPal or card. Live within 24 hours. Free listing $0 Featured listing from $19/mo Submit your free listing Fill in the details below and we'll review your tool. Want it live in 24 hours with a verified badge? Get Featured instead",
+      "in 24 hours. Free listing $0 Featured listing from $19/mo Submit your free listing Fill in the details below and we'll review your tool. Want it live in 24 hours with a verified badge? Get Featured instead . Tool Name * Website URL * Tagline * 0 /100 characters ",
+      " and we'll review your tool. Want it live in 24 hours with a verified badge? Get Featured instead . Tool Name * Website URL * Tagline * 0 /100 characters Description * 0 /100 minimum characters Category * Select a category Pricing Model * Free Freemium (F"
+    ],
+    "submission_title": "Submit Your AI Tool | Intelligent Tools",
+    "id": 32,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "ListYourTool",
+    "url": "https://www.listyourtool.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.listyourtool.com",
+    "page_title": "ListYourTool - AI Tools Directory | Submit and Discover Apps",
+    "submission_links": [
+      {
+        "label": "List Your Tool",
+        "url": "https://www.listyourtool.com/"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://www.listyourtool.com/submit-tool"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://www.listyourtool.com/submit-tool"
+      },
+      {
+        "label": "Submit Your Tool",
+        "url": "https://www.listyourtool.com/submit-tool"
+      }
+    ],
+    "submission_url": "https://www.listyourtool.com/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.listyourtool.com/",
+    "policy_excerpts": [],
+    "submission_title": "ListYourTool - AI Tools Directory | Submit and Discover Apps",
+    "id": 33,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Makerlist.io",
+    "url": "https://makerlist.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; page says login to submit",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://makerlist.io",
+    "page_title": "Makerlist.io",
+    "submission_links": [
+      {
+        "label": "Submit Bot",
+        "url": "https://makerlist.io"
+      },
+      {
+        "label": "Submit",
+        "url": "https://makerlist.io"
+      },
+      {
+        "label": "Login to submit",
+        "url": "https://makerlist.io"
+      }
+    ],
+    "submission_url": "https://makerlist.io/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://makerlist.io",
+    "policy_excerpts": [
+      "Makerlist.io Makerlist.io Login Menu Home Explore Verified Top Submit Bot Home Explore Verified Top Submit Other Tools by Us The #1 Startup Directory Discover & vote for the best products The best way to find th",
+      "best way to find the latest apps, tools and startups on the internet. Login to submit Filter Verified Music Moderation Utility Fun | ★ 4.0+ 24/7 Open source Latest Tools Recent Votes Clicks Oldest Capture Studio ▲ Vote (0) Capture Studio records your scre",
+      "out Contact Privacy Terms API © 2025 Maker List. All rights reserved. Sign in Sign in with Google Sign in with Github",
+      "act Privacy Terms API © 2025 Maker List. All rights reserved. Sign in Sign in with Google Sign in with Github",
+      "I © 2025 Maker List. All rights reserved. Sign in Sign in with Google Sign in with Github"
+    ],
+    "submission_title": "Makerlist.io",
+    "id": 34,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Most Popular AI Tools",
+    "url": "https://mostpopularaitools.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://mostpopularaitools.com",
+    "page_title": "Best AI Tools Directory 2026 — 26 Tools, Hand-Tested",
+    "submission_links": [
+      {
+        "label": "Submit Tool Submit",
+        "url": "https://mostpopularaitools.com/submit"
+      },
+      {
+        "label": "Submit Your Tool",
+        "url": "https://mostpopularaitools.com/submit"
+      },
+      {
+        "label": "Submit a tool",
+        "url": "https://mostpopularaitools.com/submit"
+      },
+      {
+        "label": "Submit a tool",
+        "url": "https://mostpopularaitools.com/submit"
+      }
+    ],
+    "submission_url": "https://mostpopularaitools.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://mostpopularaitools.com/submit",
+    "policy_excerpts": [
+      "pularaitools.com Home All Tools Categories Pricing Submit Tool Submit Sign In List your AI tool Get in front of people actively looking for AI software. Submit a tool Discover, compare, and pick the best AI tools — hand-checked listings, honest free tiers, "
+    ],
+    "submission_title": "Submit Your AI Tool — Get Listed | Submit Tool",
+    "id": 35,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "NavTools AI",
+    "url": "https://navtools.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; free tier available, submission explicitly accepts terms",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://navtools.ai",
+    "page_title": "NavTools.ai | The Ultimate AI Tools Directory & Navigation Hub",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://navtools.ai/submit"
+      },
+      {
+        "label": "Submit a Tool",
+        "url": "https://navtools.ai/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://navtools.ai/submit"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://navtools.ai/submit"
+      }
+    ],
+    "submission_url": "https://navtools.ai/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://navtools.ai/submit",
+    "policy_excerpts": [
+      "Submit Your AI Tool - Free Listing - NavTools AI NavTools.ai Home Category Rankings Fastest Growing Visit Growth Most Visited Submit Submit a Tool Advertise Login Home Category Rankings Submit Get Your AI Tool Disc",
+      "test Growing Visit Growth Most Visited Submit Submit a Tool Advertise Login Home Category Rankings Submit Get Your AI Tool Discovered Start with just your tool name, website, and contact email. NavTools AI can create your listing content for you, or you c"
+    ],
+    "submission_title": "Submit Your AI Tool - Free Listing - NavTools AI",
+    "id": 36,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "nextgentools",
+    "url": "https://nextgentools.me",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted; Airtable receipt confirmed; editorial review pending",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://nextgentools.me",
+    "page_title": "A curated list of the best AI tools - NextGenTools",
+    "submission_links": [
+      {
+        "label": "Submit your tool",
+        "url": "https://nextgentools.me/submit-your-tool"
+      }
+    ],
+    "submission_url": "https://nextgentools.me/submit-your-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://nextgentools.me/submit-your-tool",
+    "policy_excerpts": [
+      "Submission page invites tools, requires duplicate search, rejects affiliate links and newsletters; submissions manually reviewed."
+    ],
+    "submission_title": "Submit your tool - NextGenTools",
+    "id": 37,
+    "checked_at": "2026-09-27",
+    "outcome": "submitted_form",
+    "verification": "Airtable displayed thank-you receipt promising review; domain search returned no results",
+    "next_action": "Await review; do not resubmit"
+  },
+  {
+    "name": "OpenFuture AI",
+    "url": "https://openfuture.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 403: Forbidden",
+    "id": 38,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "OpenTools",
+    "url": "https://opentools.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; paid listing subscription required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://opentools.ai",
+    "page_title": "OpenTools AI Tools Directory — 2,500+ Tools & Models",
+    "submission_links": [
+      {
+        "label": "Submit a Tool",
+        "url": "https://opentools.ai/friends/launch-tool"
+      },
+      {
+        "label": "Submit a Tool",
+        "url": "https://opentools.ai/friends/launch-tool"
+      }
+    ],
+    "submission_url": "https://opentools.ai/friends/launch-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://opentools.ai/friends/launch-tool",
+    "policy_excerpts": [
+      "scription. What You Get Listing on OpenTools website (Strong on-topic backlink) 4 days listed on homepage Launch post on OpenTools X/Twitter (23k followers) Launch post on OpenTools LinkedIn (5k followers) Website Stats 782.89k Unique visitors per month 70 D",
+      "nsor visibility and response A paid listing subscription is required. Sign in to enter your tool details and continue to checkout. Sign In to Continue 120+ successful launches 120+ Builders made richer Recent Launch Results 👇 Campaign Results ✨ 74 New Signu",
+      "equired. Sign in to enter your tool details and continue to checkout. Sign In to Continue 120+ successful launches 120+ Builders made richer Recent Launch Results 👇 Campaign Results ✨ 74 New Signups: A wave of qualified users entering Guidde's funnel. 🚀 18 ",
+      "nted to get my AI tool on as many directories as possible for SEO and backlink purposes. OpenTools was an ideal choice because of its mixture of affordability and audience size. The advertising gave us access to an audience genuinely interested in AI—exactly"
+    ],
+    "submission_title": "Launch to your next 1000 customers - OpenTools",
+    "id": 39,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "PoweredbyAI",
+    "url": "https://poweredbyai.app",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Draft generated; needs a 500px+ logo, corrected categories/keywords, and plan review; not submitted",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://poweredbyai.app",
+    "page_title": "10,000+ AI Tools Directory 2026 | PoweredByAI",
+    "submission_links": [
+      {
+        "label": "Submit your Tool",
+        "url": "https://poweredbyai.app/submit-tool"
+      },
+      {
+        "label": "Submit your Ai Tool",
+        "url": "https://poweredbyai.app/submit-tool"
+      },
+      {
+        "label": "Submit your Tool",
+        "url": "https://poweredbyai.app/submit-tool"
+      }
+    ],
+    "submission_url": "https://poweredbyai.app/submit-tool?toolID=one",
+    "submission_http_status": 200,
+    "submission_final_url": "https://poweredbyai.app/submit-tool",
+    "policy_excerpts": [],
+    "submission_title": "Submit Your AI Tool | PoweredbyAI",
+    "id": 40,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Productivity Directory",
+    "url": "https://productivity.directory",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://productivity.directory",
+    "page_title": "Productivity Directory: Best Productivity Apps and Tools List - Reviews, Guides and Hacks",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://productivity.directory/s/submit"
+      },
+      {
+        "label": "Submit Yours",
+        "url": "https://productivity.directory/s/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://productivity.directory/s/submit"
+      }
+    ],
+    "submission_url": "https://productivity.directory/s/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://productivity.directory/user/signin?return_to=%2Fs%2Fsubmit",
+    "policy_excerpts": [
+      "Search Open main menu Submit Newsletter Sign in Search Search icon Open main menu Dashboard Recent To-Do Lists Project Management Time Tracking Pomodoro Timer Email Management Instant Messaging Team Collaboration Word Processin",
+      " Tools Reminder Tools Community Platforms CRM Habit Tracker AI Agents Sign in to continue To prevent spam, some actions require being signed in. It's free and only takes a few seconds. Continue with Google Continue with Google By continuing, you agree to ou",
+      "ls © 2024 Productivity Directory . All Rights Reserved. Make it yours Sign in to get the most out of Productivity Directory Save & bookmark your favourite tools Get personalised recommendations Track & organise tools you use Submit & manage your own listing"
+    ],
+    "submission_title": "email-notification-alert",
+    "id": 41,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Stackviv",
+    "url": "https://stackviv.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; submission page returns 500",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://stackviv.ai",
+    "page_title": "Stackviv - Free AI Tools & Agents Directory",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://stackviv.ai/submit"
+      }
+    ],
+    "submission_url": "https://stackviv.ai/submit",
+    "submission_check_error": "HTTP Error 500: Internal Server Error",
+    "id": 42,
+    "checked_at": "2026-09-27",
+    "outcome": "site_error",
+    "verification": "Browser shows 500 Internal Server Error",
+    "next_action": "Recheck on later run"
+  },
+  {
+    "name": "Stratup.ai",
+    "url": "https://stratup.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 308: Permanent Redirect",
+    "id": 43,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Tools Submit",
+    "url": "https://submitaitools.org/submit-your-ai-tool",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://submitaitools.org/verify/submit/",
+    "page_title": "Verification",
+    "submission_links": [],
+    "id": 44,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "superaitools",
+    "url": "https://superaitools.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.superaitools.io/",
+    "page_title": "Super AI Tools - Find all the best AI tools to accelerate your career and productivity",
+    "submission_links": [],
+    "id": 45,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Library",
+    "url": "https://www.theailibrary.co",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.theailibrary.co",
+    "page_title": "The AI Library | Best AI Tools, Prompts & Startup Resources 2026",
+    "submission_links": [
+      {
+        "label": "Log In to Submit your Tool",
+        "url": "https://www.theailibrary.co/login"
+      },
+      {
+        "label": "Submit your Tool",
+        "url": "https://www.theailibrary.co/login"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://www.theailibrary.co/submit-tool"
+      }
+    ],
+    "submission_url": "https://www.theailibrary.co/login",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.theailibrary.co/login",
+    "policy_excerpts": [
+      "Log In to Submit your Tool Sign In Prompts Leaderboard All Categories AI Events Work With Us Blog Submit your Tool Login to AI Library Continue with google AI Library | Login",
+      "Log In to Submit your Tool Sign In Prompts Leaderboard All Categories AI Events Work With Us Blog Submit your Tool Login to AI Library Continue with google AI Library | Login",
+      "aderboard All Categories AI Events Work With Us Blog Submit your Tool Login to AI Library Continue with google AI Library | Login",
+      "ubmit your Tool Login to AI Library Continue with google AI Library | Login"
+    ],
+    "submission_title": "AI Library | Login",
+    "id": 46,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Toolify.ai",
+    "url": "https://www.toolify.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.toolify.ai",
+    "page_title": "Best AI Tools Directory & AI Tools List - Toolify",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://www.toolify.ai/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://www.toolify.ai/submit"
+      },
+      {
+        "label": "Submit GPT",
+        "url": "https://www.toolify.ai/submit-gpt"
+      }
+    ],
+    "submission_url": "https://www.toolify.ai/submit",
+    "submission_check_error": "HTTP Error 403: Forbidden",
+    "id": 47,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Toolkitly",
+    "url": "https://www.toolkitly.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-up required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.toolkitly.com",
+    "page_title": "Toolkitly: AI Tools for Productivity & Innovation",
+    "submission_links": [
+      {
+        "label": "Submit a Tool",
+        "url": "https://www.toolkitly.com/sign-up"
+      },
+      {
+        "label": "Submit a Prompt",
+        "url": "https://www.toolkitly.com/sign-up"
+      }
+    ],
+    "submission_url": "https://www.toolkitly.com/sign-up",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.toolkitly.com/sign-up",
+    "policy_excerpts": [
+      "ree to our Terms of Use and Privacy Policy . Sign Up Have an account? Sign In Grow Smarter with Free AI Compare AI tools to find the best fit for your tasks. Join vibrant discussions on AI tools. Access user feedback to gauge AI tool performance. Stay updat"
+    ],
+    "submission_title": "Toolkitly Registration: Access cutting-edge features for smarter solutions | Toolkitly",
+    "id": 48,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Tool Pilot",
+    "url": "https://www.toolpilot.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.toolpilot.ai",
+    "page_title": "ToolPilot AI - Navigate AI's Possibilities with AI Tools Directory",
+    "submission_links": [
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.toolpilot.ai/pages/submit-your-ai-tool"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.toolpilot.ai/pages/submit-your-ai-tool"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.toolpilot.ai/pages/submit-your-ai-tool"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.toolpilot.ai/pages/submit-your-ai-tool"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://www.toolpilot.ai/pages/submit-your-ai-tool"
+      }
+    ],
+    "submission_url": "https://www.toolpilot.ai/pages/submit-your-ai-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.toolpilot.ai/pages/submit-your-ai-tool",
+    "policy_excerpts": [
+      " Tools Free AI Tools New AI Tools Guides Blog My Tools Submit AI Tool Login 0 Browse All Featured AI Tools Categories Coupon Codes Top AI Tools Free AI Tools New AI Tools Guides Blog My Tools Submit AI Tool Browse All Featured AI Tools Categories Coupon C",
+      "URL or email us to confirm. This step is essential to qualify for the free listing and will help prioritize your submission. We appreciate your understanding and cooperation. Thank you! Thank you for your interest in submitting your AI tool to our platform. We a"
+    ],
+    "submission_title": "\n\tSubmit Your AI Tool &ndash; ToolPilot\n\t",
+    "id": 49,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "TopAI.tools",
+    "url": "https://topai.tools",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 403: Forbidden",
+    "id": 50,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Top Tools",
+    "url": "https://www.toptools.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; submissions paused",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://toptools.ai/",
+    "page_title": "TopTools.ai - The #1 AI Tools Directory",
+    "submission_links": [
+      {
+        "label": "Submit Tool",
+        "url": "https://toptools.ai/submit"
+      },
+      {
+        "label": "Submit Now",
+        "url": "https://toptools.ai/submit"
+      }
+    ],
+    "submission_url": "https://toptools.ai/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://toptools.ai/submit",
+    "policy_excerpts": [],
+    "submission_title": "Submissions paused | TopTools.ai - The #1 AI Tools Directory",
+    "id": 51,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "WhatstheBigData.com",
+    "url": "https://whatsthebigdata.com/ai-tools",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 308: Permanent Redirect",
+    "id": 52,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Yet Another AI Tool Directory",
+    "url": "https://yaatd.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://yaatd.com",
+    "page_title": "",
+    "submission_links": [],
+    "id": 53,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Hunt List",
+    "url": "https://aihuntlist.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; login required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aihuntlist.com",
+    "page_title": "Best AI Products Directory & AI Tools List – AIHuntList.com",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://aihuntlist.com/submission/new"
+      },
+      {
+        "label": "Submit AI Tool",
+        "url": "https://aihuntlist.com/submission/new"
+      },
+      {
+        "label": "SubmitSaaS",
+        "url": "https://submitsaas.com"
+      },
+      {
+        "label": "Increase your SaaS visibility by submitting to 100+ directories. Save time, gain high-quality backlinks, and grow your reach with minimal effort.",
+        "url": "https://aihuntlist.com/tool/submitsaas"
+      }
+    ],
+    "submission_url": "https://aihuntlist.com/login",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aihuntlist.com/login",
+    "policy_excerpts": [
+      "Login Back Welcome back Enter your email to sign in to your account Email Sign In with Email Or continue with Google GitHub Don't have an account? Sign Up",
+      "Login Back Welcome back Enter your email to sign in to your account Email Sign In with Email Or continue with Google GitHub Don't have an account? Sign Up",
+      "n Back Welcome back Enter your email to sign in to your account Email Sign In with Email Or continue with Google GitHub Don't have an account? Sign Up"
+    ],
+    "submission_title": "Login",
+    "id": 54,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AIToolsHunt",
+    "url": "https://aitoolshunt.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aitoolshunt.com",
+    "page_title": "AI Tool Hunt Discover & Compare the Best AI Tools 2026",
+    "submission_links": [
+      {
+        "label": "Submit AI Tool",
+        "url": "https://aitoolshunt.com/submit-ai-tool/"
+      }
+    ],
+    "submission_url": "https://aitoolshunt.com/submit-ai-tool/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aitoolshunt.com/submit-ai-tool/",
+    "policy_excerpts": [
+      "n option that best fits your requirement. * Get Priority Review — $15 Free Listing – $0 – Not Guaranteed Tool Logo or Favicon URL * Name * Email Address * Company / Founder Name LinkedIn or X URL Consent * I confirm that I am authorized to submit this tool and a"
+    ],
+    "submission_title": "Submit AI Tool &#045; aitoolshunt.com",
+    "id": 55,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "aiyouneed",
+    "url": "https://aiyouneed.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.aiyouneed.com/tr/",
+    "page_title": "AI You Need — Best AI Tools & Latest AI News",
+    "submission_links": [],
+    "id": 56,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Deeplaunch.io",
+    "url": "https://deeplaunch.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://deeplaunch.io",
+    "page_title": "DeepLaunch.io - The Ultimate Directory for Online Tools and Resources",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://deeplaunch.io/submit"
+      }
+    ],
+    "submission_url": "https://deeplaunch.io/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://deeplaunch.io/submit",
+    "policy_excerpts": [
+      "h.io Submit Backlinks NEW Featured Skills Pricing Blogs Image Prompts Sign In Sign In Get Your Tool Discovered Whether you've built an AI image generator, video creation tool, chatbot, or any innovative solution, showcase it to thousands of users actively s",
+      "mit Backlinks NEW Featured Skills Pricing Blogs Image Prompts Sign In Sign In Get Your Tool Discovered Whether you've built an AI image generator, video creation tool, chatbot, or any innovative solution, showcase it to thousands of users actively searching",
+      "pricing plan should I choose for my tool? Choose based on your goals: Free submission is perfect for testing the platform. One-Time Pro is ideal if you want a permanent listing with priority support. Monthly Promotion works great for new tools needing regular visib"
+    ],
+    "submission_title": "Submit Your AI Tool | DeepLaunch.io",
+    "id": 57,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "launch-list",
+    "url": "https://launch-list.org",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.launch-list.org/",
+    "page_title": "Launch List - Launch Your Product on Product Hunt and 100+ websites",
+    "submission_links": [],
+    "id": 58,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Launch Vault",
+    "url": "https://www.launchvault.dev",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.launchvault.dev",
+    "page_title": "Launch Vault - The Product Launch Platform for Startups | Product Hunt Alternative",
+    "submission_links": [
+      {
+        "label": "Submit Project",
+        "url": "https://www.launchvault.dev/projects/submit"
+      },
+      {
+        "label": "Submit Your Product Now",
+        "url": "https://www.launchvault.dev/projects/submit"
+      },
+      {
+        "label": "SubmitSaaS Auto-Submit Your SaaS to 100+ Directories Effortlessly",
+        "url": "https://submitsaas.com/?ref=launch-vault"
+      },
+      {
+        "label": "Submit Project",
+        "url": "https://www.launchvault.dev/projects/submit"
+      }
+    ],
+    "submission_url": "https://www.launchvault.dev/projects/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.launchvault.dev/sign-in?redirect=/projects/submit",
+    "policy_excerpts": [
+      " Sponsors Browse Projects Alternative To Traffic Checker Toggle theme Sign in Sign up Sign in Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an acco",
+      " Projects Alternative To Traffic Checker Toggle theme Sign in Sign up Sign in Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By ",
+      " To Traffic Checker Toggle theme Sign in Sign up Sign in Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, yo",
+      "n in Sign up Sign in Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, you agree to our Terms of Service an",
+      "in Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, you agree to our Terms of Service and Privacy Policy .",
+      "gin with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, you agree to our Terms of Service and Privacy Policy . All Categories 3D & Motion Design APIs & Integrations AR/VR Artificial "
+    ],
+    "submission_title": "Launch Vault - Discover the Best Tech Products",
+    "id": 59,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "OpenHunts",
+    "url": "https://openhunts.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://openhunts.com",
+    "page_title": "OpenHunts: Product Launch & Discovery Platform for Makers",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://openhunts.com/projects/submit"
+      },
+      {
+        "label": "Submit Project",
+        "url": "https://openhunts.com/projects/submit"
+      }
+    ],
+    "submission_url": "https://openhunts.com/projects/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://openhunts.com/sign-in?redirect=/projects/submit",
+    "policy_excerpts": [
+      "Sign in | OpenHunts Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account?",
+      "Sign in | OpenHunts Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, yo",
+      "Sign in | OpenHunts Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, you agree to our Terms of Service an",
+      "ts Welcome back Sign in to your account to continue Login with Google Login with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, you agree to our Terms of Service and Privacy Policy .",
+      "gin with GitHub Or continue with Email Password Forgot your password? Login Don't have an account? Sign up By clicking continue, you agree to our Terms of Service and Privacy Policy . © 2026 OpenHunts. All rights reserved. Follow us on X (Twitter) Follow "
+    ],
+    "submission_title": "Sign in | OpenHunts",
+    "id": 60,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "postmake",
+    "url": "https://postmake.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; free route requires reciprocal badge",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://postmake.io",
+    "page_title": "Postmake – Curated tools and resources for your next project",
+    "submission_links": [
+      {
+        "label": "Submit Your Business",
+        "url": "https://postmake.io/submit"
+      },
+      {
+        "label": "Submit Your Business",
+        "url": "https://postmake.io/submit"
+      },
+      {
+        "label": "submit your own startup or tool",
+        "url": "https://postmake.io/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://postmake.io/submit"
+      }
+    ],
+    "submission_url": "https://postmake.io/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://postmake.io/submit",
+    "policy_excerpts": [
+      "ew\" section Promoted across the directory for 1 month Interested in a free listing? Get do-follow links to boost your visibility and SEO. Add a Postmake badge to your site and and we'll feature it once it's live. Get the badge instructions . \"If good design make",
+      " Get do-follow links to boost your visibility and SEO. Add a Postmake badge to your site and and we'll feature it once it's live. Get the badge instructions . \"If good design makes one want to lick a site, this is very lickable.\" – anonymous Hacker News u",
+      "e badge to your site and and we'll feature it once it's live. Get the badge instructions . \"If good design makes one want to lick a site, this is very lickable.\" – anonymous Hacker News user Frequently Asked Questions How do submissions work? Submissions "
+    ],
+    "submission_title": "Submit Your Business – Postmake",
+    "id": 61,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AgentHunter",
+    "url": "https://www.agenthunter.io",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; browser redirected to sign-in",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://www.agenthunter.io",
+    "page_title": "AgentHunter",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://www.agenthunter.io/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://www.agenthunter.io/submit"
+      }
+    ],
+    "submission_url": "https://www.agenthunter.io/auth/login?callbackUrl=%2Fsubmit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.agenthunter.io/submit",
+    "policy_excerpts": [],
+    "submission_title": "Submit your product (1/2) - AgentHunter",
+    "id": 62,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Agents Directory",
+    "url": "https://aiagentsdirectory.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aiagentsdirectory.com",
+    "page_title": "AI Agent Marketplace & Directory | Find Top AI Agents & AI Agent Solutions",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://aiagentsdirectory.com/submit-agent"
+      },
+      {
+        "label": "Submit",
+        "url": "https://aiagentsdirectory.com/submit-agent"
+      },
+      {
+        "label": "Submit Agent",
+        "url": "https://aiagentsdirectory.com/submit-agent"
+      },
+      {
+        "label": "Submit AI Agent",
+        "url": "https://aiagentsdirectory.com/submit-agent"
+      },
+      {
+        "label": "Submit AI Agent",
+        "url": "https://aiagentsdirectory.com/submit-agent"
+      }
+    ],
+    "submission_url": "https://aiagentsdirectory.com/submit-agent",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aiagentsdirectory.com/submit-agent",
+    "policy_excerpts": [],
+    "submission_title": "Submit AI Agent | AI Agents Directory",
+    "id": 63,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Agents List",
+    "url": "https://aiagentslist.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; listing costs $29 or $49",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aiagentslist.com",
+    "page_title": "AI Agents Directory 2026 | 600+ AI Tools & Autonomous Agents",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://aiagentslist.com/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://aiagentslist.com/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://aiagentslist.com/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://aiagentslist.com/submit"
+      }
+    ],
+    "submission_url": "https://aiagentslist.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aiagentslist.com/submit",
+    "policy_excerpts": [
+      "ubmit Agents Categories MCP Servers Tags AI Agents Map Blog Advertise Login Browse AI Agents Map Blog Advertise Submit Login Course Give your AI a permanent memory of your business . A course for people who use ChatGPT or Claude daily. For AI tool founder",
+      "s Map Blog Advertise Login Browse AI Agents Map Blog Advertise Submit Login Course Give your AI a permanent memory of your business . A course for people who use ChatGPT or Claude daily. For AI tool founders and teams Put your AI tool in front of 25,000+ ",
+      "tory buyers use to research AI tools — category discovery, a Verified badge, and a link from our DR 40 domain. Pay once, listed for life. Website URL Check eligibility free Free check, no card required. Accepted submissions are a one-time $29 or $49 — app",
+      "isting that keeps working — pay once, stay listed for life A Verified badge and a structured profile you can share with customers Structured categories, capability tags, and a verified badge give buyers what they need to shortlist your tool — and a clear ",
+      "with customers Structured categories, capability tags, and a verified badge give buyers what they need to shortlist your tool — and a clear path to your website when they're ready. Browse live listings in the directory Example AI Tool Verified Customer su"
+    ],
+    "submission_title": "Submit Your AI Tool | AI Agents List",
+    "id": 64,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Agents Live",
+    "url": "https://aiagentslive.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Submitted; free standard queue confirmed; review may take months",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aiagentslive.com",
+    "page_title": "AI Agents & Services Directory | AI Agents Live Sep 2026",
+    "submission_links": [
+      {
+        "label": "Submit Your AI Agent",
+        "url": "https://aiagentslive.com/agents/products/new"
+      },
+      {
+        "label": "Submit Your AI Agent",
+        "url": "https://aiagentslive.com/agents/products/new"
+      }
+    ],
+    "submission_url": "https://aiagentslive.com/agents/products/received",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aiagentslive.com/agents/submit/1",
+    "policy_excerpts": [
+      "ents Live Open main menu AI Agents Blog News API Submit Your AI Agent Sign In Submit an AI Agent Buyers browse this directory looking for agents like yours. Start with your website and how we can reach you. Step 1 of 4 We only accept AI agents and AI platfo"
+    ],
+    "submission_title": "Submit your AI Agent: Step 1",
+    "id": 65,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "AI Agent Store",
+    "url": "https://aiagentstore.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://aiagentstore.ai",
+    "page_title": "AI Agent Store | AI Agent Marketplace & AI Workers",
+    "submission_links": [
+      {
+        "label": "Gross & Contribution Margin",
+        "url": "https://aiagentstore.ai/free-tools/gross-margin-contribution-margin-calculator"
+      }
+    ],
+    "id": 66,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI Agents Verse",
+    "url": "https://aiagentsverse.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": "error",
+    "check_error": "HTTP Error 403: Forbidden",
+    "id": 67,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Findyouragent.ai",
+    "url": "https://findyouragent.ai",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; sign-in required",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://findyouragent.ai",
+    "page_title": "Find Your Agent | AI Agent Directory & Search Platform",
+    "submission_links": [
+      {
+        "label": "Submit Agent",
+        "url": "https://findyouragent.ai/agents/new"
+      },
+      {
+        "label": "Submit Agent",
+        "url": "https://findyouragent.ai/agents/new"
+      },
+      {
+        "label": "Submit Agent",
+        "url": "https://findyouragent.ai/agents/new"
+      }
+    ],
+    "submission_url": "https://findyouragent.ai/agents/new",
+    "submission_http_status": 200,
+    "submission_final_url": "https://findyouragent.ai/users/sign_in",
+    "policy_excerpts": [
+      "or a new owner. Make an offer → Browse Agents Categories Submit Agent Sign In Browse Agents Categories Submit Agent Sign In Sign in with Google OR Email Password Remember me Sign up Forgot your password? Didn't receive confirmation instructions? Discover th",
+      "Categories Submit Agent Sign In Browse Agents Categories Submit Agent Sign In Sign in with Google OR Email Password Remember me Sign up Forgot your password? Didn't receive confirmation instructions? Discover the perfect AI agents to enhance your productivi",
+      "es Submit Agent Sign In Browse Agents Categories Submit Agent Sign In Sign in with Google OR Email Password Remember me Sign up Forgot your password? Didn't receive confirmation instructions? Discover the perfect AI agents to enhance your productivity and s"
+    ],
+    "submission_title": "Find Your Agent | AI Agent Directory &amp; Search Platform",
+    "id": 68,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "theagentrank",
+    "url": "https://theagentrank.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Not submitted; standalone-agent fit uncertain; listing guidelines need review",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://theagentrank.com",
+    "page_title": "AgentRank — Find AI Agents You Can Trust",
+    "submission_links": [
+      {
+        "label": "Submit Agent",
+        "url": "https://theagentrank.com/submit"
+      },
+      {
+        "label": "Submit Agent",
+        "url": "https://theagentrank.com/submit"
+      },
+      {
+        "label": "Submit your agent — it's free →",
+        "url": "https://theagentrank.com/submit"
+      }
+    ],
+    "submission_url": "https://theagentrank.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://theagentrank.com/submit",
+    "policy_excerpts": [],
+    "submission_title": "AgentRank — Find AI Agents You Can Trust",
+    "id": 69,
+    "checked_at": "2026-09-27",
+    "outcome": "not_submitted",
+    "verification": "Form available; by submitting agrees to listing guidelines; no linked guideline text found in accessible form",
+    "next_action": "Resolve platform eligibility and guidelines before submission"
+  },
+  {
+    "name": "AI Agents Marketplace",
+    "url": "https://trillionagent.com",
+    "type": "AI/tool directory",
+    "source": "https://github.com/truvery/ai-tool-directories",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Agent collaboration and human-readable live observation",
+    "http_status": 200,
+    "checked_url": "https://trillionagent.com",
+    "page_title": "AI Agents Marketplace - The World's Leading AI Agent Marketplace | TrillionAgent",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://trillionagent.com/register-agent/"
+      }
+    ],
+    "submission_url": "https://trillionagent.com/register-agent/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://trillionagent.com/register-agent",
+    "policy_excerpts": [
+      "Register Your AI Agent - AI Agents Marketplace Submit Hire Sign In AI Agents Marketplace Register Your AI Agent Submit your AI agent to the TrillionAgent marketplace and showcase it to tho",
+      "Register Your AI Agent - AI Agents Marketplace Submit Hire Sign In AI Agents Marketplace Register Your AI Agent Submit your AI agent to the TrillionAgent marketplace and showcase it to thousands of businesses seeking AI solutions. Listing is free",
+      "ent - AI Agents Marketplace Submit Hire Sign In AI Agents Marketplace Register Your AI Agent Submit your AI agent to the TrillionAgent marketplace and showcase it to thousands of businesses seeking AI solutions. Listing is free and helps potential users disc",
+      "egory Other Role * Select a role Other Description * Cost * Address * Register Agent © 2026 TrillionAgent AI Agents Marketplace. All rights reserved. Privacy Policy Terms Blog TrillionAgent - AI Agents Marketplace The world's leading AI agents marketplace fo",
+      "for finding and hiring AI agents. Search AI agents across 300+ roles. Register your AI agent for free or create an employer account. Please enable JavaScript to access the full website experience."
+    ],
+    "submission_title": "Register Your AI Agent - AI Agents Marketplace",
+    "id": 70,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "agentfirst.directory",
+    "url": "https://agentfirst.directory/submit",
+    "type": "Agent/tool directory",
+    "source": "https://agentfirst.directory/submit",
+    "status": "Published; live ONE directory profile verified",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://agentfirst.directory/submit",
+    "page_title": "Submit a tool | agentfirst.directory",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://agentfirst.directory/submit"
+      },
+      {
+        "label": "Submit",
+        "url": "https://agentfirst.directory/submit"
+      },
+      {
+        "label": "contribution skill",
+        "url": "https://agentfirst.directory/SKILL.md"
+      },
+      {
+        "label": "Submit Tool",
+        "url": "https://agentfirst.directory/submit"
+      }
+    ],
+    "submission_url": "https://github.com/bradvin/agentfirst.directory/pull/76",
+    "submission_http_status": 200,
+    "submission_final_url": "https://agentfirst.directory/submit",
+    "policy_excerpts": [],
+    "submission_title": "Submit a tool | agentfirst.directory",
+    "id": 71,
+    "checked_at": "2026-09-27",
+    "outcome": "published",
+    "verification": "Browser displayed complete ONE profile, workrr.ai developer credit, product link and official skill documentation",
+    "next_action": "Monitor meaningful feedback; no resubmission",
+    "published_url": "https://agentfirst.directory/tools/one"
+  },
+  {
+    "name": "Agent Switchboard",
+    "url": "https://agentswitchboard.dev/submit",
+    "type": "Agent/tool directory",
+    "source": "https://agentswitchboard.dev/submit",
+    "status": "Submitted; review queue confirmed",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://agentswitchboard.dev/submit",
+    "page_title": "List Your Agent | Agent Switchboard",
+    "submission_links": [
+      {
+        "label": "List Your Agent",
+        "url": "https://agentswitchboard.dev/submit"
+      },
+      {
+        "label": "List Your Agent",
+        "url": "https://agentswitchboard.dev/submit"
+      }
+    ],
+    "submission_url": "https://agentswitchboard.dev/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://agentswitchboard.dev/submit",
+    "policy_excerpts": [],
+    "submission_title": "List Your Agent | Agent Switchboard",
+    "id": 72,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "AI Agents List (.io)",
+    "url": "https://www.aiagentslist.io/submit",
+    "type": "Agent/tool directory",
+    "source": "https://www.aiagentslist.io/submit",
+    "status": "Submitted; receipt confirmed",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.aiagentslist.io/submit",
+    "page_title": "Submit an AI Agent — AI Agents List",
+    "submission_links": [],
+    "submission_url": "https://www.aiagentslist.io/submit",
+    "id": 73,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "agent-tools.org",
+    "url": "https://agent-tools.org/",
+    "type": "Agent/tool directory",
+    "source": "https://agent-tools.org/",
+    "status": "API key / email registration required",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": "error",
+    "check_error": "The read operation timed out",
+    "id": 74,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "The Agents Index",
+    "url": "https://theagentsindex.com/submit",
+    "type": "Agent/tool directory",
+    "source": "https://theagentsindex.com/submit",
+    "status": "Login required",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://theagentsindex.com/login?next=%2Fsubmit",
+    "page_title": "Sign in or create your account",
+    "submission_links": [
+      {
+        "label": "Submit an agent",
+        "url": "https://theagentsindex.com/submit"
+      },
+      {
+        "label": "Submit an agent",
+        "url": "https://theagentsindex.com/submit"
+      }
+    ],
+    "submission_url": "https://theagentsindex.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://theagentsindex.com/login?next=%2Fsubmit",
+    "policy_excerpts": [
+      "Sign in or create your account Skip to content The datasheet for every AI agent Pricing Advertise Agents·Index Browse 01 Coding agents AI agents that write, review and ship code, from inl",
+      "↵ to open esc to close Your account Submit a listing. Get discovered. Sign in or create a free account, then share your website for review. ◆ Free account · no card required · 129 agents to explore · updated 25 September 2026 What the account holds 01 Your ",
+      "d referral sources. 04 Everything in one place. Your profile, how you sign in, and every email this site can send you. Here to claim your agent? Find it in the index, then verify your connection to its domain. Find your listing to claim →"
+    ],
+    "submission_title": "Sign in or create your account",
+    "id": 75,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AIDealer",
+    "url": "https://aidealer.io/",
+    "type": "Agent/tool directory",
+    "source": "https://aidealer.io/",
+    "status": "Not submitted; requires specific task-executing agents and binding builder declaration; platform fit weak",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://aidealer.io/",
+    "page_title": "AIDealer — Find AI Agents That Automate Real Work",
+    "submission_links": [
+      {
+        "label": "Submit Agent",
+        "url": "https://aidealer.io/submit-agent.html"
+      },
+      {
+        "label": "Submit a Request",
+        "url": "https://aidealer.io/request-agent.html"
+      },
+      {
+        "label": "Submit your agent",
+        "url": "https://aidealer.io/submit-agent.html"
+      },
+      {
+        "label": "Submit an Agent",
+        "url": "https://aidealer.io/submit-agent.html"
+      },
+      {
+        "label": "Submit an Agent",
+        "url": "https://aidealer.io/submit-agent.html"
+      }
+    ],
+    "submission_url": "https://aidealer.io/submit-agent.html",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aidealer.io/submit-agent.html",
+    "policy_excerpts": [],
+    "submission_title": "Submit Your Agent — AIDealer",
+    "id": 76,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AgentStackMap",
+    "url": "https://www.agentstackmap.com/",
+    "type": "Agent/tool directory",
+    "source": "https://www.agentstackmap.com/",
+    "status": "Not submitted; intake coming soon and standalone-agent product focus",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.agentstackmap.com/",
+    "page_title": "AI Agent Directory that does the work | AgentStackMap",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://www.agentstackmap.com/submit-agent"
+      },
+      {
+        "label": "Submit a product",
+        "url": "https://www.agentstackmap.com/submit-agent"
+      },
+      {
+        "label": "Submit",
+        "url": "https://www.agentstackmap.com/submit-agent"
+      }
+    ],
+    "submission_url": "https://www.agentstackmap.com/submit-agent",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.agentstackmap.com/submit-agent",
+    "policy_excerpts": [],
+    "submission_title": "Submit an AI agent product | AgentStackMap",
+    "id": 77,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Agents.NET",
+    "url": "https://agents.net/",
+    "type": "Agent/tool directory",
+    "source": "https://agents.net/",
+    "status": "Published; live ONE profile verified",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://agents.net/",
+    "page_title": "Agents.NET — The Directory, Registry & Orchestration Network for AI Agents",
+    "submission_links": [
+      {
+        "label": "List Your Agent — Free",
+        "url": "https://agents.net/submit-your-agent"
+      },
+      {
+        "label": "Submit Your Agent",
+        "url": "https://agents.net/submit-your-agent"
+      }
+    ],
+    "submission_url": "https://agents.net/submit-your-agent",
+    "submission_http_status": 200,
+    "submission_final_url": "https://agents.net/submit-your-agent",
+    "policy_excerpts": [
+      "37+ agents already listed. Get discovered by thousands of developers. Free listing • Developer-first discovery • Direct submission 🆓 Free Listing No fees, no revenue share. List your agent at zero cost. 🔍 Developer-First Discovery Agents.NET reaches developers a",
+      "opers. Free listing • Developer-first discovery • Direct submission 🆓 Free Listing No fees, no revenue share. List your agent at zero cost. 🔍 Developer-First Discovery Agents.NET reaches developers actively searching for solutions. ⚡ Quick Approval Get reviewed ",
+      "clear them. ✓ No credit card required • Reviewed within 24-48 hours • Free listing forever Agent Name * Use a readable English name (this speeds up approval). Agent URL * Link to a live https:// landing page a person can visit — not a temporary tunnel, raw JSON/"
+    ],
+    "submission_title": "Submit Your AI Agent — Agents.NET",
+    "id": 78,
+    "checked_at": "2026-09-29",
+    "outcome": "published",
+    "verification": "Official directory and ONE detail page display submitted description and product link",
+    "next_action": "Monitor relevant feedback; do not resubmit",
+    "published_url": "https://agents.net/directory/520"
+  },
+  {
+    "name": "AI Agents Listing",
+    "url": "https://aiagentslisting.com/submit",
+    "type": "Agent/tool directory",
+    "source": "https://aiagentslisting.com/submit",
+    "status": "Free listing requires reciprocal badge; not submitted",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://aiagentslisting.com/submit",
+    "page_title": "Add a free listing – AI Agents Listing",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://aiagentslisting.com/submit"
+      },
+      {
+        "label": "Submit your tool",
+        "url": "https://aiagentslisting.com/submit"
+      },
+      {
+        "label": "Submit a tool",
+        "url": "https://aiagentslisting.com/submit"
+      },
+      {
+        "label": "Submit from your agent (MCP)",
+        "url": "https://aiagentslisting.com/mcp"
+      }
+    ],
+    "submission_url": "https://aiagentslisting.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://aiagentslisting.com/submit",
+    "policy_excerpts": [
+      "Add a free listing – AI Agents Listing AI Agents Listing Blog News Leaderboard Directory Write for Us Blog News Leaderboard Directory Write for Us More Submit Log in Add a free listing Listing on AI",
+      "Write for Us Blog News Leaderboard Directory Write for Us More Submit Log in Add a free listing Listing on AI Agents Listing is a great way to get more exposure for your tool. We only list high-quality tools that are useful for directory owners. Submitting",
+      "Blog News Leaderboard Directory Write for Us More Submit Log in Add a free listing Listing on AI Agents Listing is a great way to get more exposure for your tool. We only list high-quality tools that are useful for directory owners. Submitting from an AI agent? ",
+      "and your agent a URL. No API key, same review queue. Connect over MCP Sign in to add your listing A listing belongs to an account, so we need to know who to hand it to. Signing in takes a few seconds and a basic listing stays free. Sign in Get your agent li",
+      "it to. Signing in takes a few seconds and a basic listing stays free. Sign in Get your agent listed. Join the directory where the agentic ecosystem gets discovered. Submit your tool Ask AI about AI Agents Listing ChatGPT Claude Perplexity Grok Directory AI ",
+      "ponsor a category Platform Submit a tool Submit from your agent (MCP) Sign in Dashboard Best of Best AI Agents Best MCP Servers Best Agent Skills View all → Alternatives mcp.so Alternatives Glama Alternatives Smithery Alternatives View all → Comparisons AI "
+    ],
+    "submission_title": "Add a free listing – AI Agents Listing",
+    "id": 79,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Submit AI Agent",
+    "url": "https://submitaiagent.com/",
+    "type": "Agent/tool directory",
+    "source": "https://submitaiagent.com/",
+    "status": "Candidate; submission policy not yet checked",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://submitaiagent.com/",
+    "page_title": "Submit AI Agent - A Directory For Agentic Tools & AI Agents",
+    "submission_links": [],
+    "id": 80,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AgentsTide",
+    "url": "https://agentstide.com/",
+    "type": "Agent/tool directory",
+    "source": "https://agentstide.com/",
+    "status": "Attempted; no receipt or error shown; do not count as submitted",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://agentstide.com/",
+    "page_title": "AgentsTide – Free AI Agents Directory 2026 | 57+ Autonomous AI Tools Reviewed",
+    "submission_links": [
+      {
+        "label": "Submit",
+        "url": "https://agentstide.com/#submit"
+      },
+      {
+        "label": "Submit Your Agent",
+        "url": "https://agentstide.com/#submit"
+      },
+      {
+        "label": "Submit Free Listing →",
+        "url": "https://agentstide.com/submit"
+      },
+      {
+        "label": "Submit an Agent",
+        "url": "https://agentstide.com/#submit"
+      }
+    ],
+    "submission_url": "https://agentstide.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://agentstide.com/#submit",
+    "policy_excerpts": [
+      "e basic listings. Sponsored placements for premium visibility. Submit Free Listing → Sponsor a Placement ✓ Free basic listing ✓ Published within 48hrs ✓ SEO-optimized profile ✓ Featured placement options Common Questions Answers for developers, founders, and tea",
+      ".`, pricingTiers:[ {name:\"Hobby\",price:\"Free forever\",highlight:false,badge:\"Free\",desc:\"2,000 completions per month, 50 slow Composer requests, and access to GPT-3.5 level models. Enough to evaluate Cursor seriously, but you'll hit the ceiling if you're ",
+      "ou're coding daily.\"}, {name:\"Pro\",price:\"$20 / month\",highlight:true,badge:\"Most Popular\",desc:\"Unlimited completions, 500 fast premium model requests per month (Claude, GPT-4o, Gemini), access to background agents in beta, and priority support. This is ",
+      " time.\"}, {name:\"Business\",price:\"$40 / user / month\",highlight:false,badge:\"Teams\",desc:\"Everything in Pro plus team management dashboard, admin controls, centralized billing, SSO/SAML authentication, and usage analytics. Built for companies that want to",
+      "stion to shareable document. The output is more trustworthy than most AI-generated content because every factual claim is sourced.\"}, ], useCases:[ {title:\"Real-Time Research and Fact-Checking\",text:\"Perplexity is the right tool whenever you need current informa",
+      "e.`, pricingTiers:[ {name:\"Free\",price:\"Free forever\",highlight:false,badge:\"Free\",desc:\"Standard web search with AI synthesis, 5 Deep Research runs per day, basic model access, and limited file uploads. Excellent for occasional research and getting famil"
+    ],
+    "submission_title": "AgentsTide – Free AI Agents Directory 2026 | 57+ Autonomous AI Tools Reviewed",
+    "id": 81,
+    "checked_at": "2026-09-25",
+    "outcome": "attempt_unconfirmed",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AgentsSpot",
+    "url": "https://agentsspot.com/pricing",
+    "type": "Agent/tool directory",
+    "source": "https://agentsspot.com/pricing",
+    "status": "Not submitted; redirected to login",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://agentsspot.com/pricing",
+    "page_title": "Pricing & Submission Plans - AgentsSpot Directory — AgentsSpot",
+    "submission_links": [
+      {
+        "label": "Submit Agent",
+        "url": "https://agentsspot.com/submit"
+      },
+      {
+        "label": "Submit for Free",
+        "url": "https://agentsspot.com/submit"
+      },
+      {
+        "label": "Submit Agent",
+        "url": "https://agentsspot.com/submit"
+      }
+    ],
+    "submission_url": "https://agentsspot.com/login?callbackUrl=/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://agentsspot.com/submit",
+    "policy_excerpts": [
+      "Live Agents Directory News Agent Models Rankings Pricing Submit Agent Sign in AS AgentsSpot Autonomous AI Directory The premier curated directory for autonomous software engineers, computer-use agents, multi-agent frameworks, and goal-driven workflows. Subm"
+    ],
+    "submission_title": "AgentsSpot — Best AI Agents, Autonomous Systems &amp; Frameworks (2026)",
+    "id": 82,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "MeshKore",
+    "url": "https://meshkore.com/directory",
+    "type": "Agent/tool directory",
+    "source": "https://meshkore.com/directory",
+    "status": "Submitted; receipt confirmed; not connected to live mesh",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://meshkore.com/directory",
+    "page_title": "AI Agent Directory — 100,000+ Agent Projects Indexed | MeshKore",
+    "submission_links": [
+      {
+        "label": "List your agent",
+        "url": "https://meshkore.com/submit"
+      },
+      {
+        "label": "List your agent",
+        "url": "https://meshkore.com/submit"
+      },
+      {
+        "label": "Add your agent to the directory",
+        "url": "https://meshkore.com/submit"
+      }
+    ],
+    "submission_url": "https://meshkore.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://meshkore.com/submit",
+    "policy_excerpts": [
+      "hem directly. Claim & verify guide → Listed? Link back to us. Add the badge to your repo README or site — it shows you're discoverable on the agent network, and it helps both of us get found. HTML <a href=\"https://meshkore.com\"><img src=\"https://meshkore.",
+      "d. HTML <a href=\"https://meshkore.com\"><img src=\"https://meshkore.com/badge.svg\" alt=\"Listed on MeshKore\" height=\"32\"></a> this.textContent='Copy',1500)\" class=\"absolute bottom-2 right-2 text-xs px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 roun",
+      "ion-colors\">Copy Markdown [![Listed on MeshKore](https://meshkore.com/badge.svg)](https://meshkore.com) this.textContent='Copy',1500)\" class=\"absolute bottom-2 right-2 text-xs px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colo"
+    ],
+    "submission_title": "Add your agent to the MeshKore directory",
+    "id": 83,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "AddictedToApps",
+    "url": "https://www.addictedtoapps.com/",
+    "type": "Agent/tool directory",
+    "source": "https://www.addictedtoapps.com/",
+    "status": "Not submitted; local Build Card draft interface inspected",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.addictedtoapps.com/",
+    "page_title": "AddictedToApps",
+    "submission_links": [
+      {
+        "label": "Submit Project",
+        "url": "https://www.addictedtoapps.com/submit"
+      }
+    ],
+    "submission_url": "https://www.addictedtoapps.com/submit",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.addictedtoapps.com/submit",
+    "policy_excerpts": [
+      "Build Create a Build Card Weekly Challenges Lessons Dashboard Account Sign In Join Free Dashboard Settings Build with AI. Share your work. Grow your portfolio. © 2026 AddictedToApps"
+    ],
+    "submission_title": "AddictedToApps",
+    "id": 84,
+    "checked_at": "2026-09-27",
+    "outcome": "not_submitted",
+    "verification": "Page offers local draft, Save, Publish and Claim; no external write attempted",
+    "next_action": "Check publication requirements and suitable project classification"
+  },
+  {
+    "name": "Collective AI Tools",
+    "url": "https://collectiveai.tools/submit",
+    "type": "Agent/tool directory",
+    "source": "https://collectiveai.tools/submit",
+    "status": "Accepted; PR merged; live website sync not verified",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://collectiveai.tools/submit",
+    "page_title": "Collective AI Tools - Curated Directory of AI Tools",
+    "submission_links": [],
+    "id": 85,
+    "checked_at": "2026-09-29",
+    "outcome": "accepted_pr",
+    "verification": "GitHub PR 377 reports MERGED",
+    "next_action": "Verify website sync later; do not resubmit",
+    "submission_url": "https://github.com/hanishrao/collective-ai-tools/pull/377"
+  },
+  {
+    "name": "DropYourAI",
+    "url": "https://www.dropyourai.com/submit-tool",
+    "type": "Agent/tool directory",
+    "source": "https://www.dropyourai.com/submit-tool",
+    "status": "Form checked; image required; listing options follow form",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.dropyourai.com/submit-tool",
+    "page_title": "AI Tool Listing Options | Submit AI Tool | DropYourAI",
+    "submission_links": [
+      {
+        "label": "Submit tool",
+        "url": "https://www.dropyourai.com/submit-tool"
+      },
+      {
+        "label": "Submit tool",
+        "url": "https://www.dropyourai.com/submit-tool"
+      }
+    ],
+    "submission_url": "https://www.dropyourai.com/submit-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.dropyourai.com/submit-tool",
+    "policy_excerpts": [],
+    "submission_title": "AI Tool Listing Options | Submit AI Tool | DropYourAI",
+    "id": 86,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "AI SuperHub",
+    "url": "https://www.aisuperhub.io/ai-tools/submit/free",
+    "type": "Agent/tool directory",
+    "source": "https://www.aisuperhub.io/ai-tools/submit/free",
+    "status": "Submitted; receipt confirmed; standard review may take 90+ days",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.aisuperhub.io/ai-tools/submit/free",
+    "page_title": "Submit AI Tool for FREE | AISuperHub AI Tools Directory",
+    "submission_links": [],
+    "submission_url": "https://www.aisuperhub.io/submit/success",
+    "id": 87,
+    "checked_at": "2026-09-25",
+    "outcome": "submitted_for_review",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Await editorial decision; avoid duplicate submission"
+  },
+  {
+    "name": "GPTBot",
+    "url": "https://gptbot.io/submit-ai-tool",
+    "type": "Agent/tool directory",
+    "source": "https://gptbot.io/submit-ai-tool",
+    "status": "Not submitted; $39 paid review required",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://gptbot.io/submit-ai-tool",
+    "page_title": "Submit Your AI Tool - GPTBot | Add Your AI Tool to Our Directory",
+    "submission_links": [
+      {
+        "label": "Submit AI Tool",
+        "url": "https://gptbot.io/submit-ai-tool"
+      }
+    ],
+    "submission_url": "https://gptbot.io/submit-ai-tool",
+    "submission_http_status": 200,
+    "submission_final_url": "https://gptbot.io/submit-ai-tool",
+    "policy_excerpts": [
+      "ols. Review in 48 hours Fast Track $39 Price increases soon Do-follow backlink Verified tool badge Ongoing listing while eligible Higher visibility in the directory How it works 1 Submit your tool 2 We review it within 48 hours 3 Your listing goes live with ",
+      " Fast Track $39 Price increases soon Do-follow backlink Verified tool badge Ongoing listing while eligible Higher visibility in the directory How it works 1 Submit your tool 2 We review it within 48 hours 3 Your listing goes live with a do-follow backlink",
+      "e review it within 48 hours 3 Your listing goes live with a do-follow backlink Not approved? You get a full refund. Join ElevenLabs, Instantly, Granola and other leading AI tools already listed. Website Name * Website URL * Email * We only use your email for",
+      "e review it within 48 hours 3 Your listing goes live with a do-follow backlink Not approved? You get a full refund. Join ElevenLabs, Instantly, Granola and other leading AI tools already listed. Submission guidelines Privacy Policy Contact Us Submit AI Tool "
+    ],
+    "submission_title": "Submit Your AI Tool - GPTBot | Add Your AI Tool to Our Directory",
+    "id": 88,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "The Next AI",
+    "url": "https://www.thenextai.com/submit-ai-tool/",
+    "type": "Agent/tool directory",
+    "source": "https://www.thenextai.com/submit-ai-tool/",
+    "status": "Prepared; CAPTCHA confirmation pending",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.thenextai.com/submit-ai-tool/",
+    "page_title": "Submit Your AI Tool Free — List on The Next AI Directory | The Next AI",
+    "submission_links": [
+      {
+        "label": "+ Submit Tool",
+        "url": "https://www.thenextai.com/submit-ai-tool/"
+      },
+      {
+        "label": "+ Submit Tool",
+        "url": "https://www.thenextai.com/submit-ai-tool/"
+      },
+      {
+        "label": "🚀 Submit Free Now",
+        "url": "https://www.thenextai.com/submit-ai-tool/#submit-form"
+      },
+      {
+        "label": "Submit a Tool",
+        "url": "https://www.thenextai.com/submit-ai-tool/"
+      }
+    ],
+    "submission_url": "https://www.thenextai.com/submit-ai-tool/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.thenextai.com/submit-ai-tool/",
+    "policy_excerpts": [
+      "ories 🤖 AI Tools 📝 Blog 📬 Contact + Submit Tool Home › Submit AI Tool Free Listing · Live in 48 Hours Submit Your AI Tool Free Get Discovered by Thousands List your AI tool in front of 120,000+ monthly visitors actively searching for AI solutions. Free basic lis",
+      "actively searching for AI solutions. Free basic listing with dofollow backlink and dedicated page — or go Featured ($199 one-time) for homepage placement, 9–12 hour priority review, featured badge and maximum global exposure. ✓ Dofollow Backlink ✓ Free Basic",
+      "one-time) for homepage placement, 9–12 hour priority review, featured badge and maximum global exposure. ✓ Dofollow Backlink ✓ Free Basic Listing ✓ Permanent Listing ✓ 120k+ Monthly Visitors ✓ 150+ Countries ✓ Featured from $199 3,200+ AI Tools Listed 120",
+      "iority review, featured badge and maximum global exposure. ✓ Dofollow Backlink ✓ Free Basic Listing ✓ Permanent Listing ✓ 120k+ Monthly Visitors ✓ 150+ Countries ✓ Featured from $199 3,200+ AI Tools Listed 120k+ Monthly Visitors 150+ Countries Reach 48hrs Av",
+      "hly Visitors 150+ Countries Reach 48hrs Avg. Go-Live Choose Your Plan Free Listing or Featured Placement Both plans include a permanent dofollow backlink and dedicated tool page. Featured gets you maximum visibility. 🆓 Basic Listing $0 / forever Perfect for AI t",
+      "Listing or Featured Placement Both plans include a permanent dofollow backlink and dedicated tool page. Featured gets you maximum visibility. 🆓 Basic Listing $0 / forever Perfect for AI tools wanting permanent organic discovery, a dofollow SEO backlink and a"
+    ],
+    "submission_title": "Submit Your AI Tool Free — List on The Next AI Directory | The Next AI",
+    "id": 89,
+    "checked_at": "2026-09-25",
+    "outcome": "prepared",
+    "verification": "Form/receipt or PR reviewed",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "r/AI_Agents showcase",
+    "url": "https://www.reddit.com/r/AI_Agents/comments/1woa0r2/weekly_thread_project_display/",
+    "type": "Community showcase",
+    "source": "https://www.reddit.com/r/AI_Agents/comments/1woa0r2/weekly_thread_project_display/",
+    "status": "Current Sep23 showcase verified; Reddit login required",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.reddit.com/r/AI_Agents/comments/1woa0r2/weekly_thread_project_display/",
+    "page_title": "Reddit",
+    "submission_links": [],
+    "id": 90,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "r/AgentsOfAI showcase",
+    "url": "https://www.reddit.com/r/AgentsOfAI/comments/1ts8cfd/weekly_project_showcase_thread/",
+    "type": "Community showcase",
+    "source": "https://www.reddit.com/r/AgentsOfAI/comments/1ts8cfd/weekly_project_showcase_thread/",
+    "status": "Showcase welcomes projects; login required; find current thread",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.reddit.com/r/AgentsOfAI/comments/1ts8cfd/weekly_project_showcase_thread/",
+    "page_title": "Reddit",
+    "submission_links": [],
+    "id": 91,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "r/AIProfessionalsHQ tools thread",
+    "url": "https://www.reddit.com/r/AIProfessionalsHQ/comments/1wg5wga/weekly_selfpromotion_tools_thread/",
+    "type": "Community showcase",
+    "source": "https://www.reddit.com/r/AIProfessionalsHQ/comments/1wg5wga/weekly_selfpromotion_tools_thread/",
+    "status": "Self-promotion thread; login required; recheck currency",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.reddit.com/r/AIProfessionalsHQ/comments/1wg5wga/weekly_selfpromotion_tools_thread/",
+    "page_title": "Reddit",
+    "submission_links": [],
+    "id": 92,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "r/ChatGPTCoding self-promotion",
+    "url": "https://www.reddit.com/r/ChatGPTCoding/comments/1vkehmk/weekly_self_promotion_thread/",
+    "type": "Community showcase",
+    "source": "https://www.reddit.com/r/ChatGPTCoding/comments/1vkehmk/weekly_self_promotion_thread/",
+    "status": "Dedicated thread; login required; find current thread",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.reddit.com/r/ChatGPTCoding/comments/1vkehmk/weekly_self_promotion_thread/",
+    "page_title": "Reddit",
+    "submission_links": [],
+    "id": 93,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "r/SinceAI builder thread",
+    "url": "https://www.reddit.com/r/SinceAI/comments/1wltyfr/what_are_you_building_in_ai_this_week/",
+    "type": "Community showcase",
+    "source": "https://www.reddit.com/r/SinceAI/comments/1wltyfr/what_are_you_building_in_ai_this_week/",
+    "status": "Sep20 builder invitation verified; Reddit login required",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.reddit.com/r/SinceAI/comments/1wltyfr/what_are_you_building_in_ai_this_week/",
+    "page_title": "Reddit",
+    "submission_links": [],
+    "id": 94,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "CrewAI Showcase",
+    "url": "https://community.crewai.com/c/showcase/12",
+    "type": "Community showcase",
+    "source": "https://community.crewai.com/c/showcase/12",
+    "status": "Integration-specific; need CrewAI example and membership",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://community.crewai.com/c/showcase/12",
+    "page_title": "Latest Showcase topics - CrewAI",
+    "submission_links": [],
+    "id": 95,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "LangChain Forum",
+    "url": "https://forum.langchain.com/",
+    "type": "Community showcase",
+    "source": "https://forum.langchain.com/",
+    "status": "Integration-specific; need LangChain example and rule review",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://forum.langchain.com/",
+    "page_title": "LangChain Forum",
+    "submission_links": [],
+    "id": 96,
+    "checked_at": "2026-09-25",
+    "outcome": "not_submitted",
+    "verification": "HTTP page checked; policy excerpts are leads, not approval to post",
+    "next_action": "Review current rules, fit, and access before posting"
+  },
+  {
+    "name": "Launching Next",
+    "url": "https://www.launchingnext.com/submit/",
+    "type": "Agent/tool directory",
+    "source": "https://www.launchingnext.com/submit/",
+    "status": "Not submitted; anti-bot arithmetic challenge and marketing-budget question",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://www.launchingnext.com/submit/",
+    "page_title": "Submit Your Project | Launching Next",
+    "submission_links": [
+      {
+        "label": "Submit Startup",
+        "url": "https://www.launchingnext.com/submit/"
+      },
+      {
+        "label": "Submit Startup",
+        "url": "https://www.launchingnext.com/submit/"
+      }
+    ],
+    "submission_url": "https://www.launchingnext.com/submit/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://www.launchingnext.com/submit/",
+    "policy_excerpts": [],
+    "submission_title": "Submit Your Project | Launching Next",
+    "id": 97,
+    "checked_at": "2026-09-27",
+    "outcome": "blocked",
+    "verification": "Free submission form contains Quick Check arithmetic challenge; no challenge solved",
+    "next_action": "User completion of challenge needed; do not guess future marketing budget"
+  },
+  {
+    "name": "Startup Stash",
+    "url": "https://startupstash.com/add-listing/",
+    "type": "Agent/tool directory",
+    "source": "https://startupstash.com/add-listing/",
+    "status": "Submitted; Typeform receipt confirmed; editorial review pending",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://startupstash.com/add-listing/",
+    "page_title": "Add a Listing - Startup Stash",
+    "submission_links": [],
+    "id": 98,
+    "checked_at": "2026-10-10",
+    "outcome": "submitted_for_review",
+    "verification": "Official embedded Typeform b8EyDE thanked applicant for applying; screenshot daily-runs/2026-10-10-startupstash-receipt.png. Not an accepted listing.",
+    "next_action": "Await review; do not resubmit",
+    "submission_url": "https://startupstash.com/add-listing/"
+  },
+  {
+    "name": "Launchpedia",
+    "url": "https://launchpedia.co/submit/",
+    "type": "Agent/tool directory",
+    "source": "https://launchpedia.co/submit/",
+    "status": "Research resource; supplied URL lists directories, not direct intake",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://launchpedia.co/submit/",
+    "page_title": "Submit - LaunchPedia",
+    "submission_links": [
+      {
+        "label": "Directories to list your SaaS",
+        "url": "https://launchpedia.co/list-my-saas/"
+      },
+      {
+        "label": "Directories to list your SaaS",
+        "url": "https://launchpedia.co/list-my-saas/"
+      },
+      {
+        "label": "115 places to list your SaaS",
+        "url": "https://launchpedia.co/list-my-saas/"
+      }
+    ],
+    "submission_url": "https://launchpedia.co/list-my-saas/",
+    "submission_http_status": 200,
+    "submission_final_url": "https://launchpedia.co/list-my-saas/",
+    "policy_excerpts": [
+      "his helps you understand what people like about your product. Diverse Backlink Profile: Search engines favor websites with a variety of high-quality backlinks. Directory listings provide backlinks from different domains, improving your backlink diversity. Th",
+      "ory listings provide backlinks from different domains, improving your backlink diversity. This diversity signals to search engines that your site is reputable and relevant. Save on Marketing Costs: Reaching lots of people through regular advertising can be e",
+      " in top will get benefits like a mention in the newsletter, do follow backlink and badges. 🤔 What are maker communities? Group of founders and makers who share their goals publicly and be accountable to each other. You can build your product in the public, s"
+    ],
+    "submission_title": "150 Directories And Platforms To List Your SaaS",
+    "id": 99,
+    "checked_at": "2026-10-13",
+    "outcome": "research_resource",
+    "verification": "Official list-my-saas page lists directory links and paid launch service; no submission made.",
+    "next_action": "Review linked LaunchPedia Tools intake separately if suitable; no paid service"
+  },
+  {
+    "name": "Startup Collections",
+    "url": "https://startupcollections.com/submit-product/",
+    "type": "Agent/tool directory",
+    "source": "https://startupcollections.com/submit-product/",
+    "status": "Submitted; Google Forms receipt confirmed; editorial review pending",
+    "angle": "Scoped agent handoffs and collaboration; disclose workrr.ai affiliation",
+    "http_status": 200,
+    "checked_url": "https://startupcollections.com/submit-product/",
+    "page_title": "Submit Product - Startup Collections",
+    "submission_links": [],
+    "id": 100,
+    "checked_at": "2026-10-13",
+    "outcome": "submitted_for_review",
+    "verification": "Official embedded Google Form displayed Your response has been recorded. Screenshot daily-runs/2026-10-13-startupcollections-receipt.png",
+    "next_action": "Await editorial review; do not resubmit"
+  },
+  {
+    "id": 101,
+    "name": "BotMarket",
+    "url": "https://botmarket.bot/",
+    "submission_url": "https://botmarket.bot/submit",
+    "type": "Agent/MCP directory",
+    "source": "Web search September 27, 2026",
+    "status": "Not submitted; requires full A2A agent, MCP server or x402 service",
+    "outcome": "not_eligible",
+    "checked_at": "2026-09-27",
+    "verification": "Live submission form accepts only A2A agent-card, MCP server or x402 service; ONE is not a full A2A task server",
+    "next_action": "Revisit only if ONE gains an eligible interface"
+  },
+  {
+    "id": 102,
+    "name": "Awesome AI Agents 2026",
+    "url": "https://github.com/ARUNAGIRINATHAN-K/awesome-ai-agents-2026",
+    "submission_url": "https://github.com/ARUNAGIRINATHAN-K/awesome-ai-agents-2026/issues/324",
+    "type": "Agent infrastructure registry",
+    "source": "Web search September 28, 2026",
+    "status": "Submitted public registry issue; editorial review pending",
+    "outcome": "public_suggestion",
+    "checked_at": "2026-10-14",
+    "verification": "GitHub API: OPEN, zero comments October 14. No reply needed.",
+    "next_action": "Await review; template label agent-submission does not exist, so automated PR generation may need maintainer intervention",
+    "policy_excerpts": [
+      "CONTRIBUTING.md explicitly invites hosted, experimental agent infrastructure via GitHub issue form; Agent Communication category fits."
+    ]
+  },
+  {
+    "id": 103,
+    "name": "AgentLane",
+    "url": "https://agentlanehq.com/",
+    "type": "Open-source agent directory",
+    "source": "Web search September 28, 2026",
+    "status": "Not submitted; open-source agent focus does not establish fit for ONE",
+    "outcome": "not_submitted",
+    "checked_at": "2026-09-28",
+    "verification": "Official homepage emphasizes open-source agents, source, setup, license and repository health",
+    "next_action": "Only revisit if eligible hosted-platform intake is documented"
+  },
+  {
+    "id": 104,
+    "name": "zPlatform",
+    "url": "https://zplatform.ai/",
+    "submission_url": "https://zplatform.ai/submit-ai-tool/",
+    "type": "AI tools directory",
+    "status": "Submitted; receipt confirmed; editorial review pending",
+    "outcome": "submitted_form",
+    "verification": "Browser showed Submission received and 48-hour weekday response statement",
+    "next_action": "Await editorial response; no duplicate submission",
+    "source": "Web search September 29, 2026",
+    "checked_at": "2026-09-29"
+  },
+  {
+    "id": 105,
+    "name": "AgentBets",
+    "url": "https://agentbets.ai/",
+    "type": "Prediction-market agent directory",
+    "status": "Not submitted; prediction-market/betting-stack focus outside ONE scope",
+    "outcome": "not_eligible",
+    "verification": "Official API schema restricts listing scope to agent betting stack",
+    "next_action": "Exclude unless a relevant product exists",
+    "source": "Web search September 29, 2026",
+    "checked_at": "2026-09-29"
+  },
+  {
+    "id": 106,
+    "name": "Skiln",
+    "url": "https://skiln.co/",
+    "submission_url": "https://skiln.co/submit",
+    "type": "Agent skills directory",
+    "source": "Web search September 30, 2026",
+    "status": "Not submitted; advertised free route not exposed in intake",
+    "outcome": "not_submitted",
+    "checked_at": "2026-09-30",
+    "verification": "FAQ says basic listings free, but visible submit controls are only paid $29/$79/$149 tiers",
+    "next_action": "Revisit only if an accessible free intake is found; no purchase or email sent"
+  },
+  {
+    "id": 107,
+    "name": "AgentIndexed",
+    "url": "https://agentindexed.com/",
+    "submission_url": "https://agentindexed.com/submit/",
+    "type": "Agent infrastructure directory",
+    "status": "Blocked by browser security policy; no confirmed submission",
+    "outcome": "blocked",
+    "verification": "Free infrastructure category and rules reviewed; browser rejected form interaction because browser use is not permitted on this page",
+    "next_action": "Do not retry through alternate browser, API, or other workaround; user may choose to submit manually",
+    "source": "Web search October 1, 2026",
+    "checked_at": "2026-10-01"
+  },
+  {
+    "id": 108,
+    "name": "Messaging Agents",
+    "url": "https://messagingagents.com/",
+    "submission_url": "https://messagingagents.com/submit",
+    "type": "Messaging assistant directory",
+    "status": "Not submitted; personal messaging assistant focus does not establish ONE fit",
+    "outcome": "not_eligible",
+    "verification": "Public intake compares agents users can text and their messaging channels; ONE is collaboration infrastructure",
+    "next_action": "Only revisit if infrastructure category is explicitly invited",
+    "source": "Web search October 1, 2026",
+    "checked_at": "2026-10-01"
+  },
+  {
+    "id": 109,
+    "name": "OpenAgents.pro",
+    "url": "https://www.openagents.pro/",
+    "submission_url": "https://www.openagents.pro/submit",
+    "type": "AI tools directory",
+    "status": "Submitted; Formspree receipt confirmed; editorial review pending",
+    "outcome": "submitted_form",
+    "verification": "Browser redirected to https://formspree.io/thanks?language=en and showed The form was submitted successfully",
+    "next_action": "Await editorial review; do not duplicate submission",
+    "source": "Web search October 1, 2026",
+    "checked_at": "2026-10-01"
+  },
+  {
+    "id": 110,
+    "name": "Awesome Agent Collaboration Tools",
+    "url": "https://github.com/masstensor/awesome-agent-collaborate-tools",
+    "submission_url": "https://github.com/masstensor/awesome-agent-collaborate-tools/pull/4",
+    "type": "Agent collaboration curated GitHub list",
+    "status": "Closed without merge by submitting account; not accepted",
+    "outcome": "closed_unmerged",
+    "checked_at": "2026-10-07",
+    "verification": "GitHub API confirms merged=false; timeline records shawnbure closing October 6 at 21:47 UTC; no comments or editorial reason.",
+    "next_action": "Leave closed; do not reopen or resubmit automatically",
+    "source": "Web search October 2, 2026"
+  },
+  {
+    "id": 111,
+    "name": "Ultimate Agent Directory (Swpn0neel fork)",
+    "url": "https://github.com/Swpn0neel/ultimate-agent-directory",
+    "type": "GitHub curated directory",
+    "status": "Not submitted; canonical upstream unavailable, active intake ownership uncertain",
+    "outcome": "not_submitted",
+    "verification": "Fork README has no ONE entry and issues empty; contribution guidelines invite suggestions; parent moshehbenavraham/Ultimate-Agent-Directory returns 404",
+    "next_action": "Establish maintained submission destination before posting",
+    "checked_at": "2026-10-04",
+    "source": "Web search October 4, 2026"
+  },
+  {
+    "id": 112,
+    "name": "AgenticBook",
+    "url": "https://agenticbook.org/about",
+    "type": "Agent infrastructure directory",
+    "status": "Not submitted; real-world adoption criterion not established",
+    "outcome": "not_eligible",
+    "verification": "Editorial principles exclude tools lacking real-world adoption; ONE adoption evidence is unavailable",
+    "next_action": "Revisit when concrete adoption evidence supports eligibility",
+    "checked_at": "2026-10-04",
+    "source": "Web search October 4, 2026"
+  },
+  {
+    "id": 113,
+    "name": "Agentbrisk",
+    "url": "https://agentbrisk.com/submit/",
+    "type": "Agent review directory",
+    "status": "Not submitted; email-only submission route",
+    "outcome": "blocked",
+    "verification": "Official intake explicitly requires email; this automation does not authorize cold email",
+    "next_action": "Only submit with separate authorization for email outreach",
+    "checked_at": "2026-10-04",
+    "source": "Web search October 4, 2026"
+  },
+  {
+    "id": 114,
+    "name": "Agents List (.app)",
+    "url": "https://www.agentslist.app/",
+    "submission_url": "https://www.agentslist.app/submit?success=1",
+    "type": "Agent-friendly service directory",
+    "status": "Submitted; review queue confirmed; editorial decision pending",
+    "outcome": "submitted_form",
+    "checked_at": "2026-10-05",
+    "verification": "Browser showed Thanks! Your submission is in the review queue.",
+    "next_action": "Await review; do not duplicate or invent a usability score",
+    "source": "Web search October 5, 2026"
+  },
+  {
+    "id": 115,
+    "name": "Nice Pick",
+    "url": "https://nicepick.dev/picks/agent-platforms",
+    "type": "Agent platform rankings",
+    "status": "Not submitted; API registration required",
+    "outcome": "blocked",
+    "checked_at": "2026-10-05",
+    "verification": "Official page requires POST auth/register to obtain API key before suggestions",
+    "next_action": "No new account creation under current authorization",
+    "source": "Web search October 5, 2026"
+  },
+  {
+    "id": 116,
+    "name": "Awesome Agents Team",
+    "url": "https://github.com/CiferaTeam/awesome-agents-team",
+    "submission_url": "https://github.com/CiferaTeam/awesome-agents-team/pull/64",
+    "type": "Agent collaboration curated GitHub list",
+    "status": "Accepted; PR merged; README listing verified",
+    "outcome": "accepted_pr",
+    "checked_at": "2026-10-06",
+    "verification": "GitHub API confirms merged October 6 at 10:50 UTC; default-branch README contains ONE; maintainer replied thanks!",
+    "next_action": "No follow-up needed; monitor actual feedback",
+    "source": "Web search October 5, 2026",
+    "published_url": "https://github.com/CiferaTeam/awesome-agents-team/blob/main/products/one.md"
+  },
+  {
+    "id": 117,
+    "name": "Awesome AI Agent Tools (AFunLS)",
+    "url": "https://github.com/AFunLS/awesome-ai-agent-tools",
+    "type": "GitHub agent tools directory",
+    "status": "Not submitted; community adoption eligibility not established",
+    "outcome": "not_submitted",
+    "checked_at": "2026-10-06",
+    "verification": "CONTRIBUTING excludes personal projects without community adoption and requires significant engagement for community listings",
+    "next_action": "Revisit with concrete adoption evidence; do not manufacture metrics",
+    "source": "Web search October 6, 2026"
+  },
+  {
+    "id": 118,
+    "name": "Best AI Agents (.org)",
+    "url": "https://bestaiagents.org/",
+    "submission_url": "https://bestaiagents.org/#header-29-755201",
+    "type": "AI agent and developer platform directory",
+    "status": "Submitted; success receipt confirmed; editorial review pending",
+    "outcome": "submitted_for_review",
+    "checked_at": "2026-10-10",
+    "verification": "October 7 receipt remains evidence of submission; October 10 public homepage/search check did not verify a live ONE listing. Do not interpret absence as rejection.",
+    "next_action": "Await editorial review; do not duplicate submission",
+    "source": "Web search October 7; official homepage submission invitation"
+  },
+  {
+    "id": 119,
+    "name": "The Colony — Build In Public",
+    "url": "https://thecolony.ai/c/build-in-public",
+    "submission_url": "https://thecolony.ai/c/build-in-public",
+    "type": "Agent community forum",
+    "status": "Not posted; sign-in required; project-sharing invitation verified",
+    "outcome": "blocked_login",
+    "checked_at": "2026-10-10",
+    "verification": "Official room invites project sharing; browser signed out and says Sign in to join this colony. Recent agent infrastructure projects visible.",
+    "next_action": "User sign-in with existing account required; review full rules and duplicates before publishing. No new account under current authorization.",
+    "source": "Web search October 10"
+  },
+  {
+    "id": 120,
+    "name": "Awesome AI Agents (Awesome-llms-labs)",
+    "url": "https://github.com/Awesome-llms-labs/awesome-ai-agents",
+    "submission_url": "https://github.com/Awesome-llms-labs/awesome-ai-agents/blob/main/CONTRIBUTING.md",
+    "type": "Agent ecosystem curated list",
+    "status": "Not submitted; genuine usage or influence requirement not established",
+    "outcome": "eligibility_unverified",
+    "checked_at": "2026-10-13",
+    "verification": "Read official README and CONTRIBUTING.md via GitHub API: notable product with genuine usage or influence required, no marketing metrics.",
+    "next_action": "Revisit only with concrete usage evidence; do not fabricate adoption",
+    "source": "Web search October 13"
+  },
+  {
+    "id": 121,
+    "name": "Moltbook-AI.com (independent guide)",
+    "url": "https://moltbook-ai.com/tools",
+    "submission_url": "https://moltbook-ai.com/submit-tool",
+    "type": "Agent tools and infrastructure directory",
+    "status": "Submitted; Formspree receipt confirmed; editorial review pending",
+    "outcome": "submitted_for_review",
+    "checked_at": "2026-10-14",
+    "verification": "Formspree success page confirmed submission. Receipt: daily-runs/2026-10-14-moltbook-ai-receipt.png. Not an accepted listing or official Moltbook platform placement.",
+    "next_action": "Await manual editorial review; do not duplicate submission",
+    "source": "Web search October 14; official directory submission page",
+    "policy_excerpts": [
+      "Invites agent, framework and infrastructure tools with a public website or repository, active within six months. Excludes spam, affiliate-only and inactive projects. Manual review; inclusion not guaranteed."
+    ]
+  },
+  {
+    "id": 122,
+    "name": "Operator Record",
+    "url": "https://operatorrecord.com/",
+    "submission_url": "https://operatorrecord.com/submit",
+    "type": "Agent and infrastructure directory",
+    "status": "Not submitted; email-only submission route",
+    "outcome": "email_only",
+    "checked_at": "2026-10-14",
+    "verification": "Submission page invites agents, platforms and infrastructure with affiliation and public evidence, via email. No email sent.",
+    "next_action": "Separate email authorization needed before submitting; otherwise await a public intake route",
+    "source": "Web search October 14; official submission page"
+  }
+]

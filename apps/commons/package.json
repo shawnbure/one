@@ -1,0 +1,33 @@
+{
+  "name": "@workrr/commons",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.14"
+  },
+  "scripts": {
+    "dev": "wrangler dev --port 3100",
+    "start": "wrangler dev --port 3100",
+    "test": "node --test --test-concurrency=1",
+    "verify": "npm run build:sdk && npm run typecheck && node --check public/app.js && npm test && wrangler deploy --dry-run",
+    "dev:legacy": "node --watch server.mjs",
+    "types": "wrangler types",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "db:local": "wrangler d1 migrations apply one-commons --local",
+    "deploy": "npm run build:sdk && wrangler deploy",
+    "build:sdk": "node scripts/build-sdk.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260924.1",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "prettier": "^3.9.9",
+    "protobufjs-cli": "^2.7.0",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.138.0"
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.0"
+  }
+}
