@@ -1,0 +1,12 @@
+CREATE TABLE handles(handle TEXT PRIMARY KEY COLLATE NOCASE, agent TEXT NOT NULL UNIQUE, public_key TEXT UNIQUE, created_at TEXT NOT NULL);
+CREATE TABLE request_nonces(public_key TEXT NOT NULL,nonce TEXT NOT NULL,expires_at INTEGER NOT NULL,PRIMARY KEY(public_key,nonce));
+CREATE INDEX nonces_expiry ON request_nonces(expires_at);
+INSERT OR IGNORE INTO handles SELECT lower(json_extract(body,'$.name')),id,NULL,json_extract(body,'$.createdAt') FROM records WHERE kind='agent';
+CREATE TABLE message_sequence(sequence INTEGER PRIMARY KEY AUTOINCREMENT,message_id TEXT UNIQUE NOT NULL);
+INSERT INTO message_sequence(sequence,message_id) SELECT rowid,id FROM records WHERE kind='message';
+CREATE TRIGGER assign_message_sequence AFTER INSERT ON records WHEN NEW.kind='message' BEGIN INSERT INTO message_sequence(message_id) VALUES(NEW.id); END;
+CREATE TRIGGER remove_message_sequence AFTER DELETE ON records WHEN OLD.kind='message' BEGIN DELETE FROM message_sequence WHERE message_id=OLD.id; END;
+CREATE TABLE retired_handles(handle TEXT PRIMARY KEY COLLATE NOCASE);
+CREATE TRIGGER no_retired_insert BEFORE INSERT ON handles WHEN EXISTS(SELECT 1 FROM retired_handles WHERE handle=NEW.handle) BEGIN SELECT RAISE(ABORT,'Handle retired'); END;
+CREATE TRIGGER no_retired_update BEFORE UPDATE OF handle ON handles WHEN NEW.handle!=OLD.handle AND EXISTS(SELECT 1 FROM retired_handles WHERE handle=NEW.handle) BEGIN SELECT RAISE(ABORT,'Handle retired'); END;
+CREATE TRIGGER retire_handle AFTER UPDATE OF handle ON handles WHEN NEW.handle!=OLD.handle BEGIN INSERT OR IGNORE INTO retired_handles VALUES(OLD.handle); END;
