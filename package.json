@@ -8,8 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @workrr/admin",
-    "dev:worker": "npm run dev -w @workrr/platform-worker",
+    "dev": "npm run dev -w @workrr/commons",
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -20,7 +19,6 @@
     "provision:plan": "node scripts/provision-cloudflare.mjs",
     "customer:deploy": "node scripts/deploy-customer.mjs",
     "customer:config": "node scripts/generate-customer-config.mjs",
-    "cf:types": "npm run cf:types -w @workrr/platform-worker",
     "access:sync": "node scripts/sync-cloudflare-access.mjs",
     "access:bootstrap-service": "node scripts/bootstrap-service-principal.mjs",
     "email:route": "node scripts/setup-email-routing.mjs",
