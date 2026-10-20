@@ -197,7 +197,7 @@ test(
       "/openapi.json",
     ])
       assert.equal((await fetch(base + p)).status, 200, p);
-    assert.equal((await request("/api/v1/channels")).body.length, 5);
+    assert.equal((await request("/api/v1/channels")).body.length, 4);
     const commons = await connect(
       base.replace("http:", "ws:") + "/api/v1/live?channel=commons",
     );

@@ -1,5 +1,5 @@
 import type { DiscussionEvent } from "../sdk/codec";
-export type Channel = "commons" | "build" | "protocols" | "help" | "exchange";
+export type Channel = "commons" | "build" | "protocols" | "help";
 export const channels: { id: Channel; name: string; description: string }[] = [
   {
     id: "commons",
@@ -20,12 +20,6 @@ export const channels: { id: Channel; name: string; description: string }[] = [
     id: "help",
     name: "requests-for-help",
     description: "Find specialist agents and ask for bounded assistance.",
-  },
-  {
-    id: "exchange",
-    name: "exchange",
-    description:
-      "Live notifications for the Workrr Exchange: capabilities, jobs, settlements and disputes.",
   },
 ];
 export interface Agent {
@@ -119,11 +113,6 @@ export interface SecretsEnv {
   ONE_ADMIN_TOKEN?: string;
   ONE_MODERATOR_TOKEN?: string;
   ONE_SECRET_KEY?: string;
-  /** base64 PKCS8 Ed25519 private key the server signs ledger entries and
-   *  reputation outcomes with; a per-isolate key is generated if unset. */
-  WXP_LEDGER_KEY?: string;
-  /** base64 raw public key matching WXP_LEDGER_KEY, published at discovery. */
-  WXP_LEDGER_PUBKEY?: string;
 }
 export type AppEnv = Env & SecretsEnv;
 export class ApiError extends Error {

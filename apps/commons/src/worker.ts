@@ -28,10 +28,6 @@ import {
   roomStats,
 } from "./discussion";
 import specification from "../openapi.json";
-import { exchange } from "./exchange";
-import { sweepJobTimeouts } from "./verification";
-import { mcp } from "./mcp";
-import { ledgerPublicKey } from "./signing";
 export { LiveChannel } from "./live";
 
 const headers = {
@@ -104,8 +100,6 @@ const publicPath = (path: string) =>
     "/skill.md",
     "/SKILL.md",
     "/skills/one-commons/SKILL.md",
-    "/skills/one-exchange/SKILL.md",
-    "/protocol/wxp-v1.md",
     "/.well-known/agent.json",
     "/openapi.json",
   ].includes(path) ||
@@ -325,19 +319,6 @@ function discovery(origin: string) {
     },
     skill: `${origin}/skills/one-commons/SKILL.md`,
     openapi: `${origin}/openapi.json`,
-    exchange: {
-      version: "0.1",
-      protocol: `${origin}/protocol/wxp-v1.md`,
-      skill: `${origin}/skills/one-exchange/SKILL.md`,
-      capabilities: `${origin}/api/v1/exchange/capabilities`,
-      openJob: `${origin}/api/v1/exchange/jobs`,
-      reputation: `${origin}/api/v1/exchange/reputation/{id}`,
-      mcp: `${origin}/mcp`,
-      live: `${origin.replace(/^http/, "ws")}/api/v1/live?channel=exchange`,
-      unit: { code: "WXC", peg: "1 WXC = 1 USD at purchase", redeemable: false },
-      takeRate: { providerBps: 700, floorWxc: "0.001", capWxc: "50" },
-      ledgerPublicKey: "",
-    },
     channels: `${origin}/api/v1/channels`,
     standards: `${origin}/api/v1/library`,
     live: {
@@ -379,30 +360,12 @@ async function api(
   if (
     method === "GET" &&
     (path === "/api/v1/discovery" || path === "/.well-known/agent.json")
-  ) {
-    const d = discovery(env.PUBLIC_ORIGIN);
-    d.exchange.ledgerPublicKey = await ledgerPublicKey(env);
-    return json(d);
-  }
+  )
+    return json(discovery(env.PUBLIC_ORIGIN));
   if (method === "GET" && path === "/openapi.json") return json(specification);
-  if (path === "/mcp") return mcp(request, env, json);
   if (path.startsWith("/api/")) {
     if (!(await env.READ_LIMIT.limit({ key: ip })).success)
       return json({ error: "Read rate limit; retry in 60 seconds" }, 429);
-  }
-  if (path.startsWith("/api/v1/exchange")) {
-    return exchange({
-      request,
-      env,
-      ctx,
-      url,
-      store,
-      json,
-      bodyOf,
-      authenticate: (req) => authenticate(req, env, store),
-      backgroundFlush: () => backgroundFlush(env, ctx),
-      rejectCredentials,
-    });
   }
   if (path === "/api/v1/secrets" || path.startsWith("/api/v1/secrets/"))
     return json(
@@ -1136,7 +1099,6 @@ export default {
         )
           .bind(now())
           .run(),
-        sweepJobTimeouts(env, new Store(env.DB)).then(() => flush(env)),
       ]),
     );
   },

@@ -48,33 +48,6 @@ export function fromA2AMessage(message: any): DiscussionEvent {
   return event;
 }
 
-/** WXP ↔ A2A mapping: a job is an A2A task; its quotes, deliveries and verdicts
- *  are task messages. v0.1 provides the task shape; a full A2A task server is a
- *  v0.2 goal. `job` is the shape returned by GET /api/v1/exchange/jobs/{id}. */
-const A2A_STATE: Record<string, string> = {
-  open: "submitted",
-  quoted: "submitted",
-  accepted: "working",
-  delivered: "input-required",
-  settled: "completed",
-  refunded: "canceled",
-  disputed: "working",
-  cancelled: "canceled",
-};
-export function wxpJobToA2ATask(job: {
-  id: string;
-  state: string;
-  acceptanceCriteria?: string;
-  price?: string | null;
-}) {
-  return {
-    id: job.id,
-    contextId: job.id,
-    status: { state: A2A_STATE[job.state] ?? "unknown" },
-    metadata: { "workrr.exchange/price": job.price ?? null, "workrr.exchange/acceptanceCriteria": job.acceptanceCriteria ?? null },
-  };
-}
-
 export class OneClient {
   constructor(
     readonly origin = "https://one.workrr.ai",
