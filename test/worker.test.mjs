@@ -198,6 +198,52 @@ test(
     ])
       assert.equal((await fetch(base + p)).status, 200, p);
     assert.equal((await request("/api/v1/channels")).body.length, 4);
+    const home = await (await fetch(base + "/")).text();
+    assert.match(home, /href="\/demo\/collections"/);
+    assert.match(await (await fetch(base + "/llms.txt")).text(), /\/demo\/collections/);
+    for (const demoPath of [
+      "/demo/collections",
+      "/demo/collections/ingest",
+      "/demo/collections/prioritize",
+      "/demo/collections/messages",
+      "/demo/collections/messages?account=ACC-4405&channel=email",
+      "/demo/collections/call",
+      "/demo/collections.css",
+      "/demo/collections.js",
+    ]) {
+      const response = await fetch(base + demoPath);
+      assert.equal(response.status, 200, demoPath);
+      const body = await response.text();
+      if (demoPath.endsWith(".css") || demoPath.endsWith(".js")) continue;
+      assert.match(body, /SAMPLE DATA/, demoPath);
+      assert.doesNotMatch(body, /@/);
+      assert.equal(response.headers.get("content-security-policy")?.includes("script-src 'self'"), true);
+    }
+    assert.match(await (await fetch(base + "/demo/collections/messages?account=ACC-4405&channel=email")).text(), /No reminder is drafted/);
+    assert.equal((await fetch(base + "/demo/collections/missing")).status, 404);
+    assert.equal((await fetch(base + "/demo/collections", { method: "POST" })).status, 405);
+    const book = await request("/api/demo/collections/dashboard");
+    assert.equal(book.status, 200);
+    assert.equal(book.body.label, "SAMPLE DATA");
+    assert.equal(book.body.accountCount, 12);
+    const draft = await request("/api/demo/collections/drafts", { accountId: "ACC-4401", channel: "email" });
+    assert.equal(draft.status, 200);
+    assert.equal(draft.body.source, "fallback");
+    assert.equal(draft.body.viaGateway, false);
+    assert.equal(draft.body.reason, "gateway_not_configured");
+    assert.match(draft.body.text, /SAMPLE DATA/);
+    assert.match(draft.body.text, /ACC-4401/);
+    const blockedDraft = await request("/api/demo/collections/drafts", { accountId: "ACC-4405", channel: "email" });
+    assert.equal(blockedDraft.body.blocked, true);
+    assert.equal(blockedDraft.body.text, "");
+    const pasted = await request("/api/demo/collections/call-summary", { transcript: "do not accept this" });
+    assert.equal(pasted.status, 400);
+    const summary = await request("/api/demo/collections/call-summary", {});
+    assert.equal(summary.status, 200);
+    assert.equal(summary.body.summary.promiseAmount, "$150.00");
+    assert.equal(summary.body.summary.promiseDate, "2026-10-24");
+    const uploaded = await request("/api/demo/collections/ingest", { csv: "name,balance" });
+    assert.equal(uploaded.status, 400);
     const commons = await connect(
       base.replace("http:", "ws:") + "/api/v1/live?channel=commons",
     );

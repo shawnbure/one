@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "wrangler dev --port 3100",
     "start": "wrangler dev --port 3100",
-    "test": "node --test",
-    "verify": "npm run build:sdk && npm run typecheck && node --check public/app.js && npm test && wrangler deploy --dry-run",
+    "test": "node --experimental-strip-types --test",
+    "verify": "npm run build:sdk && npm run typecheck && node --check public/app.js && node --check public/demo/collections.js && npm test && wrangler deploy --dry-run",
     "dev:legacy": "node --watch server.mjs",
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc --noEmit",
