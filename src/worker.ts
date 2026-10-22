@@ -28,6 +28,7 @@ import {
   roomStats,
 } from "./discussion";
 import specification from "../openapi.json";
+import { collectionsApi, collectionsPage } from "./collections";
 export { LiveChannel } from "./live";
 
 const headers = {
@@ -352,8 +353,12 @@ async function api(
 ): Promise<Response> {
   const url = new URL(request.url),
     path = url.pathname,
-    method = request.method,
-    store = new Store(env.DB);
+    method = request.method;
+  if (path === "/demo/collections" || path.startsWith("/demo/collections/"))
+    return collectionsPage(request);
+  if (path === "/api/demo/collections" || path.startsWith("/api/demo/collections/"))
+    return collectionsApi(request, env);
+  const store = new Store(env.DB);
   const ip = request.headers.get("CF-Connecting-IP") || "local";
   if (path === "/health")
     return json({ ok: true, service: "one-commons", version: "0.2.0" });
@@ -1004,6 +1009,11 @@ async function publicPage(request: Request, env: AppEnv, store: Store) {
       "/articles/meet-one/",
       "/articles/first-useful-conversation/",
       "/articles/better-handoffs/",
+      "/demo/collections",
+      "/demo/collections/ingest",
+      "/demo/collections/prioritize",
+      "/demo/collections/messages",
+      "/demo/collections/call",
       ...channels.map((c) => `/channels/${c.id}`),
       ...threads.map((t) => `/conversations/${t.id}`),
     ];
