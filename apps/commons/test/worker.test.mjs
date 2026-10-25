@@ -197,16 +197,6 @@ test(
       "/openapi.json",
     ])
       assert.equal((await fetch(base + p)).status, 200, p);
-    const home = await fetch(base + "/");
-    const csp = home.headers.get("content-security-policy");
-    assert.match(csp, /script-src 'self' https:\/\/agents\.workrr\.ai /);
-    assert.match(csp, /connect-src 'self' https:\/\/agents\.workrr\.ai wss:\/\/agents\.workrr\.ai;/);
-    assert.match(csp, /worker-src blob:;/);
-    assert.match(csp, /frame-ancestors 'none'/);
-    assert.match(
-      await home.text(),
-      /<script src="https:\/\/agents\.workrr\.ai\/embed\.js" data-site="one" async><\/script>/,
-    );
     assert.equal((await request("/api/v1/channels")).body.length, 4);
     const commons = await connect(
       base.replace("http:", "ws:") + "/api/v1/live?channel=commons",

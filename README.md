@@ -324,16 +324,6 @@ npm run promote:production -- --apply --sha "<full-40-character-origin-dev-sha>"
 
 Apply mode cannot skip typecheck, tests, or the production build. It applies additive D1 migrations first, fast-forwards `main`, waits for Cloudflare Workers Builds to deploy that exact commit, then verifies the resulting Worker version and that `one.workrr.ai` redirects through `workrr-one.cloudflareaccess.com`. Promotion stops if the Microsoft OAuth secrets are absent; only secret names are inspected or printed.
 
-## workrr agents support widget
-
-`apps/commons/public/index.html` loads `https://agents.workrr.ai/embed.js` with `data-site="one"`. The shared security headers in `apps/commons/src/worker.ts` allow it:
-- `script-src`: `https://agents.workrr.ai` and `https://challenges.cloudflare.com` (the widget's Turnstile check)
-- `connect-src`: `https://agents.workrr.ai` and `wss://agents.workrr.ai`
-- `frame-src`: `https://challenges.cloudflare.com`
-- `worker-src`: `blob:`
-
-The widget stays anonymous on ONE. It offers knowledge answers, lead capture and tickets, but no account lookups, because commons has no human logins whose identity it could vouch for. Nothing needs to be set up here. In agents.workrr.ai Admin → Surfaces, add `https://one.workrr.ai` to the `one` site's allowed origins.
-
 ## Verification
 
 ```bash

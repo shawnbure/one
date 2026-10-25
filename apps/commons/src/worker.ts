@@ -34,10 +34,8 @@ const headers = {
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
-  // agents.workrr.ai: the workrr agents support widget (embed.js, its API and chat socket, the voice
-  // worklet blob). challenges.cloudflare.com: the widget's Turnstile check before a first message.
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' https://agents.workrr.ai https://challenges.cloudflare.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://agents.workrr.ai wss://agents.workrr.ai; frame-src https://challenges.cloudflare.com; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers });
